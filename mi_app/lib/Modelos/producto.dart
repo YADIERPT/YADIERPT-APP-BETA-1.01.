@@ -5,6 +5,7 @@ class Producto {
   double precioVenta;
   double costo;
   int cantidadEnInventario;
+  int umbralStockCritico;
   List<String> imagenes;
 
   Producto({
@@ -14,8 +15,12 @@ class Producto {
     required this.precioVenta,
     required this.costo,
     this.cantidadEnInventario = 0,
+    this.umbralStockCritico = 5,
     List<String>? imagenes,
   }) : imagenes = imagenes ?? [];
+
+  bool get esStockCritico => cantidadEnInventario <= umbralStockCritico;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -24,6 +29,7 @@ class Producto {
       'precioVenta': precioVenta,
       'costo': costo,
       'cantidadEnInventario': cantidadEnInventario,
+      'umbralStockCritico': umbralStockCritico,
       'imagenes': imagenes.join(','),
     };
   }
@@ -36,6 +42,7 @@ class Producto {
       precioVenta: map['precioVenta'],
       costo: map['costo'],
       cantidadEnInventario: map['cantidadEnInventario'],
+      umbralStockCritico: map['umbralStockCritico'] ?? 5,
       imagenes: map['imagenes'] != null && map['imagenes'].toString().isNotEmpty
           ? map['imagenes'].toString().split(',')
           : [],

@@ -82,7 +82,7 @@ class _LoginVistaState extends State<LoginVista> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surfaceContainerLowest,
+          backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -93,14 +93,14 @@ class _LoginVistaState extends State<LoginVista> {
               Text('Error de Acceso', style: TextStyle(color: AppColors.error)),
             ],
           ),
-          content: const Text(
+          content: Text(
             'Usuario o PIN incorrectos. Por favor, intenta de nuevo.',
-            style: TextStyle(color: AppColors.onSurface),
+            style: TextStyle(color: AppColors.textPrimary),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
+              child: Text(
                 'Entendido',
                 style: TextStyle(
                   color: AppColors.primary,
@@ -117,10 +117,12 @@ class _LoginVistaState extends State<LoginVista> {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness:
+            AppColors.isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness:
+            AppColors.isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
         backgroundColor: AppColors.surface,
@@ -170,22 +172,15 @@ class _LoginVistaState extends State<LoginVista> {
               height: 96,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
+                color: AppColors.secondarySurface,
                 shape: BoxShape.circle,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
               ),
               child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.surfaceContainer,
+                decoration: BoxDecoration(
+                  color: AppColors.card,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.local_florist,
                   color: AppColors.primary,
                   size: 40,
@@ -198,40 +193,34 @@ class _LoginVistaState extends State<LoginVista> {
               child: Container(
                 width: 28,
                 height: 28,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: const Icon(
                   Icons.spa,
-                  color: AppColors.onPrimary,
+                  color: Colors.white,
                   size: 16,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        const Text(
+        const SizedBox(height: 20),
+        Text(
           'Vivero',
           style: TextStyle(
-            color: AppColors.onSurface,
+            color: AppColors.textPrimary,
             fontSize: 26,
             fontWeight: FontWeight.bold,
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Terminal de Punto de Venta • Iniciar Sesión',
-          style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 14),
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
       ],
     );
@@ -239,22 +228,20 @@ class _LoginVistaState extends State<LoginVista> {
 
   Widget _buildLoginForm() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-        ],
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Usuario o correo',
             style: TextStyle(
-              color: AppColors.onSurfaceVariant,
-              fontSize: 14,
+              color: AppColors.textSecondary,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -262,33 +249,34 @@ class _LoginVistaState extends State<LoginVista> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
+              color: AppColors.secondarySurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
               controller: _usuarioController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 prefixIcon: Icon(
-                  Icons.badge,
-                  color: AppColors.onSurfaceVariant,
+                  Icons.badge_outlined,
+                  color: AppColors.textSecondary,
+                  size: 20,
                 ),
                 hintText: 'Ej. VO-8421 o ana@vivero.pe',
-                hintStyle: TextStyle(color: AppColors.outline),
+                hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 12,
+                  vertical: 14,
                 ),
               ),
-              style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
             ),
           ),
-          const SizedBox(height: 20),
-          const Text(
+          const SizedBox(height: 18),
+          Text(
             'PIN de acceso o clave',
             style: TextStyle(
-              color: AppColors.onSurfaceVariant,
-              fontSize: 14,
+              color: AppColors.textSecondary,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -296,7 +284,7 @@ class _LoginVistaState extends State<LoginVista> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
+              color: AppColors.secondarySurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
@@ -304,14 +292,16 @@ class _LoginVistaState extends State<LoginVista> {
               obscureText: _ocultarClave,
               obscuringCharacter: '•',
               decoration: InputDecoration(
-                prefixIcon: const Icon(
-                  Icons.lock,
-                  color: AppColors.onSurfaceVariant,
+                prefixIcon: Icon(
+                  Icons.lock_outline,
+                  color: AppColors.textSecondary,
+                  size: 20,
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _ocultarClave ? Icons.visibility : Icons.visibility_off,
-                    color: AppColors.onSurfaceVariant,
+                    color: AppColors.textSecondary,
+                    size: 20,
                   ),
                   onPressed: () =>
                       setState(() => _ocultarClave = !_ocultarClave),
@@ -319,17 +309,17 @@ class _LoginVistaState extends State<LoginVista> {
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 12,
+                  vertical: 14,
                 ),
               ),
-              style: const TextStyle(
-                color: AppColors.onSurface,
+              style: TextStyle(
+                color: AppColors.textPrimary,
                 fontSize: 14,
                 letterSpacing: 2,
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           GestureDetector(
             onTap: () => setState(() => _recordarTerminal = !_recordarTerminal),
             child: Row(
@@ -340,38 +330,47 @@ class _LoginVistaState extends State<LoginVista> {
                   decoration: BoxDecoration(
                     color: _recordarTerminal
                         ? AppColors.primary
-                        : AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(4),
+                        : AppColors.secondarySurface,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: _recordarTerminal
+                          ? AppColors.primary
+                          : AppColors.border,
+                      width: 1,
+                    ),
                   ),
                   child: _recordarTerminal
                       ? const Icon(
                           Icons.check,
-                          size: 16,
-                          color: AppColors.onPrimary,
+                          size: 14,
+                          color: Colors.white,
                         )
                       : null,
                 ),
                 const SizedBox(width: 10),
-                const Text(
-                  'Recordar terminal en este dispositivo',
-                  style: TextStyle(color: AppColors.onSurface, fontSize: 14),
+                Expanded(
+                  child: Text(
+                    'Recordar datos en este dispositivo',
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            height: 56,
+            height: 50,
             child: ElevatedButton(
               onPressed: _isLoading || _isSuccess ? null : _iniciarSesion,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                disabledBackgroundColor: AppColors.primary.withOpacity(0.8),
+                disabledBackgroundColor:
+                    AppColors.primary.withValues(alpha: 0.7),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                elevation: 1,
+                elevation: 0,
               ),
               child: _buildButtonContent(),
             ),
@@ -387,18 +386,18 @@ class _LoginVistaState extends State<LoginVista> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: const [
           SizedBox(
-            width: 20,
-            height: 20,
+            width: 18,
+            height: 18,
             child: CircularProgressIndicator(
-              color: AppColors.onPrimary,
+              color: Colors.white,
               strokeWidth: 2,
             ),
           ),
           SizedBox(width: 8),
           Text(
-            'Abriendo caja...',
+            'Ingresando...',
             style: TextStyle(
-              color: AppColors.onPrimary,
+              color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -409,12 +408,12 @@ class _LoginVistaState extends State<LoginVista> {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: const [
-          Icon(Icons.check_circle, color: AppColors.onPrimary, size: 20),
+          Icon(Icons.check_circle, color: Colors.white, size: 20),
           SizedBox(width: 8),
           Text(
-            '¡Sesión Iniciada!',
+            '¡Bienvenido!',
             style: TextStyle(
-              color: AppColors.onPrimary,
+              color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -428,13 +427,13 @@ class _LoginVistaState extends State<LoginVista> {
           Text(
             'Ingresar',
             style: TextStyle(
-              color: AppColors.onPrimary,
-              fontSize: 14,
+              color: Colors.white,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
           ),
           SizedBox(width: 8),
-          Icon(Icons.arrow_forward, color: AppColors.onPrimary, size: 20),
+          Icon(Icons.arrow_forward, color: Colors.white, size: 18),
         ],
       );
     }
@@ -443,21 +442,21 @@ class _LoginVistaState extends State<LoginVista> {
   Widget _buildDivider() {
     return Row(
       children: [
-        const Expanded(
-          child: Divider(color: AppColors.surfaceContainerHigh, thickness: 1),
+        Expanded(
+          child: Divider(color: AppColors.border, thickness: 1),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            'bienvenido',
+            'punto de venta',
             style: TextStyle(
-              color: AppColors.onSurfaceVariant.withOpacity(0.8),
+              color: AppColors.textSecondary,
               fontSize: 11,
             ),
           ),
         ),
-        const Expanded(
-          child: Divider(color: AppColors.surfaceContainerHigh, thickness: 1),
+        Expanded(
+          child: Divider(color: AppColors.border, thickness: 1),
         ),
       ],
     );
@@ -466,13 +465,13 @@ class _LoginVistaState extends State<LoginVista> {
   Widget _buildFooter() {
     return Column(
       children: [
-        const Text(
-          'VIVERO POS • v1.0.2',
+        Text(
+          'VIVERO • PLANTEAPP',
           style: TextStyle(
-            color: AppColors.outline,
+            color: AppColors.textSecondary,
             fontSize: 11,
-            letterSpacing: 1,
-            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),

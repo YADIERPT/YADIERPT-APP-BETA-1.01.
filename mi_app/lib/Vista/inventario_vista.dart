@@ -1,19 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 
 import 'nuevo_lote.dart';
-
-import 'package:flutter/services.dart';
-
 import '../Controladores/controlador_inventario.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
-import '../BaseDatos/base_datos.dart';
-
-import 'dart:io';
-
-import 'package:image_picker/image_picker.dart';
-
-import 'scanner_vista.dart';
+import '../Constantes/limites.dart';
 
 class InventarioVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -26,7 +18,6 @@ class InventarioVista extends StatefulWidget {
 
 class _InventarioVistaState extends State<InventarioVista> {
   String _busqueda = '';
-  String _categoriaSeleccionada = 'all';
 
   @override
   void initState() {
@@ -47,25 +38,157 @@ class _InventarioVistaState extends State<InventarioVista> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: AppColors.onPrimary),
+            const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 mensaje,
-                style: const TextStyle(color: AppColors.onPrimary),
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+    );
+  }
+
+  void _mostrarDialogoEditarNombre(Producto prod) {
+    final controller = TextEditingController(text: prod.nombre);
+    String? errorTexto;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Editar nombre',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: controller,
+                    maxLength: LimitesApp.maxLongitudNombreProducto,
+                    autofocus: true,
+                    style: TextStyle(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Nombre del producto',
+                      hintStyle: TextStyle(color: AppColors.textSecondary),
+                      filled: true,
+                      fillColor: AppColors.secondarySurface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      errorText: errorTexto,
+                      errorStyle: TextStyle(color: AppColors.coral),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (val) {
+                      if (errorTexto != null) {
+                        setDialogState(() => errorTexto = null);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancelar',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final nuevoNombre = controller.text.trim();
+                    if (nuevoNombre.isEmpty) {
+                      setDialogState(() {
+                        errorTexto = 'El nombre no puede estar vacío';
+                      });
+                      return;
+                    }
+                    if (nuevoNombre.length >
+                        LimitesApp.maxLongitudNombreProducto) {
+                      setDialogState(() {
+                        errorTexto =
+                            'Máximo ${LimitesApp.maxLongitudNombreProducto} caracteres';
+                      });
+                      return;
+                    }
+
+                    final yaExiste = widget.controladorInventario.productos.any(
+                      (p) =>
+                          p.id != prod.id &&
+                          p.nombre.toLowerCase().trim() ==
+                              nuevoNombre.toLowerCase(),
+                    );
+                    if (yaExiste) {
+                      setDialogState(() {
+                        errorTexto = 'Ya existe otro producto con este nombre';
+                      });
+                      return;
+                    }
+
+                    try {
+                      await widget.controladorInventario
+                          .actualizarNombreProducto(
+                        prod.id,
+                        nuevoNombre,
+                      );
+                      await _cargarInventario();
+                      if (mounted) {
+                        setState(() {});
+                        Navigator.pop(ctx);
+                        _mostrarToast('Nombre actualizado correctamente');
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        errorTexto = 'Error: $e';
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
   void _abrirAjuste(Producto producto) {
     int cantidad = producto.cantidadEnInventario;
+    int umbral = producto.umbralStockCritico;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -74,10 +197,11 @@ class _InventarioVistaState extends State<InventarioVista> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceContainerLowest,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -85,57 +209,65 @@ class _InventarioVistaState extends State<InventarioVista> {
                 children: [
                   Center(
                     child: Container(
-                      width: 48,
-                      height: 6,
+                      width: 36,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(3),
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Ajuste Manual',
+                            Text(
+                              'AJUSTE MANUAL',
                               style: TextStyle(
-                                color: AppColors.secondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
+                                color: AppColors.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
                               ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               producto.nombre,
-                              style: const TextStyle(
-                                color: AppColors.onSurface,
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close, size: 20),
                         style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surfaceContainer,
+                          backgroundColor: AppColors.secondarySurface,
+                          foregroundColor: AppColors.textPrimary,
+                          padding: const EdgeInsets.all(8),
+                          minimumSize: const Size(36, 36),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
+                  // Bloque 1: Cantidad de unidades en inventario
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
+                      color: AppColors.secondarySurface,
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -144,80 +276,209 @@ class _InventarioVistaState extends State<InventarioVista> {
                           onPressed: () {
                             if (cantidad > 0) setModalState(() => cantidad--);
                           },
-                          icon: const Icon(Icons.remove, size: 28),
+                          icon: const Icon(Icons.remove, size: 26),
                           style: IconButton.styleFrom(
-                            backgroundColor: AppColors.surfaceContainerHigh,
+                            backgroundColor: AppColors.card,
+                            foregroundColor: AppColors.textPrimary,
+                            minimumSize: const Size(48, 48),
+                            shape: const CircleBorder(),
                           ),
                         ),
                         Column(
                           children: [
                             Text(
                               '$cantidad',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 36,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                            const Text(
-                              'unidades',
+                            Text(
+                              'unidades en inventario',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
                         ),
                         IconButton(
                           onPressed: () {
-                            setModalState(() => cantidad++);
+                            if (cantidad < LimitesApp.maxUnidades) {
+                              setModalState(() => cantidad++);
+                            }
                           },
-                          icon: const Icon(Icons.add, size: 28),
+                          icon: const Icon(Icons.add, size: 26),
                           style: IconButton.styleFrom(
-                            backgroundColor: AppColors.surfaceContainerHigh,
+                            backgroundColor: AppColors.card,
+                            foregroundColor: AppColors.textPrimary,
+                            minimumSize: const Size(48, 48),
+                            shape: const CircleBorder(),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
+                  // Bloque 2: Umbral de Stock Crítico
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondarySurface,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.warning,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Umbral de Stock Crítico',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Alertar cuando queden existencias',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border, width: 1),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  if (umbral > 0) {
+                                    setModalState(() => umbral--);
+                                  }
+                                },
+                                borderRadius: const BorderRadius.horizontal(
+                                  left: Radius.circular(10),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.remove,
+                                    size: 16,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                constraints: const BoxConstraints(minWidth: 26),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '$umbral',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () {
+                                  if (umbral < LimitesApp.maxStockUmbral) {
+                                    setModalState(() => umbral++);
+                                  }
+                                },
+                                borderRadius: const BorderRadius.horizontal(
+                                  right: Radius.circular(10),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.add,
+                                    size: 16,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      int diferencia = cantidad - producto.cantidadEnInventario;
                       try {
-                        if (diferencia > 0) {
-                          producto.agregarInventario(diferencia);
-                        } else if (diferencia < 0) {
-                          producto.reducirInventario(diferencia.abs());
-                        }
-                        final db = await BaseDeDatos.instancia.database;
-                        await db.update(
-                          'productos',
-                          producto.toMap(),
-                          where: 'id = ?',
-                          whereArgs: [producto.id],
+                        producto.cantidadEnInventario = cantidad;
+                        producto.umbralStockCritico = umbral;
+
+                        await widget.controladorInventario
+                            .actualizarExistenciasYUmbral(
+                          producto.id,
+                          cantidad,
+                          umbral,
                         );
                         await _cargarInventario();
 
                         if (mounted) Navigator.pop(context);
-                        _mostrarToast('Stock actualizado exitosamente');
-                      } catch (e) {}
+                        _mostrarToast('Existencias y umbral actualizados');
+                      } catch (_) {
+                        if (mounted) Navigator.pop(context);
+                      }
                     },
-                    icon: const Icon(Icons.check),
+                    icon: const Icon(Icons.check, size: 20),
                     label: const Text(
                       'Confirmar Existencias',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.secondary,
-                      foregroundColor: AppColors.onSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
+                      elevation: 0,
                     ),
                   ),
                 ],
@@ -234,16 +495,30 @@ class _InventarioVistaState extends State<InventarioVista> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Borrar Producto'),
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            'Borrar Producto',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           content: Text(
-            '¿Estás seguro de que deseas eliminar completamente el producto ${producto.nombre} de tu base de datos? Esto no se puede deshacer.',
+            '¿Estás seguro de que deseas eliminar completamente el producto ${producto.nombre} de tu inventario? Esta acción no se puede deshacer.',
+            style: TextStyle(color: AppColors.textSecondary),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () async {
                 try {
                   await widget.controladorInventario.eliminarProducto(
@@ -259,10 +534,11 @@ class _InventarioVistaState extends State<InventarioVista> {
                   }
                 }
               },
-              child: const Text(
-                'Confirmar',
-                style: TextStyle(color: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
               ),
+              child: const Text('Borrar'),
             ),
           ],
         );
@@ -272,548 +548,592 @@ class _InventarioVistaState extends State<InventarioVista> {
 
   @override
   Widget build(BuildContext context) {
-    List<Producto> productos = widget.controladorInventario.buscarProductos(
-      _busqueda,
-    );
-    if (_categoriaSeleccionada == 'critical') {
-      productos = productos.where((p) => p.cantidadEnInventario <= 5).toList();
-    }
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, _) {
+        List<Producto> productos =
+            widget.controladorInventario.buscarProductos(_busqueda);
 
-    int totalPlantas = widget.controladorInventario.productos.fold(
-      0,
-      (sum, p) => sum + p.cantidadEnInventario,
-    );
-    int stockCritico = widget.controladorInventario.productos
-        .where((p) => p.cantidadEnInventario <= 5)
-        .length;
+        int totalPlantas = widget.controladorInventario.productos.fold(
+          0,
+          (sum, p) => sum + p.cantidadEnInventario,
+        );
+        int stockCritico = widget.controladorInventario.productos
+            .where((p) => p.esStockCritico)
+            .length;
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NuevoLoteVista(
-                controladorInventario: widget.controladorInventario,
+        return Scaffold(
+          backgroundColor: AppColors.surface,
+          floatingActionButton: FloatingActionButton(
+            tooltip: 'Añadir nuevo producto',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NuevoLoteVista(
+                    controladorInventario: widget.controladorInventario,
+                  ),
+                ),
+              ).then((_) => _cargarInventario());
+            },
+            backgroundColor: AppColors.secondary,
+            foregroundColor: const Color(0xFF161616),
+            elevation: 3,
+            shape: const CircleBorder(),
+            child: const Icon(Icons.add, size: 28),
+          ),
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+              children: [
+                // 1. Buscador en la parte superior (sin botón de escáner y sin filtros rápidos anteriores)
+                TextField(
+              onChanged: (val) {
+                setState(() {
+                  _busqueda = val;
+                });
+              },
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Buscar planta o lote...',
+                hintStyle:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+                suffixIcon: _busqueda.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear,
+                            color: AppColors.textSecondary, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _busqueda = '';
+                          });
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppColors.secondarySurface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 14,
+                ),
               ),
             ),
-          ).then((_) => _cargarInventario());
-        },
-        backgroundColor: AppColors.secondary,
-        foregroundColor: AppColors.onSecondary,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Nuevo Lote',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
+            const SizedBox(height: 12),
+
+            // 2. Debajo del buscador, las 3 tarjetas de resumen: plantas vivas, stock crítico y lotes/SKUs
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: AppColors.subtleGreen,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.spa_outlined,
+                            color: AppColors.brightGreen,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$totalPlantas',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Plantas vivas',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: AppColors.subtleAmber,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.amber,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$stockCritico',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.warning,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Stock crítico',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: AppColors.subtleTurquoise,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.inventory_2_outlined,
+                            color: AppColors.turquoise,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${widget.controladorInventario.productos.length}',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Lotes / SKUs',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 3. Módulo 9: Panel "Sugerencias IA" y chip con el mismo nombre (solo visual / placeholder)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border, width: 1),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 2),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.spa,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '$totalPlantas',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              const Text(
-                                'Plantas vivas',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Color(0xFFC85A32).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 2),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.warning_amber,
-                                color: AppColors.secondary,
-                                size: 20,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '$stockCritico',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.secondary,
-                                ),
-                              ),
-                              const Text(
-                                'Stock crítico',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 2),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.inventory_2,
-                                color: AppColors.tertiary,
-                                size: 20,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${widget.controladorInventario.productos.length}',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.tertiary,
-                                ),
-                              ),
-                              const Text(
-                                'Lotes / SKUs',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          onChanged: (val) {
-                            setState(() {
-                              _busqueda = val;
-                            });
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Buscar planta o maceta...',
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.surfaceContainer,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 0,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       Container(
-                        height: 48,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
                         ),
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.qr_code_scanner,
-                            color: AppColors.onPrimary,
-                          ),
-                          onPressed: () async {
-                            final resultado = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ScannerVista(),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Sugerencias IA',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
                               ),
-                            );
-                            if (resultado != null && resultado is String) {
-                              setState(() {
-                                _busqueda = resultado;
-                              });
-                            }
-                          },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Espacio de sugerencias',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Recomendación del sistema: optimización de stock botánico disponible.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      _FilterChip(
-                        label:
-                            'Todos (${widget.controladorInventario.productos.length})',
-                        icon: Icons.apps,
-                        isSelected: _categoriaSeleccionada == 'all',
-                        onTap: () =>
-                            setState(() => _categoriaSeleccionada = 'all'),
+                      OutlinedButton(
+                        onPressed: () {},
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
+                          minimumSize: const Size(60, 28),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        child: Text(
+                          'Descartar',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'Stock Crítico ($stockCritico)',
-                        icon: Icons.warning_amber,
-                        isSelected: _categoriaSeleccionada == 'critical',
-                        onTap: () =>
-                            setState(() => _categoriaSeleccionada = 'critical'),
-                        iconColor: AppColors.secondary,
+                      ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 2,
+                          ),
+                          minimumSize: const Size(60, 28),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        child: const Text(
+                          'Ver sugerencia',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                itemCount: productos.length,
-                itemBuilder: (context, index) {
-                  final prod = productos[index];
-                  bool isCritical = prod.cantidadEnInventario <= 5;
+            const SizedBox(height: 16),
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+            // 4. Lista de productos del inventario
+            Text(
+              'Plantas y Lotes en Catálogo',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            if (productos.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border, width: 1),
+                ),
+                child: Center(
+                  child: Text(
+                    'No se encontraron productos en el inventario.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    child: Column(
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: prod.imagenes.isNotEmpty
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child:
-                                          prod.imagenes.first.startsWith('http')
-                                          ? Image.network(
-                                              prod.imagenes.first,
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Image.file(
-                                              File(prod.imagenes.first),
-                                              fit: BoxFit.cover,
+                  ),
+                ),
+              )
+            else
+              ...productos.map((prod) {
+                final bool isCritical = prod.esStockCritico;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border, width: 1),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: AppColors.secondarySurface,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: prod.imagenes.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child:
+                                        prod.imagenes.first.startsWith('http')
+                                            ? Image.network(
+                                                prod.imagenes.first,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (c, e, s) =>
+                                                    Icon(
+                                                  Icons.local_florist,
+                                                  color: AppColors.primary,
+                                                  size: 32,
+                                                ),
+                                              )
+                                            : Image.file(
+                                                File(prod.imagenes.first),
+                                                fit: BoxFit.cover,
+                                              ),
+                                  )
+                                : Icon(
+                                    Icons.local_florist,
+                                    color: AppColors.primary,
+                                    size: 32,
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              prod.nombre,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                    )
-                                  : const Icon(
-                                      Icons.local_florist,
-                                      color: AppColors.surfaceTint,
-                                      size: 36,
-                                    ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          prod.nombre,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.onSurface,
                                           ),
-                                        ),
+                                          const SizedBox(width: 4),
+                                          GestureDetector(
+                                            onTap: () =>
+                                                _mostrarDialogoEditarNombre(
+                                                    prod),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(2.0),
+                                              child: Icon(
+                                                Icons.edit_outlined,
+                                                size: 16,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                        ],
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Color(0xFFC8EBCE),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${prod.cantidadEnInventario} u.',
-                                          style: const TextStyle(
-                                            color: Color(0xFF02210F),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
                                     ),
-                                    decoration: BoxDecoration(
+                                    // Cantidad disponible como texto simple (cantidad + unidad), sin recuadro de color
+                                    Text(
+                                      '${prod.cantidadEnInventario} u.',
+                                      style: TextStyle(
+                                        color: isCritical
+                                            ? AppColors.warning
+                                            : AppColors.textSecondary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      isCritical
+                                          ? Icons.warning_amber_rounded
+                                          : Icons.check_circle_outline,
+                                      size: 13,
                                       color: isCritical
-                                          ? AppColors.secondary.withOpacity(0.1)
-                                          : AppColors.surfaceContainer,
-                                      borderRadius: BorderRadius.circular(4),
+                                          ? AppColors.warning
+                                          : AppColors.primary,
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isCritical
-                                              ? Icons.warning_amber
-                                              : Icons.check_circle,
-                                          size: 12,
-                                          color: isCritical
-                                              ? AppColors.secondary
-                                              : AppColors.onSurfaceVariant,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          isCritical ? 'Stock Bajo' : 'Óptimo',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: isCritical
-                                                ? AppColors.secondary
-                                                : AppColors.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isCritical ? 'Stock Bajo' : 'Óptimo',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isCritical
+                                            ? AppColors.warning
+                                            : AppColors.primary,
+                                      ),
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '\$${prod.precioVenta.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '\$${prod.precioVenta.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                          ),
+                        ],
+                      ),
+                      if (prod.notas.isNotEmpty) ...[
+                        const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerLow,
+                            color: AppColors.secondarySurface,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.eco,
-                                size: 16,
-                                color: AppColors.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  prod.notas.isNotEmpty
-                                      ? prod.notas
-                                      : 'Sin notas específicas',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            prod.notas,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: ElevatedButton.icon(
-                                onPressed: () => _abrirAjuste(prod),
-                                icon: const Icon(Icons.exposure, size: 18),
-                                label: const Text('Ajustar'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      AppColors.surfaceContainerHigh,
-                                  foregroundColor: AppColors.onSurface,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 1,
-                              child: ElevatedButton.icon(
-                                onPressed: () => _abrirBorrarProducto(prod),
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  size: 18,
-                                ),
-                                label: const Text('Borrar'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.error,
-                                  foregroundColor: AppColors.onError,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
-                    ),
-                  );
-                },
-              ),
-            ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _abrirAjuste(prod),
+                              icon: const Icon(Icons.add, size: 16),
+                              // El botón "Ajustar" cambia su texto a "Añadir"
+                              label: const Text('Añadir'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _abrirBorrarProducto(prod),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                              ),
+                              label: const Text('Borrar'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            const SizedBox(height: 50),
           ],
         ),
       ),
     );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Color? iconColor;
-
-  const _FilterChip({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-    this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.surfaceContainerHighest
-              : AppColors.surfaceContainer,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected
-              ? Border.all(color: AppColors.primary, width: 1.5)
-              : Border.all(color: Colors.transparent, width: 1.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected
-                  ? (iconColor ?? AppColors.primary)
-                  : AppColors.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? AppColors.onSurface
-                    : AppColors.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  },
+);
   }
 }

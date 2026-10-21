@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
 class BaseDeDatos {
@@ -14,12 +17,17 @@ class BaseDeDatos {
   }
 
   Future<Database> _inicializarDB(String filePath) async {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _crearEsquema,
       onUpgrade: _actualizarEsquema,
     );
@@ -51,6 +59,11 @@ class BaseDeDatos {
         'ALTER TABLE ventas ADD COLUMN aplicarIva INTEGER NOT NULL DEFAULT 1',
       );
     }
+    if (oldVersion < 6) {
+      await db.execute(
+        'ALTER TABLE productos ADD COLUMN umbralStockCritico INTEGER NOT NULL DEFAULT 5',
+      );
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -70,7 +83,8 @@ class BaseDeDatos {
         precioVenta REAL NOT NULL,
         costo REAL NOT NULL,
         cantidadEnInventario INTEGER NOT NULL,
-        imagenes TEXT -- Guardaremos las rutas separadas por comas
+        imagenes TEXT,
+        umbralStockCritico INTEGER NOT NULL DEFAULT 5
       )
     ''');
     await db.execute('''
@@ -114,7 +128,7 @@ class BaseDeDatos {
     ''');
     await db.execute('''
       INSERT INTO configuracion (id, temaOscuro, tipoCambioUSD, porcentajeIvaDefecto, aplicarIva, etiquetasJson)
-      VALUES (1, 0, 18.0, 0.16, 1, '["Interior", "Suculentas", "Macetas", "Regalos"]')
+      VALUES (1, 2, 18.0, 0.16, 1, '["Interior", "Suculentas", "Macetas", "Regalos"]')
     ''');
   }
 

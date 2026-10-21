@@ -27,7 +27,7 @@ class _SeguridadVistaState extends State<SeguridadVista> {
       if (_claveActual != user.clave) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('La contrasena actual no coincide.'),
+            content: Text('La contraseña actual no coincide.'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -38,8 +38,8 @@ class _SeguridadVistaState extends State<SeguridadVista> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Contrasena actualizada exitosamente.'),
+          SnackBar(
+            content: const Text('Contraseña actualizada exitosamente.'),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -53,70 +53,100 @@ class _SeguridadVistaState extends State<SeguridadVista> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Seguridad de la Cuenta'),
+        title: Text(
+          'Seguridad de la Cuenta',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.onSurface,
+        iconTheme: IconThemeData(color: AppColors.textPrimary),
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Cambiar Contrasena',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border, width: 1),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                decoration: InputDecoration(
-                  labelText: 'Contrasena actual',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerLowest,
-                ),
-                obscureText: true,
-                validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                onSaved: (v) => _claveActual = v!,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                decoration: InputDecoration(
-                  labelText: 'Nueva contrasena',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerLowest,
-                ),
-                obscureText: true,
-                validator: (v) =>
-                    v != null && v.length < 6 ? 'Minimo 6 caracteres' : null,
-                onSaved: (v) => _nuevaClave = v!,
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cambiar Contraseña',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
-                  ),
-                  onPressed: _guardar,
-                  child: const Text(
-                    'Actualizar Contrasena',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña actual',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        filled: true,
+                        fillColor: AppColors.secondarySurface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      obscureText: true,
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                      onSaved: (v) => _claveActual = v!,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      decoration: InputDecoration(
+                        labelText: 'Nueva contraseña',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        filled: true,
+                        fillColor: AppColors.secondarySurface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      obscureText: true,
+                      validator: (v) =>
+                          v!.length < 4 ? 'Mínimo 4 caracteres' : null,
+                      onSaved: (v) => _nuevaClave = v!,
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _guardar,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Actualizar Contraseña',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

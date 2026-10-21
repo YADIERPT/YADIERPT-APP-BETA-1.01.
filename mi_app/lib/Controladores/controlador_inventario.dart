@@ -62,6 +62,19 @@ class ControladorInventario {
     }
   }
 
+  Future<void> actualizarNombreProducto(
+    String productoId,
+    String nuevoNombre,
+  ) async {
+    final producto = obtenerProducto(productoId);
+    if (producto != null) {
+      producto.nombre = nuevoNombre;
+      await _actualizarProducto(producto);
+    } else {
+      throw Exception('Producto no encontrado');
+    }
+  }
+
   Future<void> actualizarNotasProducto(
     String productoId,
     String nuevasNotas,
@@ -69,6 +82,21 @@ class ControladorInventario {
     final producto = obtenerProducto(productoId);
     if (producto != null) {
       producto.notas = nuevasNotas;
+      await _actualizarProducto(producto);
+    } else {
+      throw Exception('Producto no encontrado');
+    }
+  }
+
+  Future<void> actualizarExistenciasYUmbral(
+    String productoId,
+    int nuevaCantidad,
+    int nuevoUmbral,
+  ) async {
+    final producto = obtenerProducto(productoId);
+    if (producto != null) {
+      producto.cantidadEnInventario = nuevaCantidad;
+      producto.umbralStockCritico = nuevoUmbral;
       await _actualizarProducto(producto);
     } else {
       throw Exception('Producto no encontrado');

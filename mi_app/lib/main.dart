@@ -40,6 +40,7 @@ void main() async {
   );
   await controladorInicio.inicializarDatosOffline();
   await controladorAutenticacion.cargarUsuariosPorDefecto();
+  await ThemeManager.instance.inicializar();
   if (controladorInventario.productos.isEmpty) {
     final monstera = Producto(
       id: 'BOT-012',
@@ -81,16 +82,37 @@ class ViverApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ViverApp POS',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: LoginVista(
-        controladorInicio: controladorInicio,
-        controladorInventario: controladorInventario,
-        controladorVentas: controladorVentas,
-        controladorAutenticacion: controladorAutenticacion,
-      ),
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'ViverApp POS',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeManager.instance.themeMode,
+          builder: (context, child) {
+            return Container(
+              color: AppColors.appBackground,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 9 / 19.5,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24.0),
+                    child: child,
+                  ),
+                ),
+              ),
+            );
+          },
+          home: LoginVista(
+            controladorInicio: controladorInicio,
+            controladorInventario: controladorInventario,
+            controladorVentas: controladorVentas,
+            controladorAutenticacion: controladorAutenticacion,
+          ),
+        );
+      },
     );
   }
 }

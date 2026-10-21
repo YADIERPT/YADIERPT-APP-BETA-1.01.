@@ -6,12 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
+import '../Constantes/limites.dart';
 
 class NuevoLoteVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
 
-  const NuevoLoteVista({Key? key, required this.controladorInventario})
-    : super(key: key);
+  const NuevoLoteVista({super.key, required this.controladorInventario});
 
   @override
   State<NuevoLoteVista> createState() => _NuevoLoteVistaState();
@@ -21,7 +21,6 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
   final _formKey = GlobalKey<FormState>();
 
   String nombre = '';
-  double precio = 0.0;
   double costo = 0.0;
   int cantidad = 0;
   String notas = '';
@@ -32,25 +31,25 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: AppColors.onPrimary),
+            const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 mensaje,
-                style: const TextStyle(color: AppColors.onPrimary),
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
 
   void _seleccionarImagen(ImageSource source) async {
-    Navigator.of(context).pop(); // Cerrar el modal de opciones
+    Navigator.of(context).pop();
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: source,
@@ -67,7 +66,7 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
   void _mostrarOpcionesImagen() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -76,19 +75,25 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.photo_library,
                   color: AppColors.primary,
                 ),
-                title: const Text('Elegir de Galería'),
+                title: Text(
+                  'Elegir de Galería',
+                  style: TextStyle(color: AppColors.textPrimary),
+                ),
                 onTap: () => _seleccionarImagen(ImageSource.gallery),
               ),
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.photo_camera,
                   color: AppColors.primary,
                 ),
-                title: const Text('Tomar Foto'),
+                title: Text(
+                  'Tomar Foto',
+                  style: TextStyle(color: AppColors.textPrimary),
+                ),
                 onTap: () => _seleccionarImagen(ImageSource.camera),
               ),
             ],
@@ -98,14 +103,14 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
     );
   }
 
-  void _guardarLote() async {
+  void _guardarProducto() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
       try {
         final nuevo = Producto(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           nombre: nombre,
-          precioVenta: precio,
+          precioVenta: costo,
           costo: costo,
           cantidadEnInventario: cantidad,
           imagenes: rutaImagen != null ? [rutaImagen!] : [],
@@ -113,8 +118,8 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
         );
         await widget.controladorInventario.agregarProducto(nuevo);
         if (mounted) {
-          Navigator.pop(context); // Volver a la pantalla anterior
-          _mostrarToast('Lote agregado exitosamente');
+          Navigator.pop(context);
+          _mostrarToast('Producto agregado exitosamente');
         }
       } catch (e) {
         if (mounted) {
@@ -127,185 +132,185 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Agregar Nuevo Lote',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.onSurface,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                GestureDetector(
-                  onTap: _mostrarOpcionesImagen,
-                  child: Container(
-                    height: 160,
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 24),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainer,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppColors.outlineVariant,
-                        width: 2,
-                        style: BorderStyle.solid,
-                      ),
-                    ),
-                    child: rutaImagen != null && rutaImagen!.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Image.file(
-                              File(rutaImagen!),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              cacheHeight: 400,
-                            ),
-                          )
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_a_photo,
-                                color: AppColors.primary,
-                                size: 48,
-                              ),
-                              SizedBox(height: 12),
-                              Text(
-                                'Toca para añadir una foto',
-                                style: TextStyle(
-                                  color: AppColors.onSurfaceVariant,
-                                  fontSize: 14,
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: AppColors.surface,
+          appBar: AppBar(
+            title: Text(
+              'Agregar Nuevo Producto',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: AppColors.surface,
+            iconTheme: IconThemeData(color: AppColors.textPrimary),
+            elevation: 0,
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Foto
+                    GestureDetector(
+                      onTap: _mostrarOpcionesImagen,
+                      child: Container(
+                        height: 150,
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondarySurface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.border,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: rutaImagen != null && rutaImagen!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.file(
+                                  File(rutaImagen!),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
                                 ),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_a_photo_outlined,
+                                    color: AppColors.primary,
+                                    size: 40,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Toca para añadir una foto',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                  ),
-                ),
-                TextFormField(
-                  decoration: InputDecoration(
-                    labelText: 'Nombre de la planta / lote',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.surfaceContainerLowest,
-                  ),
-                  validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                  onSaved: (v) => nombre = v!,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Costo (\$)',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: AppColors.surfaceContainerLowest,
-                          prefixText: '\$ ',
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                        onSaved: (v) => costo = double.tryParse(v!) ?? 0.0,
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Precio Venta (\$)',
-                          border: OutlineInputBorder(
+
+                    // 2. Nombre de la planta / producto
+                    TextFormField(
+                      maxLength: LimitesApp.maxLongitudNombreProducto,
+                      decoration: InputDecoration(
+                        labelText: 'Nombre de la planta / producto',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.card,
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                      onSaved: (v) => nombre = v!,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 3. Costo ($) - Único precio a ancho completo
+                    TextFormField(
+                      decoration: InputDecoration(
+                        labelText: 'Costo (\$)',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.card,
+                        prefixText: '\$ ',
+                        prefixStyle: TextStyle(color: AppColors.textPrimary),
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [FormateadorMonetario(max: LimitesApp.maxMontoMonetario)],
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                      onSaved: (v) => costo = double.tryParse(v!) ?? 0.0,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 4. Cantidad inicial - Ancho completo
+                    TextFormField(
+                      decoration: InputDecoration(
+                        labelText: 'Cantidad inicial',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.card,
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FormateadorEntero(max: LimitesApp.maxUnidades)],
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                      onSaved: (v) => cantidad = int.tryParse(v!) ?? 0,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 5. Notas / cuidados - Ancho completo
+                    TextFormField(
+                      decoration: InputDecoration(
+                        labelText: 'Notas / cuidados',
+                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.card,
+                      ),
+                      style: TextStyle(color: AppColors.textPrimary),
+                      onSaved: (v) => notas = v ?? '',
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Botón de guardar: "Guardar Producto"
+                    SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          filled: true,
-                          fillColor: AppColors.surfaceContainerLowest,
-                          prefixText: '\$ ',
+                          elevation: 0,
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                        onPressed: _guardarProducto,
+                        child: const Text(
+                          'Guardar Producto',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                        onSaved: (v) => precio = double.tryParse(v!) ?? 0.0,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Cantidad Inicial',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: AppColors.surfaceContainerLowest,
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                        onSaved: (v) => cantidad = int.tryParse(v!) ?? 0,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Notas / Cuidados',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: AppColors.surfaceContainerLowest,
-                        ),
-                        onSaved: (v) => notas = v ?? '',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.onPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    onPressed: _guardarLote,
-                    child: const Text(
-                      'Guardar Lote',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

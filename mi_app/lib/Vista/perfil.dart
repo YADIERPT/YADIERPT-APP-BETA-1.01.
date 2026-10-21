@@ -9,7 +9,7 @@ import 'seguridad_vista.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 
-class PerfilVista extends StatelessWidget {
+class PerfilVista extends StatefulWidget {
   final ControladorPerfil controladorPerfil;
   final ControladorVentas controladorVentas;
   final ControladorAutenticacion controladorAutenticacion;
@@ -24,101 +24,217 @@ class PerfilVista extends StatelessWidget {
   });
 
   @override
+  State<PerfilVista> createState() => _PerfilVistaState();
+}
+
+class _PerfilVistaState extends State<PerfilVista> {
+  String _obtenerTextoTema(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'Claro';
+      case ThemeMode.dark:
+        return 'Oscuro';
+      case ThemeMode.system:
+        return 'Automático (Sistema)';
+    }
+  }
+
+  void _mostrarDialogoTema() {
+    ThemeMode modoSeleccionado = ThemeManager.instance.themeMode;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'Tema Visual',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.light,
+                    groupValue: modoSeleccionado,
+                    activeColor: AppColors.primary,
+                    title: Text(
+                      'Claro',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => modoSeleccionado = val);
+                      }
+                    },
+                  ),
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.dark,
+                    groupValue: modoSeleccionado,
+                    activeColor: AppColors.primary,
+                    title: Text(
+                      'Oscuro',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => modoSeleccionado = val);
+                      }
+                    },
+                  ),
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.system,
+                    groupValue: modoSeleccionado,
+                    activeColor: AppColors.primary,
+                    title: Text(
+                      'Automático (Sistema)',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => modoSeleccionado = val);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancelar',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await ThemeManager.instance.setThemeMode(modoSeleccionado);
+                    if (mounted) setState(() {});
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Guardar cambios'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, _) {
+        final usuario = widget.controladorAutenticacion.usuarioActual;
+        final nombreUsuario = usuario?.nombre ?? 'Administrador';
+        final rolUsuario = usuario != null
+            ? (usuario.rol == 'admin' ? 'Administrador' : 'Colaborador')
+            : 'Administrador';
+
+        return Scaffold(
+          backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               // Profile Header
               Container(
-                width: 100,
-                height: 100,
+                width: 84,
+                height: 84,
                 decoration: BoxDecoration(
                   color: AppColors.primaryContainer,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary, width: 3),
+                  border: Border.all(color: AppColors.primary, width: 2.5),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.person,
-                  size: 50,
-                  color: AppColors.onPrimaryContainer,
+                  size: 44,
+                  color: AppColors.primary,
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Administrador',
+              const SizedBox(height: 12),
+              Text(
+                nombreUsuario,
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.onSurface,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              const Text(
-                'Vivero Principal',
+              const SizedBox(height: 2),
+              Text(
+                '$rolUsuario · Vivero Principal',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.onSurfaceVariant,
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
 
               // Settings Sections
               _buildSectionTitle('Preferencias'),
               _buildListTile(
                 Icons.dark_mode_outlined,
                 'Tema Visual',
-                'Claro / Oscuro (Automatico)',
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text(
-                        'Tema Automático',
-                        style: TextStyle(color: AppColors.primary),
-                      ),
-                      content: const Text(
-                        'ViverApp respeta la configuracion de color de tu sistema operativo. Si cambias el modo oscuro en los ajustes de tu celular, la app se actualizara de inmediato.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text(
-                            'Entendido',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                _obtenerTextoTema(ThemeManager.instance.themeMode),
+                iconBgColor: AppColors.subtleTurquoise,
+                iconColor: AppColors.turquoise,
+                onTap: _mostrarDialogoTema,
               ),
               _buildListTile(
                 Icons.notifications_active_outlined,
                 'Alertas y Notificaciones',
                 'Configurar alertas de stock',
+                iconBgColor: AppColors.subtleAmber,
+                iconColor: AppColors.amber,
                 onTap: () {
                   showDialog(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: const Text(
-                        'Alertas de Stock',
-                        style: TextStyle(color: AppColors.primary),
+                      backgroundColor: AppColors.card,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      content: const Text(
-                        'El sistema actual te alerta automaticamente y muestra un punto rojo cuando cualquier producto en el inventario baja a 5 unidades o menos.',
+                      title: Text(
+                        'Alertas de Stock',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      content: Text(
+                        'El sistema te alerta automáticamente cuando un producto baja a su umbral de stock crítico configurado (por defecto 5 unidades o menos). Puedes personalizar el umbral de cada planta desde el botón Añadir en Inventario.',
+                        style: TextStyle(color: AppColors.textPrimary),
                       ),
                       actions: [
-                        TextButton(
+                        ElevatedButton(
                           onPressed: () => Navigator.pop(ctx),
-                          child: const Text(
-                            'Aceptar',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
                           ),
+                          child: const Text('Aceptar'),
                         ),
                       ],
                     ),
@@ -126,17 +242,19 @@ class PerfilVista extends StatelessWidget {
                 },
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildSectionTitle('Negocio'),
               _buildListTile(
                 Icons.storefront_outlined,
-                'Configuracion Financiera',
-                'IVA y Tipos de cambio',
+                'Configuración Financiera',
+                'IVA y Parámetros fiscales',
+                iconBgColor: AppColors.subtleGreen,
+                iconColor: AppColors.brightGreen,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => ConfiguracionFinancieraVista(
-                      controladorPerfil: controladorPerfil,
+                      controladorPerfil: widget.controladorPerfil,
                     ),
                   ),
                 ),
@@ -145,11 +263,13 @@ class PerfilVista extends StatelessWidget {
                 Icons.people_outline,
                 'Empleados',
                 'Gestionar perfiles y permisos',
+                iconBgColor: AppColors.subtleTurquoise,
+                iconColor: AppColors.turquoise,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => EmpleadosVista(
-                      controladorAutenticacion: controladorAutenticacion,
+                      controladorAutenticacion: widget.controladorAutenticacion,
                     ),
                   ),
                 ),
@@ -157,28 +277,32 @@ class PerfilVista extends StatelessWidget {
               _buildListTile(
                 Icons.receipt_long_outlined,
                 'Historial de Ventas',
-                'Ver reporte de ingresos',
+                'Ver reporte de operaciones',
+                iconBgColor: AppColors.subtleGreen,
+                iconColor: AppColors.brightGreen,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => HistorialVentasVista(
-                      controladorVentas: controladorVentas,
+                      controladorVentas: widget.controladorVentas,
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildSectionTitle('Cuenta'),
               _buildListTile(
                 Icons.security_outlined,
                 'Seguridad',
-                'Cambiar contrasena y PIN',
+                'Cambiar contraseña y PIN',
+                iconBgColor: AppColors.subtleAmber,
+                iconColor: AppColors.amber,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => SeguridadVista(
-                      controladorAutenticacion: controladorAutenticacion,
+                      controladorAutenticacion: widget.controladorAutenticacion,
                     ),
                   ),
                 ),
@@ -186,24 +310,37 @@ class PerfilVista extends StatelessWidget {
               _buildListTile(
                 Icons.help_outline,
                 'Soporte y Ayuda',
-                'Acerca de ViverApp',
+                'Acerca de Planteapp / Vivero',
+                iconBgColor: AppColors.subtleTurquoise,
+                iconColor: AppColors.turquoise,
                 onTap: () {
                   showDialog(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: const Text(
-                        'Soporte ViverApp',
-                        style: TextStyle(color: AppColors.primary),
+                      backgroundColor: AppColors.card,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      content: const Text(
-                        'ViverApp POS\nVersion: 1.1.0\n\nSi experimentas problemas, requieres restaurar datos o necesitas nuevas funciones, por favor contacta al desarrollador de tu sistema.',
+                      title: Text(
+                        'Soporte ViverApp',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      content: Text(
+                        'Planteapp POS\nVersión: 2.0\n\nSistema punto de venta e inventario botánico.',
+                        style: TextStyle(color: AppColors.textPrimary),
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx),
-                          child: const Text(
+                          child: Text(
                             'Cerrar',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -212,17 +349,17 @@ class PerfilVista extends StatelessWidget {
                 },
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 48,
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.logout, color: AppColors.error),
                   label: const Text(
-                    'Cerrar Sesion',
+                    'Cerrar Sesión',
                     style: TextStyle(
                       color: AppColors.error,
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -236,22 +373,33 @@ class PerfilVista extends StatelessWidget {
                     showDialog(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('Cerrar Sesion'),
-                        content: const Text(
-                          '¿Estas seguro que deseas cerrar sesion?',
+                        backgroundColor: AppColors.card,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Text(
+                          'Cerrar Sesión',
+                          style: TextStyle(color: AppColors.textPrimary),
+                        ),
+                        content: Text(
+                          '¿Estás seguro que deseas cerrar sesión?',
+                          style: TextStyle(color: AppColors.textSecondary),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancelar'),
+                            child: Text(
+                              'Cancelar',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
                           ),
                           TextButton(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              onLogout();
+                              widget.onLogout();
                             },
                             child: const Text(
-                              'Cerrar Sesion',
+                              'Cerrar Sesión',
                               style: TextStyle(color: AppColors.error),
                             ),
                           ),
@@ -261,23 +409,25 @@ class PerfilVista extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
             ],
           ),
         ),
       ),
     );
-  }
+  },
+);
+}
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0, top: 8.0),
+      padding: const EdgeInsets.only(bottom: 8.0, top: 4.0),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: const TextStyle(
-            fontSize: 14,
+          style: TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.bold,
             color: AppColors.primary,
           ),
@@ -291,41 +441,47 @@ class PerfilVista extends StatelessWidget {
     String title,
     String subtitle, {
     VoidCallback? onTap,
+    Color? iconBgColor,
+    Color? iconColor,
   }) {
+    final Color bg = iconBgColor ?? AppColors.subtleGreen;
+    final Color fg = iconColor ?? AppColors.brightGreen;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surfaceContainerHigh, width: 1),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: ListTile(
+        dense: true,
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainer,
-            borderRadius: BorderRadius.circular(8),
+            color: bg,
+            shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
+          child: Icon(icon, color: fg, size: 20),
         ),
         title: Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 15,
-            color: AppColors.onSurface,
+            fontSize: 14,
+            color: AppColors.textPrimary,
           ),
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: AppColors.onSurfaceVariant,
+            color: AppColors.textSecondary,
           ),
         ),
-        trailing: const Icon(
+        trailing: Icon(
           Icons.chevron_right,
-          color: AppColors.outlineVariant,
+          color: AppColors.textSecondary,
+          size: 20,
         ),
         onTap: onTap,
       ),
