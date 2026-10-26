@@ -75,6 +75,16 @@ class ControladorInventario {
     }
   }
 
+  Future<void> actualizarProductoCompleto(Producto productoActualizado) async {
+    final index = _productos.indexWhere((p) => p.id == productoActualizado.id);
+    if (index != -1) {
+      _productos[index] = productoActualizado;
+      await _actualizarProducto(productoActualizado);
+    } else {
+      throw Exception('Producto no encontrado');
+    }
+  }
+
   Future<void> actualizarNotasProducto(
     String productoId,
     String nuevasNotas,

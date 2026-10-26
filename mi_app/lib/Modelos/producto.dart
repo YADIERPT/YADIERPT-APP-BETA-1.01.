@@ -6,6 +6,7 @@ class Producto {
   double costo;
   int cantidadEnInventario;
   int umbralStockCritico;
+  String tipo; // 'planta' o 'articulo'
   List<String> imagenes;
 
   Producto({
@@ -16,10 +17,13 @@ class Producto {
     required this.costo,
     this.cantidadEnInventario = 0,
     this.umbralStockCritico = 5,
+    this.tipo = 'planta',
     List<String>? imagenes,
   }) : imagenes = imagenes ?? [];
 
   bool get esStockCritico => cantidadEnInventario <= umbralStockCritico;
+  bool get esPlanta => tipo.toLowerCase() == 'planta';
+  bool get esArticulo => tipo.toLowerCase() == 'articulo';
 
   Map<String, dynamic> toMap() {
     return {
@@ -30,6 +34,7 @@ class Producto {
       'costo': costo,
       'cantidadEnInventario': cantidadEnInventario,
       'umbralStockCritico': umbralStockCritico,
+      'tipo': tipo,
       'imagenes': imagenes.join(','),
     };
   }
@@ -43,6 +48,9 @@ class Producto {
       costo: map['costo'],
       cantidadEnInventario: map['cantidadEnInventario'],
       umbralStockCritico: map['umbralStockCritico'] ?? 5,
+      tipo: (map['tipo']?.toString().toLowerCase() == 'articulo')
+          ? 'articulo'
+          : 'planta',
       imagenes: map['imagenes'] != null && map['imagenes'].toString().isNotEmpty
           ? map['imagenes'].toString().split(',')
           : [],
@@ -69,6 +77,7 @@ class Producto {
   bool coincideConBusqueda(String consulta) {
     final consultaMinuscula = consulta.toLowerCase();
     return nombre.toLowerCase().contains(consultaMinuscula) ||
-        notas.toLowerCase().contains(consultaMinuscula);
+        notas.toLowerCase().contains(consultaMinuscula) ||
+        tipo.toLowerCase().contains(consultaMinuscula);
   }
 }

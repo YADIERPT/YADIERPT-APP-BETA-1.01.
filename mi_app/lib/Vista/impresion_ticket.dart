@@ -28,7 +28,11 @@ class ImpresionTicket {
                 ),
               ),
               pw.SizedBox(height: 10),
-              pw.Center(child: pw.Text('Ticket #${venta.id.substring(0, 8)}')),
+              pw.Center(
+                child: pw.Text(
+                  'Ticket #${venta.id.length >= 8 ? venta.id.substring(0, 8) : venta.id}',
+                ),
+              ),
               pw.Center(
                 child: pw.Text(
                   'Fecha: ${venta.fecha.toString().substring(0, 16)}',
@@ -66,7 +70,7 @@ class ImpresionTicket {
                     ],
                   ),
                 );
-              }).toList(),
+              }),
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

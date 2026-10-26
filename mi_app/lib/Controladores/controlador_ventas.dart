@@ -1,5 +1,4 @@
 import '../Modelos/venta.dart';
-import '../Modelos/producto.dart';
 import '../BaseDatos/base_datos.dart';
 import 'controlador_inventario.dart';
 import 'controlador_finanzas.dart';
@@ -9,7 +8,7 @@ class ControladorVentas {
   final ControladorInventario controladorInventario;
   final ControladorFinanzas controladorFinanzas;
   final ControladorPerfil controladorPerfil;
-  List<Venta> _ventas = [];
+  final List<Venta> _ventas = [];
 
   Venta? _ventaActual;
 
@@ -124,11 +123,12 @@ class ControladorVentas {
 
   Future<void> _guardarVentaEnBD(Venta venta) async {
     final db = await BaseDeDatos.instancia.database;
-    await db.insert('ventas', venta.toMap());
-
-    for (var articulo in venta.articulos) {
-      await db.insert('articulos_venta', articulo.toMap(venta.id));
-    }
+    await db.transaction((txn) async {
+      await txn.insert('ventas', venta.toMap());
+      for (var articulo in venta.articulos) {
+        await txn.insert('articulos_venta', articulo.toMap(venta.id));
+      }
+    });
   }
 
   Future<void> _descontarInventarioDeVenta(Venta venta) async {
@@ -138,9 +138,5 @@ class ControladorVentas {
         articulo.cantidad,
       );
     }
-  }
-
-  List<Producto> buscarProductosParaVenta(String consulta) {
-    return controladorInventario.buscarProductos(consulta);
   }
 }

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
-import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
+import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
 
 class PosVista extends StatefulWidget {
@@ -59,15 +59,41 @@ class _PosVistaState extends State<PosVista> {
     });
   }
 
+  void _mostrarAvisoSinUnidades() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.coral,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        content: const Text(
+          'Este producto no tiene unidades disponibles.',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        action: SnackBarAction(
+          label: 'Entendido',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
         final productos =
             widget.controladorInventario.buscarProductos(_busqueda).where((p) {
-          if (_categoriaSeleccionada == 'all') return true;
-          return p.notas.toLowerCase().contains(_categoriaSeleccionada);
+          if (_categoriaSeleccionada == 'planta') return p.esPlanta;
+          if (_categoriaSeleccionada == 'articulo') return p.esArticulo;
+          return true;
         }).toList();
 
         final ventaActual = widget.controladorVentas.ventaActual;
@@ -81,29 +107,82 @@ class _PosVistaState extends State<PosVista> {
           body: SafeArea(
             child: Column(
               children: [
-                _buildSearchBar(),
-                _buildCategoryChips(),
-                _buildContextStrip(),
+                _buildSearchBar(isLandscape),
+                _buildCategoryChips(isLandscape),
+                _buildContextStrip(isLandscape),
                 Expanded(
                   child: productos.isEmpty
                       ? Center(
                           child: Text(
-                            'No hay plantas que coincidan con la búsqueda',
+                            'No hay productos que coincidan con la búsqueda',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
                         )
                       : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            isLandscape ? 4 : 8,
+                            16,
+                            totalArticulos > 0 ? 80 : 20,
+                          ),
                           gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.70,
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: isLandscape ? 4 : 2,
+                            childAspectRatio: isLandscape ? 0.78 : 0.70,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
                           ),
                           itemCount: productos.length,
                           itemBuilder: (context, index) {
-                            return _buildProductCard(productos[index]);
+                            final producto = productos[index];
+                            int cantidadEnTicket = 0;
+                            if (ventaActual != null) {
+                              try {
+                                final art = ventaActual.articulos.firstWhere(
+                                  (a) => a.producto.id == producto.id,
+                                );
+                                cantidadEnTicket = art.cantidad;
+                              } catch (_) {}
+                            }
+
+                            return TarjetaPosProducto(
+                              producto: producto,
+                              cantidadEnTicket: cantidadEnTicket,
+                              onAgregar: () {
+                                setState(() {
+                                  widget.controladorVentas
+                                      .agregarProductoAVentaActual(
+                                    producto.id,
+                                    1,
+                                  );
+                                });
+                              },
+                              onIncrementar: () {
+                                setState(() {
+                                  widget.controladorVentas
+                                      .agregarProductoAVentaActual(
+                                    producto.id,
+                                    1,
+                                  );
+                                });
+                              },
+                              onDecrementar: () {
+                                setState(() {
+                                  if (ventaActual != null) {
+                                    final art =
+                                        ventaActual.articulos.firstWhere(
+                                      (a) => a.producto.id == producto.id,
+                                    );
+                                    if (art.cantidad > 1) {
+                                      art.cantidad--;
+                                    } else {
+                                      ventaActual.articulos.remove(art);
+                                    }
+                                  }
+                                });
+                              },
+                              onSinUnidades: _mostrarAvisoSinUnidades,
+                            );
                           },
                         ),
                 ),
@@ -112,7 +191,10 @@ class _PosVistaState extends State<PosVista> {
           ),
           bottomSheet: totalArticulos > 0
               ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: isLandscape ? 6 : 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     border: Border(
@@ -139,14 +221,14 @@ class _PosVistaState extends State<PosVista> {
                                 '$totalArticulos ${totalArticulos == 1 ? "artículo" : "artículos"}',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 ),
                               ),
                               Text(
                                 '\$${totalVenta.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   color: AppColors.textPrimary,
-                                  fontSize: 20,
+                                  fontSize: isLandscape ? 17 : 20,
                                   fontWeight: FontWeight.w900,
                                 ),
                               ),
@@ -155,20 +237,21 @@ class _PosVistaState extends State<PosVista> {
                         ),
                         ElevatedButton.icon(
                           onPressed: _abrirCobroModal,
-                          icon: const Icon(Icons.shopping_bag_outlined, size: 18),
-                          label: const Text(
+                          icon: Icon(Icons.shopping_bag_outlined,
+                              size: isLandscape ? 16 : 18),
+                          label: Text(
                             'Ver Ticket y Cobrar',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: isLandscape ? 13 : 14,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isLandscape ? 12 : 16,
+                              vertical: isLandscape ? 8 : 12,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -185,9 +268,9 @@ class _PosVistaState extends State<PosVista> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar(bool isLandscape) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      padding: EdgeInsets.fromLTRB(16, isLandscape ? 6 : 12, 16, isLandscape ? 4 : 6),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.secondarySurface,
@@ -206,9 +289,9 @@ class _PosVistaState extends State<PosVista> {
               size: 20,
             ),
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
+            contentPadding: EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 12,
+              vertical: isLandscape ? 8 : 12,
             ),
             suffixIcon: _busqueda.isNotEmpty
                 ? IconButton(
@@ -229,21 +312,18 @@ class _PosVistaState extends State<PosVista> {
     );
   }
 
-  Widget _buildCategoryChips() {
-    final etiquetas =
-        widget.controladorInicio.controladorPerfil.configuracion.etiquetas;
-    final categorias = [
+  Widget _buildCategoryChips(bool isLandscape) {
+    const categorias = [
       {'id': 'all', 'label': 'Todos'},
+      {'id': 'planta', 'label': 'Plantas'},
+      {'id': 'articulo', 'label': 'Artículos'},
     ];
-    for (var etiqueta in etiquetas) {
-      categorias.add({'id': etiqueta.toLowerCase(), 'label': etiqueta});
-    }
 
     return SizedBox(
-      height: 44,
+      height: isLandscape ? 36 : 44,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         itemCount: categorias.length,
         itemBuilder: (context, index) {
           final cat = categorias[index];
@@ -257,7 +337,10 @@ class _PosVistaState extends State<PosVista> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: isLandscape ? 12 : 16,
+                vertical: isLandscape ? 4 : 6,
+              ),
               decoration: BoxDecoration(
                 color: isSelected
                     ? AppColors.brightGreen
@@ -269,7 +352,7 @@ class _PosVistaState extends State<PosVista> {
                 cat['label']!,
                 style: TextStyle(
                   color: isSelected
-                      ? (AppColors.isDark ? const Color(0xFF161616) : Colors.white)
+                      ? AppColors.onPrimary
                       : AppColors.textSecondary,
                   fontWeight:
                       isSelected ? FontWeight.bold : FontWeight.normal,
@@ -283,40 +366,31 @@ class _PosVistaState extends State<PosVista> {
     );
   }
 
-  void _mostrarAvisoSinUnidades() {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.coral,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-        content: const Text(
-          'Este producto no tiene unidades disponibles.',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        action: SnackBarAction(
-          label: 'Entendido',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-  }
+  Widget _buildContextStrip(bool isLandscape) {
+    String titulo = 'CATÁLOGO GENERAL';
+    IconData icono = Icons.storefront_outlined;
+    if (_categoriaSeleccionada == 'planta') {
+      titulo = 'CATÁLOGO DE PLANTAS';
+      icono = Icons.eco_outlined;
+    } else if (_categoriaSeleccionada == 'articulo') {
+      titulo = 'CATÁLOGO DE ARTÍCULOS';
+      icono = Icons.inventory_2_outlined;
+    }
 
-  Widget _buildContextStrip() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: isLandscape ? 2 : 6,
+      ),
       child: Row(
         children: [
-          Icon(Icons.eco_outlined, color: AppColors.primary, size: 15),
+          Icon(icono, color: AppColors.primary, size: 14),
           const SizedBox(width: 4),
           Text(
-            'CATÁLOGO DE PLANTAS',
+            titulo,
             style: TextStyle(
               color: AppColors.textSecondary,
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,
             ),
@@ -325,238 +399,4 @@ class _PosVistaState extends State<PosVista> {
       ),
     );
   }
-
-  Widget _buildProductCard(Producto producto) {
-    int cantidadEnTicket = 0;
-    if (widget.controladorVentas.ventaActual != null) {
-      try {
-        final art = widget.controladorVentas.ventaActual!.articulos.firstWhere(
-          (a) => a.producto.id == producto.id,
-        );
-        cantidadEnTicket = art.cantidad;
-      } catch (_) {}
-    }
-    bool enTicket = cantidadEnTicket > 0;
-    final bool sinUnidades = producto.cantidadEnInventario == 0;
-
-    return GestureDetector(
-      onTap: () {
-        if (sinUnidades) {
-          _mostrarAvisoSinUnidades();
-          return;
-        }
-        setState(() {
-          widget.controladorVentas.agregarProductoAVentaActual(producto.id, 1);
-        });
-      },
-      child: Opacity(
-        opacity: sinUnidades ? 0.65 : 1.0,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: enTicket
-                  ? AppColors.brightGreen
-                  : (AppColors.isDark ? const Color(0xFF383838) : AppColors.border),
-              width: enTicket ? 2 : 1,
-            ),
-          ),
-        padding: const EdgeInsets.all(10),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondarySurface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: producto.imagenes.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              producto.imagenes.first,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Icon(
-                                Icons.local_florist,
-                                size: 36,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          )
-                        : Icon(
-                            Icons.local_florist,
-                            size: 36,
-                            color: AppColors.primary,
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  producto.nombre,
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  producto.notas.isNotEmpty ? producto.notas : 'Planta natural',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          '\$${producto.precioVenta.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: AppColors.brightGreen,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    if (sinUnidades)
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.subtleCoral,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              'Sin unidades',
-                              style: TextStyle(
-                                color: AppColors.coral,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      Text(
-                        '${producto.cantidadEnInventario} u.',
-                        style: TextStyle(
-                          color: producto.esStockCritico
-                              ? AppColors.amber
-                              : (AppColors.isDark
-                                  ? const Color(0xFFCCCCCC)
-                                  : AppColors.textSecondary),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            if (enTicket)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            final art = widget
-                                .controladorVentas
-                                .ventaActual!
-                                .articulos
-                                .firstWhere(
-                                  (a) => a.producto.id == producto.id,
-                                );
-                            if (art.cantidad > 1) {
-                              art.cantidad--;
-                            } else {
-                              widget
-                                  .controladorVentas
-                                  .ventaActual!
-                                  .articulos
-                                  .remove(art);
-                            }
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(
-                            Icons.remove,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          '$cantidadEnTicket',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            widget.controladorVentas
-                                .agregarProductoAVentaActual(producto.id, 1);
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(
-                            Icons.add,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
 }

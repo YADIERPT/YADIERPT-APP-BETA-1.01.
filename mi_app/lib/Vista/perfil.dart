@@ -6,13 +6,16 @@ import 'historial_ventas_vista.dart';
 import 'empleados_vista.dart';
 import 'configuracion_financiera_vista.dart';
 import 'seguridad_vista.dart';
+import 'configuracion_biometrica_vista.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
+import '../Controladores/controlador_biometrico.dart';
 
 class PerfilVista extends StatefulWidget {
   final ControladorPerfil controladorPerfil;
   final ControladorVentas controladorVentas;
   final ControladorAutenticacion controladorAutenticacion;
+  final ControladorBiometrico? controladorBiometrico;
   final VoidCallback onLogout;
 
   const PerfilVista({
@@ -20,6 +23,7 @@ class PerfilVista extends StatefulWidget {
     required this.controladorPerfil,
     required this.controladorVentas,
     required this.controladorAutenticacion,
+    this.controladorBiometrico,
     required this.onLogout,
   });
 
@@ -60,52 +64,42 @@ class _PerfilVistaState extends State<PerfilVista> {
                   fontSize: 18,
                 ),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  RadioListTile<ThemeMode>(
-                    value: ThemeMode.light,
-                    groupValue: modoSeleccionado,
-                    activeColor: AppColors.primary,
-                    title: Text(
-                      'Claro',
-                      style: TextStyle(color: AppColors.textPrimary),
+              content: RadioGroup<ThemeMode>(
+                groupValue: modoSeleccionado,
+                onChanged: (val) {
+                  if (val != null) {
+                    setDialogState(() => modoSeleccionado = val);
+                  }
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<ThemeMode>(
+                      value: ThemeMode.light,
+                      activeColor: AppColors.primary,
+                      title: Text(
+                        'Claro',
+                        style: TextStyle(color: AppColors.textPrimary),
+                      ),
                     ),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => modoSeleccionado = val);
-                      }
-                    },
-                  ),
-                  RadioListTile<ThemeMode>(
-                    value: ThemeMode.dark,
-                    groupValue: modoSeleccionado,
-                    activeColor: AppColors.primary,
-                    title: Text(
-                      'Oscuro',
-                      style: TextStyle(color: AppColors.textPrimary),
+                    RadioListTile<ThemeMode>(
+                      value: ThemeMode.dark,
+                      activeColor: AppColors.primary,
+                      title: Text(
+                        'Oscuro',
+                        style: TextStyle(color: AppColors.textPrimary),
+                      ),
                     ),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => modoSeleccionado = val);
-                      }
-                    },
-                  ),
-                  RadioListTile<ThemeMode>(
-                    value: ThemeMode.system,
-                    groupValue: modoSeleccionado,
-                    activeColor: AppColors.primary,
-                    title: Text(
-                      'Automático (Sistema)',
-                      style: TextStyle(color: AppColors.textPrimary),
+                    RadioListTile<ThemeMode>(
+                      value: ThemeMode.system,
+                      activeColor: AppColors.primary,
+                      title: Text(
+                        'Automático (Sistema)',
+                        style: TextStyle(color: AppColors.textPrimary),
+                      ),
                     ),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => modoSeleccionado = val);
-                      }
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -291,7 +285,26 @@ class _PerfilVistaState extends State<PerfilVista> {
               ),
 
               const SizedBox(height: 16),
-              _buildSectionTitle('Cuenta'),
+              _buildSectionTitle('Cuenta y Acceso'),
+              _buildListTile(
+                Icons.fingerprint,
+                'Lector de Huellas y Biometría',
+                (widget.controladorBiometrico?.tieneHuellaRegistrada ?? false)
+                    ? 'Huella activa · ${widget.controladorBiometrico!.config.tipoConexion.toUpperCase()}'
+                    : 'Configurar huella, WiFi, Bluetooth o Cable',
+                iconBgColor: AppColors.subtleGreen,
+                iconColor: AppColors.brightGreen,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ConfiguracionBiometricaVista(
+                      controladorBiometrico: widget.controladorBiometrico ??
+                          ControladorBiometrico(),
+                      controladorAutenticacion: widget.controladorAutenticacion,
+                    ),
+                  ),
+                ).then((_) => setState(() {})),
+              ),
               _buildListTile(
                 Icons.security_outlined,
                 'Seguridad',

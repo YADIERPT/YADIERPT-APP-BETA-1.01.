@@ -1,4 +1,4 @@
-# Vivero POS (Punto de Venta) 🌿
+# Vivero POS (Punto de Venta) 
 
 Una aplicación móvil desarrollada en **Flutter** para la gestión de ventas, inventario y finanzas de un vivero botánico. 
 

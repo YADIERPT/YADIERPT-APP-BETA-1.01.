@@ -23,7 +23,13 @@ class ControladorPerfil {
   }
 
   Future<void> alternarTema() async {
-    _configuracion.actualizarTema(!_configuracion.temaOscuro);
+    final nuevoModo = _configuracion.modoTema == 1 ? 0 : 1;
+    _configuracion.actualizarModoTema(nuevoModo);
+    await _guardarConfiguracion();
+  }
+
+  Future<void> actualizarModoTema(int nuevoModo) async {
+    _configuracion.actualizarModoTema(nuevoModo);
     await _guardarConfiguracion();
   }
 

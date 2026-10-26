@@ -4,24 +4,30 @@ import 'controlador_inventario.dart';
 import 'controlador_ventas.dart';
 import 'controlador_finanzas.dart';
 import 'controlador_perfil.dart';
+import 'controlador_biometrico.dart';
 
 class ControladorInicio {
   final ControladorInventario controladorInventario;
   final ControladorVentas controladorVentas;
   final ControladorFinanzas controladorFinanzas;
   final ControladorPerfil controladorPerfil;
+  final ControladorBiometrico controladorBiometrico;
 
   ControladorInicio({
     required this.controladorInventario,
     required this.controladorVentas,
     required this.controladorFinanzas,
     required this.controladorPerfil,
-  });
+    ControladorBiometrico? controladorBiometrico,
+  }) : controladorBiometrico =
+            controladorBiometrico ?? ControladorBiometrico();
+
   Future<void> inicializarDatosOffline() async {
     await controladorPerfil.cargarConfiguracion();
     await controladorInventario.cargarProductos();
     await controladorFinanzas.cargarTransacciones();
     await controladorVentas.cargarVentas();
+    await controladorBiometrico.inicializar();
   }
 
   ResumenInicio generarResumenDelDia() {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Modelos/venta.dart';
+import 'Widgets/tarjeta_historial_venta.dart';
 
 class HistorialVentasVista extends StatefulWidget {
   final ControladorVentas controladorVentas;
@@ -17,7 +18,8 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
   String _periodoSeleccionado = 'Hoy';
 
   List<Venta> _filtrarVentasPorPeriodo() {
-    final todas = widget.controladorVentas.ventas;
+    final todas = widget.controladorVentas.ventas
+        .where((v) => v.estado == EstadoVenta.completada);
     final ahora = DateTime.now();
 
     if (_periodoSeleccionado == 'Hoy') {
@@ -41,7 +43,8 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
   }
 
   double _calcularVariacion(double totalActual) {
-    final todas = widget.controladorVentas.ventas;
+    final todas = widget.controladorVentas.ventas
+        .where((v) => v.estado == EstadoVenta.completada);
     final ahora = DateTime.now();
     double totalAnterior = 0.0;
 
@@ -81,451 +84,324 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
       animation: ThemeManager.instance,
       builder: (context, _) {
         final ventasFiltradas = _filtrarVentasPorPeriodo().reversed.toList();
-    final double ventaAcumulada =
-        ventasFiltradas.fold(0.0, (sum, v) => sum + v.total);
-    final int pedidosCompletados = ventasFiltradas.length;
-    final double ticketPromedio = pedidosCompletados > 0
-        ? ventaAcumulada / pedidosCompletados
-        : 0.0;
-    final double variacion = _calcularVariacion(ventaAcumulada);
+        final double ventaAcumulada =
+            ventasFiltradas.fold(0.0, (sum, v) => sum + v.total);
+        final int pedidosCompletados = ventasFiltradas.length;
+        final double ticketPromedio = pedidosCompletados > 0
+            ? ventaAcumulada / pedidosCompletados
+            : 0.0;
+        final double variacion = _calcularVariacion(ventaAcumulada);
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: Text(
-          'Historial de Ventas',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        iconTheme: IconThemeData(color: AppColors.textPrimary),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: [
-          // Pestañas de período: "Hoy", "Semana Pasada", "Mes Pasado"
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: AppColors.secondarySurface,
-              borderRadius: BorderRadius.circular(16),
+        return Scaffold(
+          backgroundColor: AppColors.surface,
+          appBar: AppBar(
+            title: Text(
+              'Historial de Ventas',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
-            child: Row(
-              children: ['Hoy', 'Semana Pasada', 'Mes Pasado'].map((opcion) {
-                final bool activa = _periodoSeleccionado == opcion;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _periodoSeleccionado = opcion;
-                      });
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: activa ? AppColors.primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: activa
-                            ? [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          opcion,
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                activa ? FontWeight.bold : FontWeight.w500,
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            iconTheme: IconThemeData(color: AppColors.textPrimary),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: [
+              // Pestañas de período: "Hoy", "Semana Pasada", "Mes Pasado"
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.secondarySurface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children:
+                      ['Hoy', 'Semana Pasada', 'Mes Pasado'].map((opcion) {
+                    final bool activa = _periodoSeleccionado == opcion;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _periodoSeleccionado = opcion;
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
                             color: activa
-                                ? Colors.white
-                                : AppColors.textSecondary,
+                                ? AppColors.primary
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: activa
+                                ? [
+                                    BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.1),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              opcion,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: activa
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: activa
+                                    ? Colors.white
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Bloque de resumen del período seleccionado
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: ThemeManager.instance.isDarkMode ? null : AppColors.card,
-              gradient: ThemeManager.instance.isDarkMode
-                  ? AppColors.darkCardGradient
-                  : null,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border, width: 1),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Venta acumulada ($_periodoSeleccionado)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      '\$${ventaAcumulada.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: variacion >= 0
-                            ? AppColors.subtleGreen
-                            : AppColors.subtleCoral,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            variacion >= 0
-                                ? Icons.trending_up
-                                : Icons.trending_down,
-                            size: 13,
-                            color: variacion >= 0
-                                ? AppColors.brightGreen
-                                : AppColors.coral,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            variacion >= 0
-                                ? '+${variacion.toStringAsFixed(1)}%'
-                                : '${variacion.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: variacion >= 0
-                                  ? AppColors.brightGreen
-                                  : AppColors.coral,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'vs anterior',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Divider(height: 1, color: AppColors.border),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '$pedidosCompletados',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            'Pedidos completados',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      height: 28,
-                      width: 1,
-                      color: AppColors.border,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '\$${ticketPromedio.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            'Ticket promedio',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Sección "Detalle de operaciones"
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Text(
-                'Detalle de operaciones',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                    );
+                  }).toList(),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Bloque de resumen del período seleccionado
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: AppColors.secondarySurface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '$pedidosCompletados ventas registradas',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Lista de ventas o estado vacío
-          if (ventasFiltradas.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border, width: 1),
-              ),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.receipt_long_outlined,
-                      size: 42,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Sin ventas en este periodo',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'No se registraron transacciones para el periodo seleccionado.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...ventasFiltradas.map((v) {
-              final String folio = v.id.length > 6
-                  ? v.id.substring(v.id.length - 6)
-                  : v.id;
-              final int totalUnidades = v.articulos.fold(
-                0,
-                (sum, a) => sum + a.cantidad,
-              );
-              final String nombresProductos = v.articulos.isNotEmpty
-                  ? v.articulos.map((a) => a.producto.nombre).join(', ')
-                  : 'Venta General';
-              final String hora =
-                  '${v.fecha.hour.toString().padLeft(2, '0')}:${v.fecha.minute.toString().padLeft(2, '0')} hrs';
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(14),
+                  color:
+                      ThemeManager.instance.isDarkMode ? null : AppColors.card,
+                  gradient: ThemeManager.instance.isDarkMode
+                      ? AppColors.darkCardGradient
+                      : null,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.border, width: 1),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Fila superior: Nombre de productos y Monto
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            nombresProductos,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '+\$${v.total.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.brightGreen,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Venta acumulada ($_periodoSeleccionado)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 6),
-
-                    // Fila intermedia: Unidades vendidas y Método de pago
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         Text(
-                          '$totalUnidades ${totalUnidades == 1 ? "unidad" : "unidades"}',
+                          '\$${ventaAcumulada.toStringAsFixed(2)}',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                            horizontal: 8,
+                            vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.subtleGreen,
-                            borderRadius: BorderRadius.circular(6),
+                            color: variacion >= 0
+                                ? AppColors.subtleGreen
+                                : AppColors.subtleCoral,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(
-                            'Efectivo',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.brightGreen,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                variacion >= 0
+                                    ? Icons.trending_up
+                                    : Icons.trending_down,
+                                size: 13,
+                                color: variacion >= 0
+                                    ? AppColors.brightGreen
+                                    : AppColors.coral,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                variacion >= 0
+                                    ? '+${variacion.toStringAsFixed(1)}%'
+                                    : '${variacion.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: variacion >= 0
+                                      ? AppColors.brightGreen
+                                      : AppColors.coral,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'vs anterior',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-
-                    // Fila inferior: Usuario cajero, Hora y Folio en dos líneas claras
+                    const SizedBox(height: 16),
+                    Divider(height: 1, color: AppColors.border),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
-                        Icon(
-                          Icons.person_outline,
-                          size: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            'Cajero: Administrador',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$pedidosCompletados',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Pedidos completados',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Folio #$folio',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        Container(
+                          height: 28,
+                          width: 1,
+                          color: AppColors.border,
                         ),
-                        Text(
-                          hora,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '\$${ticketPromedio.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Ticket promedio',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ],
                 ),
-              );
-            }),
-          const SizedBox(height: 24),
-        ],
-      ),
+              ),
+              const SizedBox(height: 20),
+
+              // Sección "Detalle de operaciones"
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    'Detalle de operaciones',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondarySurface,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$pedidosCompletados ventas registradas',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Lista de ventas o estado vacío
+              if (ventasFiltradas.isEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border, width: 1),
+                  ),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 42,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Sin ventas en este periodo',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'No se registraron transacciones para el periodo seleccionado.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...ventasFiltradas.map((v) => TarjetaHistorialVenta(venta: v)),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
     );
-  },
-);
   }
 }

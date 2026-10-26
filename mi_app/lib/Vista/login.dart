@@ -27,10 +27,10 @@ class LoginVista extends StatefulWidget {
 }
 
 class _LoginVistaState extends State<LoginVista> {
-  final _usuarioController = TextEditingController(text: 'VO-4092');
-  final _claveController = TextEditingController(text: '123456');
+  final _usuarioController = TextEditingController();
+  final _claveController = TextEditingController();
   bool _ocultarClave = true;
-  bool _recordarTerminal = true;
+  bool _recordarTerminal = false;
   bool _isLoading = false;
   bool _isSuccess = false;
 
@@ -109,6 +109,63 @@ class _LoginVistaState extends State<LoginVista> {
               ),
             ),
           ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _iniciarSesionConHuella() async {
+    final bioCtrl = widget.controladorInicio.controladorBiometrico;
+    if (!bioCtrl.tieneHuellaRegistrada) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'No hay ninguna huella configurada. Inicia sesión con tus credenciales y configúrala en Cuenta > Lector de Huellas.',
+          ),
+          backgroundColor: AppColors.amber,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final String? usuarioId = await bioCtrl.autenticarAcceso();
+
+    if (usuarioId != null) {
+      final bool exito =
+          await widget.controladorAutenticacion.iniciarSesionPorId(usuarioId);
+
+      if (!mounted) return;
+
+      if (exito) {
+        setState(() {
+          _isLoading = false;
+          _isSuccess = true;
+        });
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => InicioVista(
+                controladorInicio: widget.controladorInicio,
+                controladorInventario: widget.controladorInventario,
+                controladorVentas: widget.controladorVentas,
+                controladorAutenticacion: widget.controladorAutenticacion,
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Huella no reconocida o autenticación cancelada.'),
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -297,6 +354,12 @@ class _LoginVistaState extends State<LoginVista> {
                   color: AppColors.textSecondary,
                   size: 20,
                 ),
+                hintText: 'PIN o contraseña',
+                hintStyle: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  letterSpacing: 0,
+                ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _ocultarClave ? Icons.visibility : Icons.visibility_off,
@@ -373,6 +436,53 @@ class _LoginVistaState extends State<LoginVista> {
                 elevation: 0,
               ),
               child: _buildButtonContent(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: Divider(color: AppColors.border)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  'o ingresa biométricamente',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: AppColors.border)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed:
+                  _isLoading || _isSuccess ? null : _iniciarSesionConHuella,
+              icon: Icon(Icons.fingerprint, color: AppColors.primary, size: 22),
+              label: Text(
+                'Acceder con Huella Digital',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: widget.controladorInicio.controladorBiometrico
+                          .tieneHuellaRegistrada
+                      ? AppColors.primary
+                      : AppColors.border,
+                  width: 1.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ),
         ],

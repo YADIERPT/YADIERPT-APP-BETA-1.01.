@@ -49,11 +49,23 @@ void main() async {
       precioVenta: 28.00,
       costo: 10.00,
       cantidadEnInventario: 14,
+      tipo: 'planta',
       imagenes: [
         'https://lh3.googleusercontent.com/aida-public/AB6AXuDzVZ9j8_4q9p5pqc4u_PmDq2owo1t5GSUSfk7MgiELHy2-YQ64qDbIklUrLJoJE1lC4bTIMTj4sMyx5eiN2g4m_jncrb3qNUvd51_X3E2aRj_AF8-r0ybK1uezldfn990ECPiAN6wtL5MJh7ajjEmbxg75EiTCDkIrTVXtIgWjdmpOdIa_MfdVj9BMU0sS8z2PUk02t6EEwqTv-AwmO-M6x4Jfm6ojNNVB2dVQT4IVpXavWuVJ12e9Cw',
       ],
     );
+    final maceta = Producto(
+      id: 'ART-001',
+      nombre: 'Maceta Cerámica Blanca 15cm',
+      notas: 'Maceta con drenaje y plato',
+      precioVenta: 18.00,
+      costo: 8.00,
+      cantidadEnInventario: 20,
+      tipo: 'articulo',
+      imagenes: [],
+    );
     await controladorInventario.agregarProducto(monstera);
+    await controladorInventario.agregarProducto(maceta);
   }
 
   runApp(
@@ -92,17 +104,10 @@ class ViverApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeManager.instance.themeMode,
           builder: (context, child) {
+            final Widget contenido = child ?? const SizedBox.shrink();
             return Container(
               color: AppColors.appBackground,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 9 / 19.5,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24.0),
-                    child: child,
-                  ),
-                ),
-              ),
+              child: contenido,
             );
           },
           home: LoginVista(

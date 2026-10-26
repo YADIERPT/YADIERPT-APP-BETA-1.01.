@@ -42,7 +42,7 @@ class _ConfiguracionFinancieraVistaState
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dialogCtx, setDialogState) {
             return AlertDialog(
               backgroundColor: AppColors.card,
               shape: RoundedRectangleBorder(
@@ -120,11 +120,13 @@ class _ConfiguracionFinancieraVistaState
                     try {
                       await widget.controladorPerfil
                           .actualizarPorcentajeIva(ivaDecimal);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
                       if (mounted) {
                         setState(() {
                           _iva = ivaDecimal;
                         });
-                        Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content:
@@ -162,80 +164,89 @@ class _ConfiguracionFinancieraVistaState
 
   @override
   Widget build(BuildContext context) {
-    final double displayPorcentaje = _iva * 100;
-    final String displayTexto =
-        displayPorcentaje == displayPorcentaje.roundToDouble()
-            ? '${displayPorcentaje.toInt()}%'
-            : '${displayPorcentaje.toStringAsFixed(2)}%';
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
+      builder: (context, _) {
+        final double displayPorcentaje = _iva * 100;
+        final String displayTexto =
+            displayPorcentaje == displayPorcentaje.roundToDouble()
+                ? '${displayPorcentaje.toInt()}%'
+                : '${displayPorcentaje.toStringAsFixed(2)}%';
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: Text(
-          'Configuración Financiera',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.surface,
-        iconTheme: IconThemeData(color: AppColors.textPrimary),
-        elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border, width: 1),
+        return Scaffold(
+          backgroundColor: AppColors.surface,
+          appBar: AppBar(
+            title: Text(
+              'Configuración Financiera',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  title: Text(
-                    'Aplicar IVA a las ventas',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Si se desactiva, los tickets no cobrarán impuestos.',
-                    style:
-                        TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                  ),
-                  value: _aplicarIva,
-                  activeThumbColor: AppColors.primary,
-                  onChanged: (val) async {
-                    await widget.controladorPerfil.alternarAplicarIva(val);
-                    setState(() => _aplicarIva = val);
-                  },
-                ),
-                Divider(height: 1, color: AppColors.border),
-                ListTile(
-                  title: Text(
-                    'Porcentaje de IVA actual: $displayTexto',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Toca para editar el porcentaje del impuesto estándar.',
-                    style:
-                        TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                  ),
-                  trailing:
-                      Icon(Icons.edit_outlined, color: AppColors.primary),
-                  onTap: _editarPorcentajeIva,
-                ),
-              ],
-            ),
+            backgroundColor: AppColors.surface,
+            iconTheme: IconThemeData(color: AppColors.textPrimary),
+            elevation: 0,
           ),
-        ],
-      ),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border, width: 1),
+                ),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      title: Text(
+                        'Aplicar IVA a las ventas',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Si se desactiva, los tickets no cobrarán impuestos.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      value: _aplicarIva,
+                      activeThumbColor: AppColors.primary,
+                      onChanged: (val) async {
+                        await widget.controladorPerfil.alternarAplicarIva(val);
+                        setState(() => _aplicarIva = val);
+                      },
+                    ),
+                    Divider(height: 1, color: AppColors.border),
+                    ListTile(
+                      title: Text(
+                        'Porcentaje de IVA actual: $displayTexto',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Toca para editar el porcentaje del impuesto estándar.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing:
+                          Icon(Icons.edit_outlined, color: AppColors.primary),
+                      onTap: _editarPorcentajeIva,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

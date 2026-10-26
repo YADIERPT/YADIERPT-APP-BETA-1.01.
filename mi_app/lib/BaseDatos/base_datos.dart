@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
@@ -27,7 +26,10 @@ class BaseDeDatos {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 8,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _crearEsquema,
       onUpgrade: _actualizarEsquema,
     );
@@ -64,6 +66,39 @@ class BaseDeDatos {
         'ALTER TABLE productos ADD COLUMN umbralStockCritico INTEGER NOT NULL DEFAULT 5',
       );
     }
+    if (oldVersion < 7) {
+      await db.execute(
+        'ALTER TABLE productos ADD COLUMN tipo TEXT NOT NULL DEFAULT \'planta\'',
+      );
+    }
+    if (oldVersion < 8) {
+      await db.execute('''
+        CREATE TABLE configuracion_biometrica (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          biometriaHabilitada INTEGER NOT NULL DEFAULT 0,
+          usuarioVinculadoId TEXT,
+          nombreHuella TEXT,
+          fechaRegistro TEXT,
+          tipoConexion TEXT NOT NULL DEFAULT 'local',
+          wifiHost TEXT NOT NULL DEFAULT '192.168.1.100',
+          wifiPuerto INTEGER NOT NULL DEFAULT 4370,
+          bluetoothDispositivo TEXT NOT NULL DEFAULT '',
+          cablePuertoSerial TEXT NOT NULL DEFAULT 'COM3',
+          cableBaudRate INTEGER NOT NULL DEFAULT 9600,
+          ultimoEstadoConexion TEXT NOT NULL DEFAULT 'Desconectado'
+        )
+      ''');
+      await db.execute('''
+        INSERT INTO configuracion_biometrica (
+          id, biometriaHabilitada, usuarioVinculadoId, nombreHuella, fechaRegistro,
+          tipoConexion, wifiHost, wifiPuerto, bluetoothDispositivo, cablePuertoSerial,
+          cableBaudRate, ultimoEstadoConexion
+        ) VALUES (
+          1, 0, NULL, NULL, NULL,
+          'local', '192.168.1.100', 4370, '', 'COM3', 9600, 'Desconectado'
+        )
+      ''');
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -84,7 +119,8 @@ class BaseDeDatos {
         costo REAL NOT NULL,
         cantidadEnInventario INTEGER NOT NULL,
         imagenes TEXT,
-        umbralStockCritico INTEGER NOT NULL DEFAULT 5
+        umbralStockCritico INTEGER NOT NULL DEFAULT 5,
+        tipo TEXT NOT NULL DEFAULT 'planta'
       )
     ''');
     await db.execute('''
@@ -129,6 +165,32 @@ class BaseDeDatos {
     await db.execute('''
       INSERT INTO configuracion (id, temaOscuro, tipoCambioUSD, porcentajeIvaDefecto, aplicarIva, etiquetasJson)
       VALUES (1, 2, 18.0, 0.16, 1, '["Interior", "Suculentas", "Macetas", "Regalos"]')
+    ''');
+    await db.execute('''
+      CREATE TABLE configuracion_biometrica (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        biometriaHabilitada INTEGER NOT NULL DEFAULT 0,
+        usuarioVinculadoId TEXT,
+        nombreHuella TEXT,
+        fechaRegistro TEXT,
+        tipoConexion TEXT NOT NULL DEFAULT 'local',
+        wifiHost TEXT NOT NULL DEFAULT '192.168.1.100',
+        wifiPuerto INTEGER NOT NULL DEFAULT 4370,
+        bluetoothDispositivo TEXT NOT NULL DEFAULT '',
+        cablePuertoSerial TEXT NOT NULL DEFAULT 'COM3',
+        cableBaudRate INTEGER NOT NULL DEFAULT 9600,
+        ultimoEstadoConexion TEXT NOT NULL DEFAULT 'Desconectado'
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO configuracion_biometrica (
+        id, biometriaHabilitada, usuarioVinculadoId, nombreHuella, fechaRegistro,
+        tipoConexion, wifiHost, wifiPuerto, bluetoothDispositivo, cablePuertoSerial,
+        cableBaudRate, ultimoEstadoConexion
+      ) VALUES (
+        1, 0, NULL, NULL, NULL,
+        'local', '192.168.1.100', 4370, '', 'COM3', 9600, 'Desconectado'
+      )
     ''');
   }
 
