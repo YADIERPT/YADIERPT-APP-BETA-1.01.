@@ -103,6 +103,7 @@ class _PosVistaState extends State<PosVista> {
         final totalVenta = ventaActual?.total ?? 0.0;
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
           body: SafeArea(
             child: Column(

@@ -1,5 +1,6 @@
 import '../Modelos/venta.dart';
 import '../BaseDatos/base_datos.dart';
+import '../IA/Controladores/controlador_ia_compras.dart';
 import 'controlador_inventario.dart';
 import 'controlador_finanzas.dart';
 import 'controlador_perfil.dart';
@@ -8,6 +9,7 @@ class ControladorVentas {
   final ControladorInventario controladorInventario;
   final ControladorFinanzas controladorFinanzas;
   final ControladorPerfil controladorPerfil;
+  ControladorIACompras? controladorIA;
   final List<Venta> _ventas = [];
 
   Venta? _ventaActual;
@@ -16,6 +18,7 @@ class ControladorVentas {
     required this.controladorInventario,
     required this.controladorFinanzas,
     required this.controladorPerfil,
+    this.controladorIA,
   });
 
   List<Venta> get ventas => _ventas;
@@ -106,18 +109,31 @@ class ControladorVentas {
 
   Future<void> completarVentaActual() async {
     if (_ventaActual != null) {
-      await _descontarInventarioDeVenta(_ventaActual!);
+      final ventaTerminada = _ventaActual!;
+      await _descontarInventarioDeVenta(ventaTerminada);
 
-      _ventaActual!.completarVenta();
-      await _guardarVentaEnBD(_ventaActual!);
-      _ventas.add(_ventaActual!);
+      ventaTerminada.completarVenta();
+      await _guardarVentaEnBD(ventaTerminada);
+      _ventas.add(ventaTerminada);
 
       await controladorFinanzas.registrarIngreso(
-        'Venta completada: ${_ventaActual!.id}',
-        _ventaActual!.total,
+        'Venta completada: ${ventaTerminada.id}',
+        ventaTerminada.total,
       );
 
       _ventaActual = null;
+
+      // Calibración reactiva local de la IA de compras
+      if (controladorIA != null) {
+        try {
+          await controladorIA!.recalibrarPorVenta(
+            venta: ventaTerminada,
+            todasLasVentas: _ventas,
+          );
+        } catch (e) {
+          // No detener el flujo de venta si la IA arroja advertencia
+        }
+      }
     }
   }
 

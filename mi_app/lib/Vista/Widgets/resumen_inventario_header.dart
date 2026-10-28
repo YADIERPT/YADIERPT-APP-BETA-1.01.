@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../IA/Controladores/controlador_ia_compras.dart';
 import '../../Tema/app_theme.dart';
+import '../../Tema/app_svg_icons.dart';
 
 class ResumenInventarioHeader extends StatelessWidget {
   final int totalPlantas;
@@ -8,6 +10,8 @@ class ResumenInventarioHeader extends StatelessWidget {
   final int totalSkus;
   final String filtroActivo;
   final ValueChanged<String> onFiltroSeleccionado;
+  final ControladorIACompras? controladorIA;
+  final VoidCallback? onVerSugerencias;
 
   const ResumenInventarioHeader({
     super.key,
@@ -16,6 +20,8 @@ class ResumenInventarioHeader extends StatelessWidget {
     required this.totalSkus,
     required this.filtroActivo,
     required this.onFiltroSeleccionado,
+    this.controladorIA,
+    this.onVerSugerencias,
   });
 
   @override
@@ -75,115 +81,172 @@ class ResumenInventarioHeader extends StatelessWidget {
         SizedBox(height: isLandscape ? 8 : 12),
 
         // Panel "Sugerencias IA"
-        Container(
-          padding: EdgeInsets.all(isLandscape ? 8 : 12),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border, width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.auto_awesome,
-                          size: 13,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Sugerencias IA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Espacio de sugerencias',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Recomendación del sistema: optimización de stock botánico disponible.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
+        Builder(
+          builder: (context) {
+            final ia = controladorIA;
+            final destacada = ia?.recomendacionDestacada;
+            final int totalSugerencias = ia?.recomendacionesActivas.length ?? 0;
+            final int totalCriticos = ia?.totalCriticos ?? 0;
+
+            String textoMotivo;
+            String etiquetaBadge = 'Sugerencias IA';
+            if (ia != null && ia.cargando) {
+              textoMotivo = 'Calibrando modelo de compras con el historial de ventas...';
+            } else if (destacada != null) {
+              if (destacada.sugiereCompra) {
+                etiquetaBadge = totalCriticos > 0
+                    ? 'Sugerencias IA ($totalCriticos críticas)'
+                    : 'Sugerencias IA ($totalSugerencias)';
+                textoMotivo =
+                    'Recomendar compra: +${destacada.cantidadSugerida} unid. de ${destacada.nombreProducto}. ${destacada.motivoRazonado}';
+              } else {
+                etiquetaBadge = 'Monitoreo de Stock';
+                textoMotivo =
+                    'Atención en ${destacada.nombreProducto}: ${destacada.motivoRazonado}';
+              }
+            } else {
+              textoMotivo =
+                  'Inventario botánico optimizado. Todas las existencias cubren la demanda proyectada.';
+            }
+
+            return Container(
+              padding: EdgeInsets.all(isLandscape ? 8 : 12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: totalCriticos > 0
+                      ? AppColors.coral.withValues(alpha: 0.5)
+                      : AppColors.border,
+                  width: totalCriticos > 0 ? 1.5 : 1,
                 ),
               ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 2,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: totalCriticos > 0
+                              ? AppColors.coral.withValues(alpha: 0.12)
+                              : AppColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SvgIconWidget(
+                              AppSvgIcons.iaChispas,
+                              size: 13,
+                              color: totalCriticos > 0
+                                  ? AppColors.coral
+                                  : AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              etiquetaBadge,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: totalCriticos > 0
+                                    ? AppColors.coral
+                                    : AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      minimumSize: const Size(60, 26),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+                      const Spacer(),
+                      Text(
+                        totalSugerencias > 0
+                            ? '$totalSugerencias productos en alerta'
+                            : 'Monitoreo activo',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      'Descartar',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    textoMotivo,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 2,
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (destacada != null) ...[
+                        OutlinedButton(
+                          onPressed: () {
+                            ia?.descartarRecomendacion(destacada.id);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: AppColors.border),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 2,
+                            ),
+                            minimumSize: const Size(60, 26),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          child: Text(
+                            'Descartar',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      ElevatedButton.icon(
+                        onPressed: onVerSugerencias,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          minimumSize: const Size(60, 26),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        icon: SvgIconWidget(
+                          AppSvgIcons.iaChispas,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          totalSugerencias > 0
+                              ? 'Ver sugerencias ($totalSugerencias)'
+                              : 'Ver análisis IA',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      minimumSize: const Size(60, 26),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text(
-                      'Ver sugerencia',
-                      style: TextStyle(fontSize: 11),
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ],
     );

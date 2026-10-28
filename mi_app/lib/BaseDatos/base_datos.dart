@@ -26,7 +26,7 @@ class BaseDeDatos {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -96,6 +96,37 @@ class BaseDeDatos {
         ) VALUES (
           1, 0, NULL, NULL, NULL,
           'local', '192.168.1.100', 4370, '', 'COM3', 9600, 'Desconectado'
+        )
+      ''');
+    }
+    if (oldVersion < 9) {
+      await db.execute('''
+        CREATE TABLE ia_calibracion_productos (
+          producto_id TEXT PRIMARY KEY,
+          velocidad_diaria REAL NOT NULL DEFAULT 0.0,
+          variabilidad REAL NOT NULL DEFAULT 0.0,
+          dias_cobertura REAL NOT NULL DEFAULT 999.0,
+          tendencia REAL NOT NULL DEFAULT 0.0,
+          nivel_rotacion TEXT NOT NULL DEFAULT 'MEDIA',
+          score_prioridad REAL NOT NULL DEFAULT 0.0,
+          ultima_calibracion TEXT NOT NULL,
+          total_unidades_historicas INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE ia_sugerencias_compra (
+          id TEXT PRIMARY KEY,
+          producto_id TEXT NOT NULL,
+          cantidad_sugerida INTEGER NOT NULL,
+          costo_estimado REAL NOT NULL,
+          ganancia_estimada REAL NOT NULL,
+          nivel_urgencia TEXT NOT NULL,
+          motivo_razonado TEXT NOT NULL,
+          dias_hasta_agotamiento REAL NOT NULL,
+          fecha_generacion TEXT NOT NULL,
+          estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+          FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
         )
       ''');
     }
@@ -190,6 +221,35 @@ class BaseDeDatos {
       ) VALUES (
         1, 0, NULL, NULL, NULL,
         'local', '192.168.1.100', 4370, '', 'COM3', 9600, 'Desconectado'
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE ia_calibracion_productos (
+        producto_id TEXT PRIMARY KEY,
+        velocidad_diaria REAL NOT NULL DEFAULT 0.0,
+        variabilidad REAL NOT NULL DEFAULT 0.0,
+        dias_cobertura REAL NOT NULL DEFAULT 999.0,
+        tendencia REAL NOT NULL DEFAULT 0.0,
+        nivel_rotacion TEXT NOT NULL DEFAULT 'MEDIA',
+        score_prioridad REAL NOT NULL DEFAULT 0.0,
+        ultima_calibracion TEXT NOT NULL,
+        total_unidades_historicas INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE ia_sugerencias_compra (
+        id TEXT PRIMARY KEY,
+        producto_id TEXT NOT NULL,
+        cantidad_sugerida INTEGER NOT NULL,
+        costo_estimado REAL NOT NULL,
+        ganancia_estimada REAL NOT NULL,
+        nivel_urgencia TEXT NOT NULL,
+        motivo_razonado TEXT NOT NULL,
+        dias_hasta_agotamiento REAL NOT NULL,
+        fecha_generacion TEXT NOT NULL,
+        estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
       )
     ''');
   }

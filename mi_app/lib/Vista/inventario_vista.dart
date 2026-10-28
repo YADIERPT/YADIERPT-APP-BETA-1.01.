@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 
 import 'nuevo_lote.dart';
+import 'sugerencias_ia_vista.dart';
 import 'Widgets/ajuste_stock_sheet.dart';
 import 'Widgets/editar_producto_sheet.dart';
 import 'Widgets/tarjeta_producto_inventario.dart';
 import 'Widgets/resumen_inventario_header.dart';
 import '../Controladores/controlador_inventario.dart';
+import '../Controladores/controlador_ventas.dart';
+import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
 
 class InventarioVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
+  final ControladorIACompras? controladorIA;
+  final ControladorVentas? controladorVentas;
 
-  const InventarioVista({super.key, required this.controladorInventario});
+  const InventarioVista({
+    super.key,
+    required this.controladorInventario,
+    this.controladorIA,
+    this.controladorVentas,
+  });
 
   @override
   State<InventarioVista> createState() => _InventarioVistaState();
@@ -100,6 +110,22 @@ class _InventarioVistaState extends State<InventarioVista> {
     );
   }
 
+  void _abrirSugerenciasIA() {
+    if (widget.controladorIA == null || widget.controladorVentas == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => SugerenciasIAVista(
+          controladorIA: widget.controladorIA!,
+          controladorInventario: widget.controladorInventario,
+          controladorVentas: widget.controladorVentas!,
+        ),
+      ),
+    ).then((_) {
+      _cargarInventario();
+    });
+  }
+
   void _abrirBorrarProducto(Producto producto) {
     showDialog(
       context: context,
@@ -167,15 +193,14 @@ class _InventarioVistaState extends State<InventarioVista> {
         List<Producto> productos =
             widget.controladorInventario.buscarProductos(_busqueda);
 
-        final int totalPlantas = widget.controladorInventario.productos
-            .where((p) => p.esPlanta)
-            .length;
-        final int stockCritico = widget.controladorInventario.productos
-            .where((p) => p.esStockCritico)
-            .length;
-        final int totalArticulos = widget.controladorInventario.productos
-            .where((p) => p.esArticulo)
-            .length;
+        int totalPlantas = 0;
+        int stockCritico = 0;
+        int totalArticulos = 0;
+        for (final p in widget.controladorInventario.productos) {
+          if (p.esPlanta) totalPlantas++;
+          if (p.esArticulo) totalArticulos++;
+          if (p.esStockCritico) stockCritico++;
+        }
 
         // Aplicar filtro de los 3 botones superiores
         if (_filtroActivo == 'critico') {
@@ -197,6 +222,7 @@ class _InventarioVistaState extends State<InventarioVista> {
         }
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
           floatingActionButton: FloatingActionButton(
             tooltip: 'Añadir nuevo producto',
@@ -217,138 +243,163 @@ class _InventarioVistaState extends State<InventarioVista> {
             child: const Icon(Icons.add, size: 28),
           ),
           body: SafeArea(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(16, isLandscape ? 8 : 12, 16, 110),
-              children: [
-                // 1. Buscador
-                TextField(
-                  onChanged: (val) {
-                    setState(() {
-                      _busqueda = val;
-                    });
-                  },
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Buscar planta o artículo...',
-                    hintStyle:
-                        TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      color: AppColors.textSecondary,
-                      size: 20,
-                    ),
-                    suffixIcon: _busqueda.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.clear,
-                                color: AppColors.textSecondary, size: 18),
-                            onPressed: () {
-                              setState(() {
-                                _busqueda = '';
-                              });
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: AppColors.secondarySurface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: isLandscape ? 8 : 12,
-                      horizontal: 14,
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16, isLandscape ? 8 : 12, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 1. Buscador
+                        TextField(
+                          onChanged: (val) {
+                            setState(() {
+                              _busqueda = val;
+                            });
+                          },
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: 'Buscar planta o artículo...',
+                            hintStyle:
+                                TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            suffixIcon: _busqueda.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(Icons.clear,
+                                        color: AppColors.textSecondary, size: 18),
+                                    onPressed: () {
+                                      setState(() {
+                                        _busqueda = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: AppColors.secondarySurface,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: isLandscape ? 8 : 12,
+                              horizontal: 14,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: isLandscape ? 8 : 12),
+
+                        // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
+                        ResumenInventarioHeader(
+                          totalPlantas: totalPlantas,
+                          stockCritico: stockCritico,
+                          totalSkus: totalArticulos,
+                          filtroActivo: _filtroActivo,
+                          onFiltroSeleccionado: _cambiarFiltro,
+                          controladorIA: widget.controladorIA,
+                          onVerSugerencias: _abrirSugerenciasIA,
+                        ),
+                        SizedBox(height: isLandscape ? 10 : 16),
+
+                        // 3. Encabezado de la lista con indicador de filtro
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              tituloLista,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (_filtroActivo != 'todos')
+                              GestureDetector(
+                                onTap: () => _cambiarFiltro('todos'),
+                                child: Text(
+                                  'Ver todos',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                     ),
                   ),
                 ),
-                SizedBox(height: isLandscape ? 8 : 12),
 
-                // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
-                ResumenInventarioHeader(
-                  totalPlantas: totalPlantas,
-                  stockCritico: stockCritico,
-                  totalSkus: totalArticulos,
-                  filtroActivo: _filtroActivo,
-                  onFiltroSeleccionado: _cambiarFiltro,
-                ),
-                SizedBox(height: isLandscape ? 10 : 16),
-
-                // 3. Encabezado de la lista con indicador de filtro
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      tituloLista,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    if (_filtroActivo != 'todos')
-                      GestureDetector(
-                        onTap: () => _cambiarFiltro('todos'),
-                        child: Text(
-                          'Ver todos',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // 4. Lista de productos adaptativa
+                // 4. Lista virtualizada con carga diferida (cero lag con teclado)
                 if (productos.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border, width: 1),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'No se encontraron productos para el filtro seleccionado.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border, width: 1),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No se encontraron productos para el filtro seleccionado.',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   )
                 else if (isLandscape)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 1.8,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 10,
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+                    sliver: SliverGrid.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 1.8,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 10,
+                      ),
+                      itemCount: productos.length,
+                      itemBuilder: (context, index) {
+                        final prod = productos[index];
+                        return TarjetaProductoInventario(
+                          prod: prod,
+                          onEditar: () => _abrirEditarProducto(prod),
+                          onAjustar: () => _abrirAjuste(prod),
+                          onBorrar: () => _abrirBorrarProducto(prod),
+                        );
+                      },
                     ),
-                    itemCount: productos.length,
-                    itemBuilder: (context, index) {
-                      final prod = productos[index];
-                      return TarjetaProductoInventario(
-                        prod: prod,
-                        onEditar: () => _abrirEditarProducto(prod),
-                        onAjustar: () => _abrirAjuste(prod),
-                        onBorrar: () => _abrirBorrarProducto(prod),
-                      );
-                    },
                   )
                 else
-                  ...productos.map((prod) => TarjetaProductoInventario(
-                        prod: prod,
-                        onEditar: () => _abrirEditarProducto(prod),
-                        onAjustar: () => _abrirAjuste(prod),
-                        onBorrar: () => _abrirBorrarProducto(prod),
-                      )),
-                const SizedBox(height: 50),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+                    sliver: SliverList.builder(
+                      itemCount: productos.length,
+                      itemBuilder: (context, index) {
+                        final prod = productos[index];
+                        return TarjetaProductoInventario(
+                          prod: prod,
+                          onEditar: () => _abrirEditarProducto(prod),
+                          onAjustar: () => _abrirAjuste(prod),
+                          onBorrar: () => _abrirBorrarProducto(prod),
+                        );
+                      },
+                    ),
+                  ),
               ],
             ),
           ),

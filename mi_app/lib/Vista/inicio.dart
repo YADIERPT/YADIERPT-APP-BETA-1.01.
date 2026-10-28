@@ -34,6 +34,52 @@ class InicioVista extends StatefulWidget {
 class _InicioVistaState extends State<InicioVista> {
   int _indiceActual = 0;
   final List<int> _historialTabs = [0];
+  late final List<Widget> _paginas;
+
+  @override
+  void initState() {
+    super.initState();
+    _paginas = [
+      DashboardVista(
+        controladorInicio: widget.controladorInicio,
+        controladorInventario: widget.controladorInventario,
+        controladorVentas: widget.controladorVentas,
+        controladorAutenticacion: widget.controladorAutenticacion,
+        alNavegar: (indice) {
+          _navegarA(indice);
+        },
+      ),
+      PosVista(
+        controladorInicio: widget.controladorInicio,
+        controladorInventario: widget.controladorInventario,
+        controladorVentas: widget.controladorVentas,
+      ),
+      InventarioVista(
+        controladorInventario: widget.controladorInventario,
+        controladorIA: widget.controladorInicio.controladorIA,
+        controladorVentas: widget.controladorVentas,
+      ),
+      PerfilVista(
+        controladorPerfil: widget.controladorInicio.controladorPerfil,
+        controladorVentas: widget.controladorVentas,
+        controladorAutenticacion: widget.controladorAutenticacion,
+        controladorBiometrico: widget.controladorInicio.controladorBiometrico,
+        onLogout: () {
+          widget.controladorAutenticacion.cerrarSesion();
+          Navigator.of(context, rootNavigator: true).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => LoginVista(
+                controladorInicio: widget.controladorInicio,
+                controladorInventario: widget.controladorInventario,
+                controladorVentas: widget.controladorVentas,
+                controladorAutenticacion: widget.controladorAutenticacion,
+              ),
+            ),
+          );
+        },
+      ),
+    ];
+  }
 
   void _navegarA(int indice) {
     if (_indiceActual != indice) {
@@ -122,45 +168,6 @@ class _InicioVistaState extends State<InicioVista> {
     }
   }
 
-  List<Widget> _obtenerPaginas() {
-    return [
-      DashboardVista(
-        controladorInicio: widget.controladorInicio,
-        controladorInventario: widget.controladorInventario,
-        controladorVentas: widget.controladorVentas,
-        controladorAutenticacion: widget.controladorAutenticacion,
-        alNavegar: (indice) {
-          _navegarA(indice);
-        },
-      ),
-      PosVista(
-        controladorInicio: widget.controladorInicio,
-        controladorInventario: widget.controladorInventario,
-        controladorVentas: widget.controladorVentas,
-      ),
-      InventarioVista(controladorInventario: widget.controladorInventario),
-      PerfilVista(
-        controladorPerfil: widget.controladorInicio.controladorPerfil,
-        controladorVentas: widget.controladorVentas,
-        controladorAutenticacion: widget.controladorAutenticacion,
-        controladorBiometrico: widget.controladorInicio.controladorBiometrico,
-        onLogout: () {
-          widget.controladorAutenticacion.cerrarSesion();
-          Navigator.of(context, rootNavigator: true).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => LoginVista(
-                controladorInicio: widget.controladorInicio,
-                controladorInventario: widget.controladorInventario,
-                controladorVentas: widget.controladorVentas,
-                controladorAutenticacion: widget.controladorAutenticacion,
-              ),
-            ),
-          );
-        },
-      ),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool isLandscape =
@@ -169,7 +176,6 @@ class _InicioVistaState extends State<InicioVista> {
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final paginas = _obtenerPaginas();
         final productosBajoStock = widget.controladorInventario.productos
             .where((p) => p.esStockCritico)
             .toList();
@@ -197,6 +203,7 @@ class _InicioVistaState extends State<InicioVista> {
             _manejarRegreso();
           },
           child: Scaffold(
+            resizeToAvoidBottomInset: false,
             backgroundColor: AppColors.surface,
             body: SafeArea(
               child: Column(
@@ -374,7 +381,7 @@ class _InicioVistaState extends State<InicioVista> {
                     ),
                   ),
                   Expanded(
-                    child: IndexedStack(index: _indiceActual, children: paginas),
+                    child: IndexedStack(index: _indiceActual, children: _paginas),
                   ),
                 ],
               ),

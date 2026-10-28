@@ -10,6 +10,7 @@ import 'Controladores/controlador_ventas.dart';
 import 'Controladores/controlador_finanzas.dart';
 import 'Controladores/controlador_perfil.dart';
 import 'Controladores/controlador_autenticacion.dart';
+import 'IA/Controladores/controlador_ia_compras.dart';
 import 'Modelos/producto.dart';
 
 void main() async {
@@ -25,11 +26,15 @@ void main() async {
   final controladorFinanzas = ControladorFinanzas();
   final controladorPerfil = ControladorPerfil();
   final controladorAutenticacion = ControladorAutenticacion();
+  final controladorIA = ControladorIACompras(
+    controladorInventario: controladorInventario,
+  );
 
   final controladorVentas = ControladorVentas(
     controladorInventario: controladorInventario,
     controladorFinanzas: controladorFinanzas,
     controladorPerfil: controladorPerfil,
+    controladorIA: controladorIA,
   );
 
   final controladorInicio = ControladorInicio(
@@ -37,6 +42,7 @@ void main() async {
     controladorVentas: controladorVentas,
     controladorFinanzas: controladorFinanzas,
     controladorPerfil: controladorPerfil,
+    controladorIA: controladorIA,
   );
   await controladorInicio.inicializarDatosOffline();
   await controladorAutenticacion.cargarUsuariosPorDefecto();

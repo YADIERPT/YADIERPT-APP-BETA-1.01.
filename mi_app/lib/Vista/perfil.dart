@@ -144,6 +144,7 @@ class _PerfilVistaState extends State<PerfilVista> {
             : 'Administrador';
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(

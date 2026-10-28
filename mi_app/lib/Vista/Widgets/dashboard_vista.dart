@@ -122,6 +122,7 @@ class _DashboardVistaState extends State<DashboardVista> {
       animation: ThemeManager.instance,
       builder: (context, _) {
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
