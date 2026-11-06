@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Modelos/colaborador.dart';
+import 'Widgets/role_guard.dart';
 
 class EmpleadosVista extends StatefulWidget {
   final ControladorAutenticacion controladorAutenticacion;
@@ -35,6 +36,8 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
 
   @override
   Widget build(BuildContext context) {
+    final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -49,53 +52,66 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
         iconTheme: IconThemeData(color: AppColors.textPrimary),
         elevation: 0,
       ),
-      body: _cargando
-          ? Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _empleados.length,
-              itemBuilder: (context, index) {
-                final emp = _empleados[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.primaryContainer,
-                      child: Icon(
-                        Icons.person,
-                        color: AppColors.primary,
+      body: RoleGuard(
+        rolesPermitidos: const [RolUsuario.duena, RolUsuario.gerente],
+        rolActual: rolActual,
+        modo: RoleGuardMode.placeholder,
+        titulo: 'Gestión de Personal Reservada',
+        mensaje:
+            'Solo la Dueña y la Gerencia tienen autorización para consultar y administrar el catálogo de colaboradores y sus accesos.',
+        textoAccion: 'Regresar',
+        onAccion: () => Navigator.pop(context),
+        child: _cargando
+            ? Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _empleados.length,
+                itemBuilder: (context, index) {
+                  final emp = _empleados[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.primaryContainer,
+                        child: Icon(
+                          Icons.person,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      title: Text(
+                        emp.nombre,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Rol: ${emp.rol.etiqueta.toUpperCase()}',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: Text(
+                        'ID: ${emp.id}',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    title: Text(
-                      emp.nombre,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Rol: ${emp.rol.toUpperCase()}',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                    trailing: Text(
-                      'ID: ${emp.id}',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 }

@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_perfil.dart';
 import 'historial_ventas_vista.dart';
+import 'deudores_vista.dart';
 import 'empleados_vista.dart';
 import 'configuracion_financiera_vista.dart';
 import 'seguridad_vista.dart';
 import 'configuracion_biometrica_vista.dart';
+import 'Widgets/verificacion_seguridad_sheet.dart';
+import 'Widgets/role_guard.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
@@ -139,9 +142,7 @@ class _PerfilVistaState extends State<PerfilVista> {
       builder: (context, _) {
         final usuario = widget.controladorAutenticacion.usuarioActual;
         final nombreUsuario = usuario?.nombre ?? 'Administrador';
-        final rolUsuario = usuario != null
-            ? (usuario.rol == 'admin' ? 'Administrador' : 'Colaborador')
-            : 'Administrador';
+        final rolUsuario = usuario?.rol.etiqueta ?? 'Administrador';
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -239,32 +240,55 @@ class _PerfilVistaState extends State<PerfilVista> {
 
               const SizedBox(height: 16),
               _buildSectionTitle('Negocio'),
-              _buildListTile(
-                Icons.storefront_outlined,
-                'Configuración Financiera',
-                'IVA y Parámetros fiscales',
-                iconBgColor: AppColors.subtleGreen,
-                iconColor: AppColors.brightGreen,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ConfiguracionFinancieraVista(
-                      controladorPerfil: widget.controladorPerfil,
+              RoleGuard.gerencia(
+                rolActual: usuario?.rol,
+                modo: RoleGuardMode.ocultar,
+                child: _buildListTile(
+                  Icons.storefront_outlined,
+                  'Configuración Financiera',
+                  'IVA y Parámetros fiscales',
+                  iconBgColor: AppColors.subtleGreen,
+                  iconColor: AppColors.brightGreen,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ConfiguracionFinancieraVista(
+                        controladorPerfil: widget.controladorPerfil,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              RoleGuard.gerencia(
+                rolActual: usuario?.rol,
+                modo: RoleGuardMode.ocultar,
+                child: _buildListTile(
+                  Icons.people_outline,
+                  'Empleados',
+                  'Gestionar perfiles y permisos',
+                  iconBgColor: AppColors.subtleTurquoise,
+                  iconColor: AppColors.turquoise,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EmpleadosVista(
+                        controladorAutenticacion: widget.controladorAutenticacion,
+                      ),
                     ),
                   ),
                 ),
               ),
               _buildListTile(
-                Icons.people_outline,
-                'Empleados',
-                'Gestionar perfiles y permisos',
-                iconBgColor: AppColors.subtleTurquoise,
-                iconColor: AppColors.turquoise,
+                Icons.account_balance_wallet_outlined,
+                'Cuentas por Cobrar (Deudores)',
+                'Apartados y seguimiento de saldos',
+                iconBgColor: AppColors.subtleAmber,
+                iconColor: AppColors.amber,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => EmpleadosVista(
-                      controladorAutenticacion: widget.controladorAutenticacion,
+                    builder: (_) => DeudoresVista(
+                      controladorVentas: widget.controladorVentas,
                     ),
                   ),
                 ),
@@ -295,16 +319,26 @@ class _PerfilVistaState extends State<PerfilVista> {
                     : 'Configurar huella, WiFi, Bluetooth o Cable',
                 iconBgColor: AppColors.subtleGreen,
                 iconColor: AppColors.brightGreen,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ConfiguracionBiometricaVista(
-                      controladorBiometrico: widget.controladorBiometrico ??
-                          ControladorBiometrico(),
-                      controladorAutenticacion: widget.controladorAutenticacion,
+                onTap: () async {
+                  final bool verificado = await VerificacionSeguridadSheet.solicitar(
+                    context: context,
+                    controladorAutenticacion: widget.controladorAutenticacion,
+                    controladorBiometrico: widget.controladorBiometrico,
+                    titulo: 'Acceso a Lector Biométrico',
+                    motivo: 'Confirma tu identidad para gestionar el lector de huellas o registrar datos biométricos.',
+                  );
+                  if (!verificado || !context.mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ConfiguracionBiometricaVista(
+                        controladorBiometrico: widget.controladorBiometrico ?? ControladorBiometrico(),
+                        controladorAutenticacion: widget.controladorAutenticacion,
+                      ),
                     ),
-                  ),
-                ).then((_) => setState(() {})),
+                  ).then((_) => setState(() {}));
+                },
               ),
               _buildListTile(
                 Icons.security_outlined,
@@ -312,14 +346,25 @@ class _PerfilVistaState extends State<PerfilVista> {
                 'Cambiar contraseña y PIN',
                 iconBgColor: AppColors.subtleAmber,
                 iconColor: AppColors.amber,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SeguridadVista(
-                      controladorAutenticacion: widget.controladorAutenticacion,
+                onTap: () async {
+                  final bool verificado = await VerificacionSeguridadSheet.solicitar(
+                    context: context,
+                    controladorAutenticacion: widget.controladorAutenticacion,
+                    controladorBiometrico: widget.controladorBiometrico,
+                    titulo: 'Acceso a Seguridad de Cuenta',
+                    motivo: 'Confirma tu identidad para cambiar tu contraseña o PIN.',
+                  );
+                  if (!verificado || !context.mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SeguridadVista(
+                        controladorAutenticacion: widget.controladorAutenticacion,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
               _buildListTile(
                 Icons.help_outline,

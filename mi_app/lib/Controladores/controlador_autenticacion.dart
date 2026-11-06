@@ -4,15 +4,22 @@ import 'package:sqflite/sqflite.dart';
 
 import '../Modelos/colaborador.dart';
 import '../BaseDatos/base_datos.dart';
+import '../Servicios/servicio_criptografia.dart';
 
 class ControladorAutenticacion {
   Colaborador? _usuarioActual;
 
   Colaborador? get usuarioActual => _usuarioActual;
 
+  /// Método legado síncrono para hashes SHA-256 (mantenido para retrocompatibilidad)
   static String hashearClave(String clave, String salt) {
     final bytes = utf8.encode('$salt:vivero_salt_2026:$clave');
     return sha256.convert(bytes).toString();
+  }
+
+  /// Método moderno asíncrono basado en KDF PBKDF2-HMAC-SHA256 (100k iteraciones)
+  static Future<String> hashearClaveKdf(String clave, String salt) async {
+    return await ServicioCriptografia.hashearClavePbkdf2(clave, salt);
   }
 
   Future<void> cargarUsuariosPorDefecto() async {
@@ -21,11 +28,12 @@ class ControladorAutenticacion {
       await db.rawQuery('SELECT COUNT(*) FROM colaboradores'),
     );
     if (conteo == null || conteo == 0) {
+      final claveSegura = await hashearClaveKdf('123456', 'VO-4092');
       final admin = Colaborador(
         id: 'VO-4092',
         nombre: 'Admin Vivero',
-        clave: hashearClave('123456', 'VO-4092'),
-        rol: 'admin',
+        clave: claveSegura,
+        rol: RolUsuario.duena,
       );
       await registrarColaborador(admin, yaHasheada: true);
     }
@@ -36,8 +44,9 @@ class ControladorAutenticacion {
     bool yaHasheada = false,
   }) async {
     final db = await BaseDeDatos.instancia.database;
-    final claveFinal =
-        yaHasheada ? nuevo.clave : hashearClave(nuevo.clave, nuevo.id);
+    final claveFinal = yaHasheada
+        ? nuevo.clave
+        : await hashearClaveKdf(nuevo.clave, nuevo.id);
     final map = nuevo.toMap();
     map['clave'] = claveFinal;
     await db.insert('colaboradores', map);
@@ -54,23 +63,30 @@ class ControladorAutenticacion {
     if (resultados.isNotEmpty) {
       final map = resultados.first;
       final claveAlmacenada = map['clave'] as String;
-      final hashCalculado = hashearClave(clave, id);
 
-      if (claveAlmacenada == hashCalculado) {
-        _usuarioActual = Colaborador.fromMap(map);
-        return true;
-      } else if (claveAlmacenada == clave) {
-        // Migración automática a hash seguro para usuarios heredados
-        await db.update(
-          'colaboradores',
-          {'clave': hashCalculado},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        _usuarioActual = Colaborador.fromMap({
-          ...map,
-          'clave': hashCalculado,
-        });
+      final esValida = await ServicioCriptografia.verificarClave(
+        claveIngresada: clave,
+        hashAlmacenado: claveAlmacenada,
+        salt: id,
+      );
+
+      if (esValida) {
+        // Si la clave no está en formato PBKDF2 moderno, migrar automáticamente
+        if (!claveAlmacenada.startsWith('\$pbkdf2\$')) {
+          final nuevoHash = await hashearClaveKdf(clave, id);
+          await db.update(
+            'colaboradores',
+            {'clave': nuevoHash},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+          _usuarioActual = Colaborador.fromMap({
+            ...map,
+            'clave': nuevoHash,
+          });
+        } else {
+          _usuarioActual = Colaborador.fromMap(map);
+        }
         return true;
       }
     }
@@ -94,10 +110,16 @@ class ControladorAutenticacion {
     return false;
   }
 
-  bool verificarClave(Colaborador colaborador, String claveIngresada) {
-    final hashCalculado = hashearClave(claveIngresada, colaborador.id);
-    return colaborador.clave == hashCalculado ||
-        colaborador.clave == claveIngresada;
+  /// Verifica la clave contra el colaborador, soportando PBKDF2 y hashes legados
+  Future<bool> verificarClave(
+    Colaborador colaborador,
+    String claveIngresada,
+  ) async {
+    return await ServicioCriptografia.verificarClave(
+      claveIngresada: claveIngresada,
+      hashAlmacenado: colaborador.clave,
+      salt: colaborador.id,
+    );
   }
 
   Future<List<Colaborador>> obtenerColaboradores() async {
@@ -108,7 +130,7 @@ class ControladorAutenticacion {
 
   Future<void> cambiarClave(String id, String nuevaClave) async {
     final db = await BaseDeDatos.instancia.database;
-    final claveHasheada = hashearClave(nuevaClave, id);
+    final claveHasheada = await hashearClaveKdf(nuevaClave, id);
     await db.update(
       'colaboradores',
       {'clave': claveHasheada},
@@ -116,12 +138,7 @@ class ControladorAutenticacion {
       whereArgs: [id],
     );
     if (_usuarioActual != null && _usuarioActual!.id == id) {
-      _usuarioActual = Colaborador(
-        id: _usuarioActual!.id,
-        nombre: _usuarioActual!.nombre,
-        clave: claveHasheada,
-        rol: _usuarioActual!.rol,
-      );
+      _usuarioActual = _usuarioActual!.copyWith(clave: claveHasheada);
     }
   }
 

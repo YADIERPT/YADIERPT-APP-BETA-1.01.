@@ -40,6 +40,9 @@ class Venta {
   List<ArticuloVenta> articulos;
   double porcentajeIva;
   bool aplicarIva;
+  String cliente;
+  double montoPagado;
+  String notas;
 
   Venta({
     required this.id,
@@ -48,6 +51,9 @@ class Venta {
     List<ArticuloVenta>? articulos,
     this.porcentajeIva = 0.16,
     this.aplicarIva = true,
+    this.cliente = 'Cliente Mostrador',
+    this.montoPagado = 0.0,
+    this.notas = '',
   }) : articulos = articulos ?? [];
 
   Map<String, dynamic> toMap() {
@@ -57,6 +63,9 @@ class Venta {
       'estado': estado.name,
       'porcentajeIva': porcentajeIva,
       'aplicarIva': aplicarIva ? 1 : 0,
+      'cliente': cliente,
+      'montoPagado': montoPagado,
+      'notas': notas,
     };
   }
 
@@ -68,8 +77,11 @@ class Venta {
       id: map['id'],
       fecha: DateTime.parse(map['fecha']),
       estado: EstadoVenta.values.firstWhere((e) => e.name == map['estado']),
-      porcentajeIva: map['porcentajeIva'],
+      porcentajeIva: (map['porcentajeIva'] as num).toDouble(),
       aplicarIva: map['aplicarIva'] != null ? map['aplicarIva'] == 1 : true,
+      cliente: map['cliente']?.toString() ?? 'Cliente Mostrador',
+      montoPagado: (map['montoPagado'] as num?)?.toDouble() ?? 0.0,
+      notas: map['notas']?.toString() ?? '',
       articulos: articulosCargados,
     );
   }
@@ -100,15 +112,33 @@ class Venta {
 
   double get total => subtotalVenta + totalIva;
 
+  /// Saldo pendiente por liquidar en ventas apartadas / cuentas por cobrar
+  double get saldoPendiente => (total - montoPagado).clamp(0.0, double.infinity);
+
+  /// Determina si la venta mantiene un saldo adeudado
+  bool get tieneSaldoPendiente => saldoPendiente > 0.001;
+
+  /// Indica si la venta corresponde a un apartado
+  bool get esApartada => estado == EstadoVenta.apartada;
+
+  /// Proporción del monto pagado sobre el total (0.0 a 1.0)
+  double get porcentajePagado =>
+      total > 0 ? (montoPagado / total).clamp(0.0, 1.0) : 1.0;
+
   void completarVenta() {
     estado = EstadoVenta.completada;
+    montoPagado = total;
   }
 
   void cancelarVenta() {
     estado = EstadoVenta.cancelada;
   }
 
-  void apartarVenta() {
+  void apartarVenta({double abonoInicial = 0.0, String? nombreCliente}) {
     estado = EstadoVenta.apartada;
+    montoPagado = abonoInicial;
+    if (nombreCliente != null && nombreCliente.trim().isNotEmpty) {
+      cliente = nombreCliente.trim();
+    }
   }
 }

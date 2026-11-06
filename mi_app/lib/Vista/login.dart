@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../Tema/app_theme.dart';
 import 'inicio.dart';
+import 'Widgets/app_logo.dart';
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
@@ -219,67 +220,10 @@ class _LoginVistaState extends State<LoginVista> {
   }
 
   Widget _buildEmblemAndTitle() {
-    return Column(
-      children: [
-        Stack(
-          alignment: Alignment.bottomRight,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.secondarySurface,
-                shape: BoxShape.circle,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.local_florist,
-                  color: AppColors.primary,
-                  size: 40,
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -4,
-              right: -4,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.spa,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Vivero',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Terminal de Punto de Venta • Iniciar Sesión',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        ),
-      ],
+    return const AppLogo.splash(
+      size: 104.0,
+      appName: 'Planteapp',
+      subtitle: 'Terminal de Punto de Venta • Iniciar Sesión',
     );
   }
 

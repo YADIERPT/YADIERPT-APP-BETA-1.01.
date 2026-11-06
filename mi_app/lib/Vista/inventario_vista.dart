@@ -6,8 +6,10 @@ import 'Widgets/ajuste_stock_sheet.dart';
 import 'Widgets/editar_producto_sheet.dart';
 import 'Widgets/tarjeta_producto_inventario.dart';
 import 'Widgets/resumen_inventario_header.dart';
+import 'Widgets/role_guard.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
+import '../Controladores/controlador_autenticacion.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
@@ -16,12 +18,14 @@ class InventarioVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
   final ControladorIACompras? controladorIA;
   final ControladorVentas? controladorVentas;
+  final ControladorAutenticacion? controladorAutenticacion;
 
   const InventarioVista({
     super.key,
     required this.controladorInventario,
     this.controladorIA,
     this.controladorVentas,
+    this.controladorAutenticacion,
   });
 
   @override
@@ -40,6 +44,17 @@ class _InventarioVistaState extends State<InventarioVista> {
 
   Future<void> _cargarInventario() async {
     await widget.controladorInventario.cargarProductos();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    await widget.controladorInventario.cargarProductos();
+    if (widget.controladorIA != null && widget.controladorVentas != null) {
+      await widget.controladorIA!.inicializar(widget.controladorVentas!.ventas);
+    }
+    await Future.delayed(const Duration(milliseconds: 300));
     if (mounted) {
       setState(() {});
     }
@@ -79,6 +94,11 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirEditarProducto(Producto producto) {
+    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    if (rolActual != null && !rolActual.puedeModificarInventario) {
+      _mostrarToast('Acceso restringido: no tienes permisos de edición');
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -95,6 +115,11 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirAjuste(Producto producto) {
+    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    if (rolActual != null && !rolActual.puedeModificarInventario) {
+      _mostrarToast('Acceso restringido: no puedes realizar ajustes de existencias');
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -127,6 +152,11 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirBorrarProducto(Producto producto) {
+    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    if (rolActual != null && !rolActual.puedeModificarInventario) {
+      _mostrarToast('Acceso restringido: no tienes permisos para dar de baja productos');
+      return;
+    }
     showDialog(
       context: context,
       builder: (dialogCtx) {
@@ -221,29 +251,46 @@ class _InventarioVistaState extends State<InventarioVista> {
           tituloLista = 'Catálogo · Artículos ($totalArticulos)';
         }
 
+        final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+        final bool puedeModificar =
+            rolActual?.puedeModificarInventario ?? true;
+
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
-          floatingActionButton: FloatingActionButton(
-            tooltip: 'Añadir nuevo producto',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NuevoLoteVista(
-                    controladorInventario: widget.controladorInventario,
+          floatingActionButton: RoleGuard.gerencia(
+            rolActual: rolActual,
+            modo: RoleGuardMode.ocultar,
+            child: FloatingActionButton(
+              tooltip: 'Añadir nuevo producto',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => NuevoLoteVista(
+                      controladorInventario: widget.controladorInventario,
+                    ),
                   ),
-                ),
-              ).then((_) => _cargarInventario());
-            },
-            backgroundColor: AppColors.secondary,
-            foregroundColor: AppColors.onSecondary,
-            elevation: 3,
-            shape: const CircleBorder(),
-            child: const Icon(Icons.add, size: 28),
+                ).then((_) => _cargarInventario());
+              },
+              backgroundColor: AppColors.secondary,
+              foregroundColor: AppColors.onSecondary,
+              elevation: 3,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add, size: 28),
+            ),
           ),
           body: SafeArea(
-            child: CustomScrollView(
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: AppColors.card,
+              strokeWidth: 2.5,
+              displacement: 40.0,
+              onRefresh: _handleRefresh,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -377,6 +424,8 @@ class _InventarioVistaState extends State<InventarioVista> {
                         final prod = productos[index];
                         return TarjetaProductoInventario(
                           prod: prod,
+                          rolActual: rolActual,
+                          puedeModificar: puedeModificar,
                           onEditar: () => _abrirEditarProducto(prod),
                           onAjustar: () => _abrirAjuste(prod),
                           onBorrar: () => _abrirBorrarProducto(prod),
@@ -393,6 +442,8 @@ class _InventarioVistaState extends State<InventarioVista> {
                         final prod = productos[index];
                         return TarjetaProductoInventario(
                           prod: prod,
+                          rolActual: rolActual,
+                          puedeModificar: puedeModificar,
                           onEditar: () => _abrirEditarProducto(prod),
                           onAjustar: () => _abrirAjuste(prod),
                           onBorrar: () => _abrirBorrarProducto(prod),
@@ -401,9 +452,10 @@ class _InventarioVistaState extends State<InventarioVista> {
                     ),
                   ),
               ],
+                ),
+              ),
             ),
-          ),
-        );
+          );
       },
     );
   }

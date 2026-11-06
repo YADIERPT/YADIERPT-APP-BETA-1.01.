@@ -9,7 +9,9 @@ class VentaFooter extends StatelessWidget {
   final TextEditingController montoRecibidoController;
   final VoidCallback onMontoCambiado;
   final VoidCallback onProcesarCobro;
+  final VoidCallback? onApartarVenta;
   final bool isLandscape;
+  final bool cobrando;
 
   const VentaFooter({
     super.key,
@@ -17,7 +19,9 @@ class VentaFooter extends StatelessWidget {
     required this.montoRecibidoController,
     required this.onMontoCambiado,
     required this.onProcesarCobro,
+    this.onApartarVenta,
     this.isLandscape = false,
+    this.cobrando = false,
   });
 
   @override
@@ -252,7 +256,7 @@ class VentaFooter extends StatelessWidget {
           width: double.infinity,
           height: isLandscape ? 42 : 48,
           child: ElevatedButton(
-            onPressed: (venta.articulos.isEmpty || !montoSuficiente)
+            onPressed: (venta.articulos.isEmpty || !montoSuficiente || cobrando)
                 ? null
                 : onProcesarCobro,
             style: ElevatedButton.styleFrom(
@@ -265,18 +269,54 @@ class VentaFooter extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'Cobrar \$${venta.total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
+            child: cobrando
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: Colors.white,
+                    ),
+                  )
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Cobrar \$${venta.total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        if (onApartarVenta != null) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: isLandscape ? 36 : 40,
+            child: OutlinedButton.icon(
+              onPressed: (venta.articulos.isEmpty || cobrando)
+                  ? null
+                  : onApartarVenta,
+              icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+              label: const Text(
+                'Apartar / Cuenta por Cobrar',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.amber,
+                side: BorderSide(
+                  color: AppColors.amber.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ],
     );
 

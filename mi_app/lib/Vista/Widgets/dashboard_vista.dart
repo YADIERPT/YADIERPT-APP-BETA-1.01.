@@ -6,8 +6,10 @@ import '../../Controladores/controlador_inventario.dart';
 import '../../Controladores/controlador_ventas.dart';
 import '../../Controladores/controlador_autenticacion.dart';
 import '../../Modelos/venta.dart';
+import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../historial_ventas_vista.dart';
+import 'role_guard.dart';
 
 class DashboardVista extends StatefulWidget {
   final ControladorInicio controladorInicio;
@@ -31,6 +33,14 @@ class DashboardVista extends StatefulWidget {
 
 class _DashboardVistaState extends State<DashboardVista> {
   String _periodoSeleccionado = 'Hoy';
+
+  Future<void> _handleRefresh() async {
+    await widget.controladorInicio.inicializarDatosOffline();
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,10 +131,30 @@ class _DashboardVistaState extends State<DashboardVista> {
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
+        final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
-          body: ListView(
+          body: RoleGuard(
+            rolesPermitidos: const [RolUsuario.duena, RolUsuario.gerente],
+            rolActual: rolActual,
+            modo: RoleGuardMode.placeholder,
+            titulo: 'Módulo Financiero Reservado',
+            mensaje:
+                'El resumen financiero, ganancias y métricas de rendimiento solo son accesibles para la Dueña y Gerencia. Tu rol operativo está enfocado en Punto de Venta e Inventario.',
+            textoAccion: 'Ir al Punto de Venta',
+            onAccion: () => widget.alNavegar(1),
+            child: RefreshIndicator(
+            color: AppColors.primary,
+            backgroundColor: AppColors.card,
+            strokeWidth: 2.5,
+            displacement: 40.0,
+            onRefresh: _handleRefresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
               Container(
@@ -734,9 +764,11 @@ class _DashboardVistaState extends State<DashboardVista> {
                       ),
               ),
               const SizedBox(height: 24),
-            ],
+              ],
+            ),
           ),
-        );
+        ),
+      );
       },
     );
   }

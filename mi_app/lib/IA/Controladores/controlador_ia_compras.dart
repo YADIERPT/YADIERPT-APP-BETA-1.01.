@@ -137,7 +137,7 @@ class ControladorIACompras extends ChangeNotifier {
     }
 
     try {
-      final resultado = MotorIARecomendacion.ejecutarAnalisis(
+      final resultado = await MotorIARecomendacion.ejecutarAnalisisEnIsolate(
         productos: controladorInventario.productos,
         ventas: ventas,
         horizonteReposicionDias: _horizonteReposicionDias,

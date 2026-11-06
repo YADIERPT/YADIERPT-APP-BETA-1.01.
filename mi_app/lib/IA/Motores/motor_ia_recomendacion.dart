@@ -1,4 +1,6 @@
+import 'dart:isolate';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 
 import '../../Modelos/producto.dart';
 import '../../Modelos/venta.dart';
@@ -16,6 +18,39 @@ class ResultadoAnalisisIA {
 }
 
 class MotorIARecomendacion {
+  /// Ejecuta el análisis predictivo pesado del motor de IA en un Isolate secundario (Dart 3)
+  /// para evitar el bloqueo del hilo principal (UI jank) y mantener 60/120 FPS.
+  static Future<ResultadoAnalisisIA> ejecutarAnalisisEnIsolate({
+    required List<Producto> productos,
+    required List<Venta> ventas,
+    int horizonteReposicionDias = 14,
+  }) async {
+    try {
+      if (kIsWeb) {
+        return ejecutarAnalisis(
+          productos: productos,
+          ventas: ventas,
+          horizonteReposicionDias: horizonteReposicionDias,
+        );
+      }
+      return await Isolate.run(() {
+        return ejecutarAnalisis(
+          productos: productos,
+          ventas: ventas,
+          horizonteReposicionDias: horizonteReposicionDias,
+        );
+      });
+    } catch (e, stack) {
+      debugPrint('Aviso de resiliencia: Fallo en Isolate del Motor IA: $e\n$stack');
+      // Fallback seguro: se procesa en el hilo principal para evitar interrumpir la app
+      return ejecutarAnalisis(
+        productos: productos,
+        ventas: ventas,
+        horizonteReposicionDias: horizonteReposicionDias,
+      );
+    }
+  }
+
   /// Analiza el inventario y las ventas históricas para generar recomendaciones
   /// matemáticamente y comercialmente congruentes para un vivero.
   static ResultadoAnalisisIA ejecutarAnalisis({

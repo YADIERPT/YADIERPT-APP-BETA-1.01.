@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_autenticacion.dart';
+import 'Widgets/custom_password_field.dart';
 
 class SeguridadVista extends StatefulWidget {
   final ControladorAutenticacion controladorAutenticacion;
@@ -32,7 +33,10 @@ class _SeguridadVistaState extends State<SeguridadVista> {
 
       if (user == null) return;
 
-      if (!widget.controladorAutenticacion.verificarClave(user, _claveActual)) {
+      final esValida =
+          await widget.controladorAutenticacion.verificarClave(user, _claveActual);
+      if (!mounted) return;
+      if (!esValida) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('La contraseña actual no coincide.'),
@@ -44,6 +48,7 @@ class _SeguridadVistaState extends State<SeguridadVista> {
 
       final nuevaClave = _nuevaClaveController.text.trim();
       await widget.controladorAutenticacion.cambiarClave(user.id, nuevaClave);
+      if (!mounted) return;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -102,58 +107,25 @@ class _SeguridadVistaState extends State<SeguridadVista> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
-                          decoration: InputDecoration(
-                            labelText: 'Contraseña actual',
-                            labelStyle: TextStyle(color: AppColors.textSecondary),
-                            filled: true,
-                            fillColor: AppColors.secondarySurface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          style: TextStyle(color: AppColors.textPrimary),
-                          obscureText: true,
+                        CustomPasswordFormField(
+                          labelText: 'Contraseña actual',
                           validator: (v) =>
                               v == null || v.isEmpty ? 'Requerido' : null,
                           onSaved: (v) => _claveActual = v ?? '',
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        CustomPasswordFormField(
                           controller: _nuevaClaveController,
-                          decoration: InputDecoration(
-                            labelText: 'Nueva contraseña',
-                            labelStyle: TextStyle(color: AppColors.textSecondary),
-                            filled: true,
-                            fillColor: AppColors.secondarySurface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          style: TextStyle(color: AppColors.textPrimary),
-                          obscureText: true,
+                          labelText: 'Nueva contraseña',
                           validator: (v) =>
                               v == null || v.length < 4
                                   ? 'Mínimo 4 caracteres'
                                   : null,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        CustomPasswordFormField(
                           controller: _confirmarClaveController,
-                          decoration: InputDecoration(
-                            labelText: 'Confirmar nueva contraseña',
-                            labelStyle: TextStyle(color: AppColors.textSecondary),
-                            filled: true,
-                            fillColor: AppColors.secondarySurface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          style: TextStyle(color: AppColors.textPrimary),
-                          obscureText: true,
+                          labelText: 'Confirmar nueva contraseña',
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Requerido';
                             if (v != _nuevaClaveController.text) {

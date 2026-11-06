@@ -4,6 +4,7 @@ import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
+import '../Modelos/colaborador.dart';
 import '../Tema/app_theme.dart';
 import '../Tema/isometric_cube_icon.dart';
 import 'pos_vista.dart';
@@ -12,6 +13,7 @@ import 'perfil.dart';
 import 'login.dart';
 import 'Widgets/dashboard_vista.dart';
 import 'Widgets/notificaciones_stock_sheet.dart';
+import 'Widgets/app_logo.dart';
 
 class InicioVista extends StatefulWidget {
   final ControladorInicio controladorInicio;
@@ -39,6 +41,13 @@ class _InicioVistaState extends State<InicioVista> {
   @override
   void initState() {
     super.initState();
+    final esEmpleado =
+        widget.controladorAutenticacion.usuarioActual?.rol == RolUsuario.empleado;
+    if (esEmpleado) {
+      _indiceActual = 1;
+      _historialTabs.clear();
+      _historialTabs.add(1);
+    }
     _paginas = [
       DashboardVista(
         controladorInicio: widget.controladorInicio,
@@ -58,6 +67,7 @@ class _InicioVistaState extends State<InicioVista> {
         controladorInventario: widget.controladorInventario,
         controladorIA: widget.controladorInicio.controladorIA,
         controladorVentas: widget.controladorVentas,
+        controladorAutenticacion: widget.controladorAutenticacion,
       ),
       PerfilVista(
         controladorPerfil: widget.controladorInicio.controladorPerfil,
@@ -181,13 +191,13 @@ class _InicioVistaState extends State<InicioVista> {
             .toList();
 
         String titulo = 'Inicio';
-        String subtitulo = 'Vivero';
+        String subtitulo = 'Planteapp';
         if (_indiceActual == 0) {
           titulo = 'Inicio';
           subtitulo = 'Resumen General';
         } else if (_indiceActual == 1) {
           titulo = 'Punto de Venta';
-          subtitulo = 'Vivero';
+          subtitulo = 'Planteapp';
         } else if (_indiceActual == 2) {
           titulo = 'Inventario';
           subtitulo = 'Control Botánico';
@@ -237,7 +247,7 @@ class _InicioVistaState extends State<InicioVista> {
                                 tooltip: 'Regresar',
                               ),
                               const SizedBox(width: 4),
-                              Icon(Icons.eco, color: AppColors.primary, size: isLandscape ? 22 : 28),
+                              const AppLogo.compact(size: 34),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(

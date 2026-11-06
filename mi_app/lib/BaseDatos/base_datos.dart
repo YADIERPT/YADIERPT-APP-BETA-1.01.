@@ -1,7 +1,11 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 import 'package:path/path.dart';
+
+import 'clave_base_datos.dart';
 
 class BaseDeDatos {
   static final BaseDeDatos instancia = BaseDeDatos._init();
@@ -16,23 +20,116 @@ class BaseDeDatos {
   }
 
   Future<Database> _inicializarDB(String filePath) async {
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    String path = filePath;
+    final String password = await ClaveBaseDatos.obtenerClaveSegura();
+
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      path = filePath;
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, filePath);
+    } else {
+      // Android / iOS: SQLCipher nativo AES-256
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, filePath);
+      await _migrarSiEsTextoPlano(path, password);
     }
 
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return await sqlcipher.openDatabase(
+        path,
+        password: password,
+        version: 10,
+        onConfigure: (db) async {
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: _crearEsquema,
+        onUpgrade: _actualizarEsquema,
+      );
+    }
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: _crearEsquema,
       onUpgrade: _actualizarEsquema,
     );
+  }
+
+  /// Migra una base de datos preexistente en texto plano hacia SQLCipher AES-256
+  /// sin pérdida ni corrupción de inventario ni ventas históricas.
+  Future<void> _migrarSiEsTextoPlano(String dbPath, String password) async {
+    try {
+      final file = File(dbPath);
+      if (!await file.exists()) return;
+      final length = await file.length();
+      if (length < 16) return;
+
+      // Leer cabecera mágica de SQLite: 'SQLite format 3\000'
+      final handle = await file.open(mode: FileMode.read);
+      final header = await handle.read(16);
+      await handle.close();
+
+      const sqliteHeader = [
+        0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66,
+        0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00
+      ];
+
+      bool esTextoPlano = true;
+      for (int i = 0; i < 16; i++) {
+        if (header[i] != sqliteHeader[i]) {
+          esTextoPlano = false;
+          break;
+        }
+      }
+
+      if (!esTextoPlano) {
+        // La base de datos ya está cifrada con SQLCipher
+        return;
+      }
+
+      // 1. Respaldo preventivo antes de la migración
+      final backupPath = '$dbPath.unencrypted.bak';
+      await file.copy(backupPath);
+
+      // 2. Archivo temporal de destino cifrado
+      final encryptedPath = '$dbPath.encrypted.tmp';
+      final encryptedFile = File(encryptedPath);
+      if (await encryptedFile.exists()) {
+        await encryptedFile.delete();
+      }
+
+      // 3. Exportación atómica mediante SQLCipher export
+      final dbPlana = await openDatabase(dbPath);
+      try {
+        await dbPlana.execute("ATTACH DATABASE ? AS encrypted KEY ?", [
+          encryptedPath,
+          password,
+        ]);
+        await dbPlana.rawQuery("SELECT sqlcipher_export('encrypted')");
+        await dbPlana.execute("DETACH DATABASE encrypted");
+        await dbPlana.close();
+
+        // 4. Reemplazo transparente del archivo
+        if (await encryptedFile.exists() && await encryptedFile.length() > 0) {
+          await file.delete();
+          await encryptedFile.rename(dbPath);
+        }
+      } catch (_) {
+        await dbPlana.close();
+        if (await encryptedFile.exists()) {
+          await encryptedFile.delete();
+        }
+      }
+    } catch (_) {
+      // Manejo silencioso defensivo para evitar caídas en arranque
+    }
   }
 
   Future _actualizarEsquema(Database db, int oldVersion, int newVersion) async {
@@ -130,6 +227,27 @@ class BaseDeDatos {
         )
       ''');
     }
+    if (oldVersion < 10) {
+      await db.execute(
+        "ALTER TABLE ventas ADD COLUMN cliente TEXT NOT NULL DEFAULT 'Cliente Mostrador'",
+      );
+      await db.execute(
+        "ALTER TABLE ventas ADD COLUMN montoPagado REAL NOT NULL DEFAULT 0.0",
+      );
+      await db.execute(
+        "ALTER TABLE ventas ADD COLUMN notas TEXT NOT NULL DEFAULT ''",
+      );
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS abonos_venta (
+          id TEXT PRIMARY KEY,
+          venta_id TEXT NOT NULL,
+          monto REAL NOT NULL,
+          fecha TEXT NOT NULL,
+          metodoPago TEXT NOT NULL DEFAULT 'Efectivo',
+          FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -160,7 +278,20 @@ class BaseDeDatos {
         fecha TEXT NOT NULL,
         estado TEXT NOT NULL,
         porcentajeIva REAL NOT NULL,
-        aplicarIva INTEGER NOT NULL
+        aplicarIva INTEGER NOT NULL,
+        cliente TEXT NOT NULL DEFAULT 'Cliente Mostrador',
+        montoPagado REAL NOT NULL DEFAULT 0.0,
+        notas TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE abonos_venta (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        monto REAL NOT NULL,
+        fecha TEXT NOT NULL,
+        metodoPago TEXT NOT NULL DEFAULT 'Efectivo',
+        FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE
       )
     ''');
     await db.execute('''
