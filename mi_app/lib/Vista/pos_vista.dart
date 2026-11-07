@@ -86,11 +86,13 @@ class _PosVistaState extends State<PosVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return AnimatedBuilder(
-      animation: ThemeManager.instance,
+    final cInventario = widget.controladorInventario;
+
+    return ListenableBuilder(
+      listenable: Listenable.merge([ThemeManager.instance, cInventario]),
       builder: (context, _) {
         final productos =
-            widget.controladorInventario.buscarProductos(_busqueda).where((p) {
+            cInventario.buscarProductos(_busqueda).where((p) {
           if (_categoriaSeleccionada == 'planta') return p.esPlanta;
           if (_categoriaSeleccionada == 'articulo') return p.esArticulo;
           return true;

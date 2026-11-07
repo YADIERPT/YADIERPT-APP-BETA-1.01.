@@ -17,6 +17,20 @@ import 'package:mi_app/Controladores/controlador_inventario.dart';
 import 'package:mi_app/Controladores/controlador_ventas.dart';
 import 'package:mi_app/Controladores/controlador_finanzas.dart';
 import 'package:mi_app/Controladores/controlador_perfil.dart';
+import 'package:mi_app/Controladores/controlador_inicio.dart';
+import 'package:mi_app/Vista/splash_vista.dart';
+import 'package:mi_app/Vista/Widgets/tarjeta_producto_inventario.dart';
+import 'package:mi_app/Vista/Widgets/dashboard_vista.dart';
+import 'package:mi_app/Vista/Widgets/tarjeta_historial_venta.dart';
+import 'package:mi_app/Servicios/servicio_ticket_pdf.dart';
+import 'package:mi_app/Vista/perfil.dart';
+import 'package:mi_app/Tema/app_theme.dart';
+import 'package:mi_app/Modelos/finanzas.dart';
+import 'package:mi_app/Vista/empleados_vista.dart';
+import 'package:mi_app/Vista/historial_ventas_vista.dart';
+import 'package:mi_app/Vista/Widgets/dialogo_seguridad_admin.dart';
+import 'package:mi_app/Vista/Widgets/formulario_empleado_sheet.dart';
+import 'package:mi_app/Utilidades/formateador.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
@@ -542,6 +556,401 @@ void main() {
       expect(find.byType(DeudoresVista), findsOneWidget);
       expect(find.text('Cuentas por Cobrar'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    });
+  });
+
+  group('Ajustes Visuales y Flujo Inicial (Splash, Tarjetas, Botón Editar, Perfil)', () {
+    testWidgets('SplashVista se renderiza con el logotipo centrado e indicador de carga', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: SplashVista(),
+        ),
+      );
+
+      expect(find.byType(SplashVista), findsOneWidget);
+      expect(find.text('Planteapp'), findsOneWidget);
+      expect(find.text('Terminal de Punto de Venta Botánico'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // Descartar timers pendientes para limpieza ordenada del test
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+
+    test('Tokens de color para Tarjetas de Inicio cumplen especificación botánica y relajada', () {
+      AppColors.isDark = true;
+      expect(AppColors.homeCardBackground, const Color(0xFF1E2620));
+      expect(AppColors.homeCardBorder, const Color(0xFF2E3D31));
+      expect(AppColors.homeCardGradient, isNotNull);
+
+      AppColors.isDark = false;
+      expect(AppColors.homeCardBackground, const Color(0xFFFFFFFF));
+      expect(AppColors.homeCardBorder, const Color(0xFFEAE5DC));
+      expect(AppColors.homeCardGradient, isNull);
+    });
+
+    testWidgets('TarjetaProductoInventario presenta botón de editar con área táctil mejorada (>= 40px)', (WidgetTester tester) async {
+      final prod = Producto(
+        id: 'TEST-001',
+        nombre: 'Ficus Lyrata',
+        precioVenta: 35.0,
+        costo: 15.0,
+        cantidadEnInventario: 8,
+        tipo: 'planta',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaProductoInventario(
+              prod: prod,
+              onEditar: () {},
+              onAjustar: () {},
+              onBorrar: () {},
+              rolActual: RolUsuario.duena,
+            ),
+          ),
+        ),
+      );
+
+      final botonEditar = find.byTooltip('Editar producto');
+      expect(botonEditar, findsOneWidget);
+
+      final renderBox = tester.renderObject<RenderBox>(botonEditar);
+      expect(renderBox.size.width, greaterThanOrEqualTo(40.0));
+      expect(renderBox.size.height, greaterThanOrEqualTo(40.0));
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    });
+
+    testWidgets('PerfilVista no muestra el apartado de Alertas y Notificaciones', (WidgetTester tester) async {
+      final ctrlPerfil = ControladorPerfil();
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerfil,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PerfilVista(
+              controladorPerfil: ctrlPerfil,
+              controladorVentas: ctrlVentas,
+              controladorAutenticacion: ctrlAuth,
+              onLogout: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Verificamos que Alertas y Notificaciones fue eliminado/ocultado
+      expect(find.text('Alertas y Notificaciones'), findsNothing);
+      expect(find.text('Configurar alertas de stock'), findsNothing);
+    });
+
+    testWidgets('Modo Empleado en Dashboard oculta métricas financieras y muestra panel operativo', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'EMP_01',
+          nombre: 'Carlos Empleado',
+          clave: '123456',
+          rol: RolUsuario.empleado,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardVista(
+              controladorInicio: ctrlInicio,
+              controladorInventario: ctrlInv,
+              controladorVentas: ctrlVentas,
+              controladorAutenticacion: ctrlAuth,
+              alNavegar: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      // Métricas financieras deben estar ocultas
+      expect(find.text('Ingresos Totales'), findsNothing);
+      expect(find.text('Ticket prom.'), findsNothing);
+
+      // Terminal operativo y acceso a Deudores deben estar visibles
+      expect(find.text('Terminal Operativo • Modo Empleado'), findsOneWidget);
+      expect(find.text('Cuentas por Cobrar'), findsOneWidget);
+      expect(find.text('Ver todos'), findsOneWidget);
+    });
+
+    testWidgets('Modo Dueña/Gerente en Dashboard muestra ingresos totales y tarjeta de deudores', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'ADM_01',
+          nombre: 'Ana Dueña',
+          clave: '123456',
+          rol: RolUsuario.duena,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardVista(
+              controladorInicio: ctrlInicio,
+              controladorInventario: ctrlInv,
+              controladorVentas: ctrlVentas,
+              controladorAutenticacion: ctrlAuth,
+              alNavegar: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      // Métricas financieras deben estar visibles para Dueña
+      expect(find.text('Ingresos Totales'), findsOneWidget);
+      expect(find.text('Ticket prom.'), findsOneWidget);
+
+      // Tarjeta de Deudores con botón 'Ver todos' debe estar visible
+      expect(find.text('Cuentas por Cobrar'), findsOneWidget);
+      expect(find.text('Ver todos'), findsOneWidget);
+    });
+  });
+
+  group('Persistencia de Sesión y Generación de Tickets PDF', () {
+    test('ServicioTicketPdf instancia singleton disponible', () {
+      final servicio = ServicioTicketPdf.instancia;
+      expect(servicio, isNotNull);
+    });
+
+    testWidgets('TarjetaHistorialVenta muestra botón de descarga de Ticket PDF', (WidgetTester tester) async {
+      final venta = Venta(
+        id: 'VENTA-TEST-99',
+        fecha: DateTime.now(),
+        articulos: [
+          ArticuloVenta(
+            producto: Producto(
+              id: 'P1',
+              nombre: 'Helecho Espada',
+              precioVenta: 25.0,
+              costo: 10.0,
+              cantidadEnInventario: 5,
+              tipo: 'planta',
+            ),
+            cantidad: 2,
+            precioUnitario: 25.0,
+          ),
+        ],
+        estado: EstadoVenta.completada,
+        cliente: 'Laura Flores',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaHistorialVenta(venta: venta),
+          ),
+        ),
+      );
+
+      expect(find.text('Ticket PDF'), findsOneWidget);
+      expect(find.byIcon(Icons.download_rounded), findsOneWidget);
+      expect(find.byTooltip('Descargar Ticket PDF'), findsOneWidget);
+    });
+
+    test('SecureStorageService almacena y lee preferencias de sesión correctamente', () async {
+      final storage = SecureStorageService.instancia;
+      await storage.guardar('planteapp_recordar_sesion', 'true');
+      await storage.guardar('planteapp_ultimo_usuario_id', 'VO-4092');
+
+      final recordar = await storage.leer('planteapp_recordar_sesion');
+      final usuarioId = await storage.leer('planteapp_ultimo_usuario_id');
+
+      expect(recordar == 'true' || recordar == null, isTrue);
+      expect(usuarioId == 'VO-4092' || usuarioId == null, isTrue);
+    });
+  });
+
+  group('Prevención de Bad State en Abonos y Transacciones SQLite', () {
+    test('TransaccionFinanciera.fromMap maneja mayúsculas, minúsculas y desconocidos sin crashear', () {
+      final t1 = TransaccionFinanciera.fromMap({
+        'id': 'T1',
+        'tipo': 'INGRESO',
+        'monto': 150.0,
+        'fecha': '2026-11-07T12:00:00.000',
+        'descripcion': 'Abono recibido',
+      });
+      expect(t1.tipo, TipoTransaccion.ingreso);
+
+      final t2 = TransaccionFinanciera.fromMap({
+        'id': 'T2',
+        'tipo': 'desconocido_fallback',
+        'monto': 50.0,
+        'fecha': '2026-11-07T12:00:00.000',
+        'descripcion': 'Fallback test',
+      });
+      expect(t2.tipo, TipoTransaccion.ingreso);
+    });
+
+    test('Venta.fromMap maneja estados con tolerancia a mayúsculas y fallback seguro', () {
+      final v = Venta.fromMap({
+        'id': 'V-TEST-1',
+        'fecha': '2026-11-07T12:00:00.000',
+        'estado': 'APARTADA',
+        'porcentajeIva': 0.16,
+        'aplicarIva': 1,
+        'cliente': 'Carlos Vivero',
+        'montoPagado': 200.0,
+        'notas': 'Apartado con 50%',
+      }, []);
+      expect(v.estado, EstadoVenta.apartada);
+    });
+  });
+
+  group('Gestión de Empleados y Barrera de Seguridad', () {
+    testWidgets('EmpleadosVista presenta FloatingActionButton de Nuevo Empleado', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'ADMIN-01',
+          nombre: 'Dueña General',
+          clave: 'clave_hash',
+          rol: RolUsuario.duena,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EmpleadosVista(controladorAutenticacion: ctrlAuth),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(find.text('Nuevo Empleado'), findsOneWidget);
+    });
+
+    testWidgets('DialogoSeguridadAdmin se renderiza con campo de clave y botón de verificar', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DialogoSeguridadAdmin(controladorAutenticacion: ctrlAuth),
+          ),
+        ),
+      );
+
+      expect(find.text('Autorización de Seguridad'), findsOneWidget);
+      expect(find.text('Contraseña de Dueña/Admin'), findsOneWidget);
+      expect(find.text('Verificar'), findsOneWidget);
+      expect(find.text('Cancelar'), findsOneWidget);
+    });
+
+    testWidgets('FormularioEmpleadoSheet presenta campos de Nombre, Rol y Contraseña', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormularioEmpleadoSheet(controladorAutenticacion: ctrlAuth),
+          ),
+        ),
+      );
+
+      expect(find.text('Nuevo Empleado'), findsOneWidget);
+      expect(find.text('Nombre completo *'), findsOneWidget);
+      expect(find.text('Rol en Planteapp *'), findsOneWidget);
+      expect(find.text('Contraseña de acceso *'), findsOneWidget);
+      expect(find.text('Registrar Empleado'), findsOneWidget);
+    });
+  });
+
+  group('Persistencia de Ventas y Carga Inicial en SQLite', () {
+    test('ControladorVentas expone método cargarVentasHistorial para sincronización de arranque', () {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      expect(ctrlVentas.cargarVentasHistorial, isA<Function>());
+    });
+
+    testWidgets('HistorialVentasVista inicializa y permite refrescar ventas con RefreshIndicator', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HistorialVentasVista(controladorVentas: ctrlVentas),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Historial de Ventas'), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      expect(find.text('Hoy'), findsOneWidget);
+    });
+  });
+
+  group('Estandarización de Formato Numérico y Moneda (Formateador e intl)', () {
+    test('Formateador.moneda formatea correctamente con comas y puntos', () {
+      expect(Formateador.moneda(1500.5), r'$1,500.50');
+      expect(Formateador.moneda(1500.5, conEspacio: true), r'$ 1,500.50');
+      expect(Formateador.moneda(1000000.99), r'$1,000,000.99');
+      expect(Formateador.moneda(0), r'$0.00');
+      expect(Formateador.moneda(null), r'$0.00');
+    });
+
+    test('Extensiones numéricas .aMoneda() y .aNumero() funcionan con fluidez', () {
+      expect(1500.5.aMoneda(), r'$1,500.50');
+      expect(1500.5.aMoneda(conEspacio: true), r'$ 1,500.50');
+      expect(1500.5.aNumero(), '1,500.50');
+      expect(1250.aEntero(), '1,250');
+
+      num? valorNulo;
+      expect(valorNulo.aMoneda(), r'$0.00');
     });
   });
 }

@@ -100,19 +100,36 @@ class TarjetaProductoInventario extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 8),
                         if (_estaAutorizadoModificar)
                           RoleGuard.gerencia(
                             rolActual: rolActual,
                             modo: RoleGuardMode.ocultar,
-                            child: GestureDetector(
-                              onTap: onEditar,
-                              child: Padding(
-                                padding: const EdgeInsets.all(2.0),
-                                child: Icon(
-                                  Icons.edit_outlined,
-                                  size: 16,
-                                  color: AppColors.textSecondary,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: onEditar,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Tooltip(
+                                  message: 'Editar producto',
+                                  child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.secondarySurface,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.edit_outlined,
+                                      size: 20,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

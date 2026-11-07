@@ -9,7 +9,7 @@ import '../../Modelos/venta.dart';
 import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../historial_ventas_vista.dart';
-import 'role_guard.dart';
+import '../deudores_vista.dart';
 
 class DashboardVista extends StatefulWidget {
   final ControladorInicio controladorInicio;
@@ -82,6 +82,20 @@ class _DashboardVistaState extends State<DashboardVista> {
 
     final ventasRecientes = ventasPeriodo.reversed.take(4).toList();
 
+    // Cuentas por cobrar y deudores pendientes
+    final deudoresPendientes = widget.controladorVentas.ventas
+        .where((v) =>
+            v.estado == EstadoVenta.apartada ||
+            (v.estado != EstadoVenta.cancelada && v.tieneSaldoPendiente))
+        .toList();
+
+    final double totalPorCobrar = deudoresPendientes.fold(
+      0.0,
+      (sum, v) => sum + v.saldoPendiente,
+    );
+
+    final deudoresRecientes = deudoresPendientes.reversed.take(4).toList();
+
     final List<Map<String, dynamic>> puntosGrafico = [
       {'hora': '8:00', 'monto': 0.0, 'conteo': 0},
       {'hora': '10:00', 'monto': 0.0, 'conteo': 0},
@@ -131,21 +145,13 @@ class _DashboardVistaState extends State<DashboardVista> {
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+        final usuarioActual = widget.controladorAutenticacion.usuarioActual;
+        final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
-          body: RoleGuard(
-            rolesPermitidos: const [RolUsuario.duena, RolUsuario.gerente],
-            rolActual: rolActual,
-            modo: RoleGuardMode.placeholder,
-            titulo: 'Módulo Financiero Reservado',
-            mensaje:
-                'El resumen financiero, ganancias y métricas de rendimiento solo son accesibles para la Dueña y Gerencia. Tu rol operativo está enfocado en Punto de Venta e Inventario.',
-            textoAccion: 'Ir al Punto de Venta',
-            onAccion: () => widget.alNavegar(1),
-            child: RefreshIndicator(
+          body: RefreshIndicator(
             color: AppColors.primary,
             backgroundColor: AppColors.card,
             strokeWidth: 2.5,
@@ -157,14 +163,17 @@ class _DashboardVistaState extends State<DashboardVista> {
               ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
-              Container(
+                if (!esEmpleado) ...[
+                  // Tarjeta Financiera de Ingresos y Gráficos (Oculta para Rol Empleado)
+                  Container(
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: AppColors.homeCardBackground,
+                  gradient: AppColors.homeCardGradient,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.border, width: 1),
+                  border: Border.all(color: AppColors.homeCardBorder, width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
+                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.25 : 0.04),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -270,15 +279,27 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.darkGreen,
+                                  color: const Color(0xFF1E2421),
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppColors.brightGreen.withOpacity(0.5),
+                                    width: 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.25),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
                                 child: Text(
                                   '$horaTooltip • \$${montoTooltip.toStringAsFixed(2)} ($ventasTooltip ventas)',
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: Color(0xFFF0F4F1),
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
                               ),
@@ -446,8 +467,109 @@ class _DashboardVistaState extends State<DashboardVista> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
+            ] else ...[
+              // Banner Operativo para Rol Empleado (Métricas financieras ocultadas)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.homeCardBackground,
+                  gradient: AppColors.homeCardGradient,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.homeCardBorder, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.25 : 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.subtleGreen,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.badge_outlined,
+                            color: AppColors.brightGreen,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Terminal Operativo • Modo Empleado',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Sesión activa de ${usuarioActual?.nombre ?? "Operador"}. Módulo de cobro, inventario y cuentas.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => widget.alNavegar(1),
+                            icon: const Icon(Icons.point_of_sale_rounded, size: 18),
+                            label: const Text('Ir al POS'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => widget.alNavegar(2),
+                            icon: const Icon(Icons.spa_outlined, size: 18),
+                            label: const Text('Inventario'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textPrimary,
+                              side: BorderSide(color: AppColors.border),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
               if (productosBajoStock.isNotEmpty) ...[
                 Container(
@@ -591,6 +713,330 @@ class _DashboardVistaState extends State<DashboardVista> {
                 const SizedBox(height: 20),
               ],
 
+              // ==========================================
+              // TARJETA DE DEUDORES Y APARTADOS EN INICIO
+              // ==========================================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 18,
+                        color: AppColors.amber,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Cuentas por Cobrar',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (deudoresPendientes.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.subtleAmber,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.amber.withValues(alpha: 0.3),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            '${deudoresPendientes.length}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.amber,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DeudoresVista(
+                            controladorVentas: widget.controladorVentas,
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Ver todos',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.homeCardBackground,
+                  gradient: AppColors.homeCardGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.homeCardBorder, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.20 : 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: deudoresPendientes.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 20.0,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppColors.subtleGreen,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_circle_outline,
+                                color: AppColors.brightGreen,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Sin deudas pendientes',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Todas las ventas y apartados están al día.',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Total por Cobrar',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '\$${totalPorCobrar.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.amber,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.subtleAmber,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${deudoresPendientes.length} ${deudoresPendientes.length == 1 ? "cuenta" : "cuentas"}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.amber,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Divider(height: 1, color: AppColors.homeCardBorder),
+                          ...deudoresRecientes.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final venta = entry.value;
+                            final String folio = venta.id.length > 5
+                                ? venta.id.substring(venta.id.length - 5)
+                                : venta.id;
+                            final bool esApartado =
+                                venta.estado == EstadoVenta.apartada;
+
+                            return InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => DeudoresVista(
+                                      controladorVentas:
+                                          widget.controladorVentas,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 11,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: idx < deudoresRecientes.length - 1
+                                      ? Border(
+                                          bottom: BorderSide(
+                                            color: AppColors.border,
+                                            width: 0.5,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: esApartado
+                                            ? AppColors.subtleTurquoise
+                                            : AppColors.subtleAmber,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        esApartado
+                                            ? Icons.bookmark_border_rounded
+                                            : Icons.person_outline,
+                                        color: esApartado
+                                            ? AppColors.turquoise
+                                            : AppColors.amber,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            venta.cliente.isNotEmpty
+                                                ? venta.cliente
+                                                : 'Cliente Mostrador',
+                                            style: TextStyle(
+                                              color: AppColors.textPrimary,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            'Venta #$folio · ${venta.fecha.day.toString().padLeft(2, '0')}/${venta.fecha.month.toString().padLeft(2, '0')}',
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '\$${venta.saldoPendiente.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            color: AppColors.amber,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          'de \$${venta.total.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 16,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 20),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -643,9 +1089,17 @@ class _DashboardVistaState extends State<DashboardVista> {
 
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: AppColors.homeCardBackground,
+                  gradient: AppColors.homeCardGradient,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border, width: 1),
+                  border: Border.all(color: AppColors.homeCardBorder, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.20 : 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: ventasRecientes.isEmpty
                     ? Padding(
@@ -767,8 +1221,7 @@ class _DashboardVistaState extends State<DashboardVista> {
               ],
             ),
           ),
-        ),
-      );
+        );
       },
     );
   }

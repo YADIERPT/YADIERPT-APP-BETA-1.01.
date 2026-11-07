@@ -16,6 +16,26 @@ class HistorialVentasVista extends StatefulWidget {
 
 class _HistorialVentasVistaState extends State<HistorialVentasVista> {
   String _periodoSeleccionado = 'Hoy';
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarHistorial();
+  }
+
+  Future<void> _cargarHistorial() async {
+    setState(() => _cargando = true);
+    try {
+      await widget.controladorVentas.cargarVentasHistorial();
+    } catch (e) {
+      debugPrint('Error al cargar ventas en HistorialVentasVista: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _cargando = false);
+      }
+    }
+  }
 
   List<Venta> _filtrarVentasPorPeriodo() {
     final todas = widget.controladorVentas.ventas
@@ -107,9 +127,19 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
             elevation: 0,
             iconTheme: IconThemeData(color: AppColors.textPrimary),
           ),
-          body: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            children: [
+          body: RefreshIndicator(
+            color: AppColors.primary,
+            backgroundColor: AppColors.card,
+            onRefresh: () async {
+              await widget.controladorVentas.cargarVentasHistorial();
+              if (mounted) {
+                setState(() {});
+              }
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              children: [
               // Pestañas de período: "Hoy", "Semana Pasada", "Mes Pasado"
               Container(
                 padding: const EdgeInsets.all(4),
@@ -400,8 +430,9 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
               const SizedBox(height: 24),
             ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 }

@@ -26,12 +26,18 @@ class TransaccionFinanciera {
   }
 
   factory TransaccionFinanciera.fromMap(Map<String, dynamic> map) {
+    final tipoRaw = map['tipo']?.toString().toLowerCase().trim() ?? '';
     return TransaccionFinanciera(
-      id: map['id'],
-      tipo: TipoTransaccion.values.firstWhere((e) => e.name == map['tipo']),
-      monto: map['monto'],
-      fecha: DateTime.parse(map['fecha']),
-      descripcion: map['descripcion'],
+      id: map['id']?.toString() ?? '',
+      tipo: TipoTransaccion.values.firstWhere(
+        (e) => e.name.toLowerCase() == tipoRaw,
+        orElse: () => TipoTransaccion.ingreso,
+      ),
+      monto: (map['monto'] as num?)?.toDouble() ?? 0.0,
+      fecha: map['fecha'] != null
+          ? DateTime.tryParse(map['fecha'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      descripcion: map['descripcion']?.toString() ?? '',
     );
   }
 

@@ -61,3 +61,5 @@ key.properties
 # Environment / Secret configs
 .env
 .env.*
+
+*.apk

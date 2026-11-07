@@ -1,12 +1,17 @@
+import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
+
+import '../Modelos/producto.dart';
 import '../Modelos/venta.dart';
 import '../Modelos/abono.dart';
+import '../Modelos/finanzas.dart';
 import '../BaseDatos/base_datos.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import 'controlador_inventario.dart';
 import 'controlador_finanzas.dart';
 import 'controlador_perfil.dart';
 
-class ControladorVentas {
+class ControladorVentas extends ChangeNotifier {
   final ControladorInventario controladorInventario;
   final ControladorFinanzas controladorFinanzas;
   final ControladorPerfil controladorPerfil;
@@ -25,30 +30,67 @@ class ControladorVentas {
   List<Venta> get ventas => _ventas;
   Venta? get ventaActual => _ventaActual;
 
+  /// Carga y restaura el historial completo de ventas desde la base de datos SQLite.
+  /// Se ejecuta automáticamente al arrancar la app y al entrar a la vista de historial.
+  Future<List<Venta>> cargarVentasHistorial() async {
+    await cargarVentas();
+    return _ventas;
+  }
+
   Future<void> cargarVentas() async {
-    final db = await BaseDeDatos.instancia.database;
-    final mapasVentas = await db.query('ventas', orderBy: 'fecha DESC');
+    try {
+      final db = await BaseDeDatos.instancia.database;
+      final mapasVentas = await db.query('ventas', orderBy: 'fecha DESC');
 
-    _ventas.clear();
-    for (var mapaVenta in mapasVentas) {
-      final ventaId = mapaVenta['id'] as String;
-      final mapasArticulos = await db.query(
-        'articulos_venta',
-        where: 'venta_id = ?',
-        whereArgs: [ventaId],
-      );
+      _ventas.clear();
+      for (var mapaVenta in mapasVentas) {
+        final ventaId = mapaVenta['id'].toString();
+        final int? ventaIdInt = int.tryParse(ventaId);
 
-      List<ArticuloVenta> articulos = [];
-      for (var mapaArticulo in mapasArticulos) {
-        final productoId = mapaArticulo['producto_id'] as String;
-        final producto = controladorInventario.obtenerProducto(productoId);
+        // Consulta compatible con identificadores String o int en SQLite
+        final mapasArticulos = await db.query(
+          'articulos_venta',
+          where: ventaIdInt != null ? 'venta_id = ? OR venta_id = ?' : 'venta_id = ?',
+          whereArgs: ventaIdInt != null ? [ventaId, ventaIdInt] : [ventaId],
+        );
 
-        if (producto != null) {
+        List<ArticuloVenta> articulos = [];
+        for (var mapaArticulo in mapasArticulos) {
+          final productoId = mapaArticulo['producto_id'].toString();
+          var producto = controladorInventario.obtenerProducto(productoId);
+
+          // Si el producto no está cargado en memoria, buscarlo directamente en la BD
+          if (producto == null) {
+            final int? prodIdInt = int.tryParse(productoId);
+            final prodMaps = await db.query(
+              'productos',
+              where: prodIdInt != null ? 'id = ? OR id = ?' : 'id = ?',
+              whereArgs: prodIdInt != null ? [productoId, prodIdInt] : [productoId],
+            );
+            if (prodMaps.isNotEmpty) {
+              producto = Producto.fromMap(prodMaps.first);
+            }
+          }
+
+          // Fallback defensivo para asegurar que ningún artículo ni total se pierda
+          producto ??= Producto(
+            id: productoId,
+            nombre: 'Producto #$productoId',
+            precioVenta: (mapaArticulo['precioUnitario'] as num?)?.toDouble() ?? 0.0,
+            costo: 0.0,
+            cantidadEnInventario: 0,
+            tipo: 'articulo',
+          );
+
           articulos.add(ArticuloVenta.fromMap(mapaArticulo, producto));
         }
-      }
 
-      _ventas.add(Venta.fromMap(mapaVenta, articulos));
+        _ventas.add(Venta.fromMap(mapaVenta, articulos));
+      }
+      notifyListeners();
+    } catch (e, stackTrace) {
+      debugPrint('CRÍTICO: Error al cargar ventas desde SQLite: $e\n$stackTrace');
+      rethrow;
     }
   }
 
@@ -168,14 +210,14 @@ class ControladorVentas {
             fecha: DateTime.now(),
             metodoPago: metodoPagoAbono,
           );
-          await txn.insert('abonos_venta', abono.toMap());
+          await txn.insert('abonos_venta', abono.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
           await txn.insert('transacciones', {
             'id': '${DateTime.now().millisecondsSinceEpoch}_tr_init',
-            'tipo': 'INGRESO',
+            'tipo': TipoTransaccion.ingreso.name,
             'monto': montoAbonoInicial,
             'fecha': DateTime.now().toIso8601String(),
             'descripcion': 'Anticipo/Abono inicial venta apartada: ${venta.id} ($cliente)',
-          });
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
 
@@ -186,11 +228,12 @@ class ControladorVentas {
         prodMemoria?.reducirInventario(articulo.cantidad);
       }
 
-      _ventas.insert(0, venta);
       _ventaActual = null;
+      await cargarVentasHistorial();
       if (montoAbonoInicial > 0) {
         await controladorFinanzas.cargarTransacciones();
       }
+      notifyListeners();
     }
   }
 
@@ -198,25 +241,36 @@ class ControladorVentas {
     if (_ventaActual != null) {
       final ventaTerminada = _ventaActual!;
 
-      ventaTerminada.completarVenta();
-      await _guardarVentaYDescontarStockEnBD(ventaTerminada);
-      _ventas.add(ventaTerminada);
+      try {
+        ventaTerminada.completarVenta();
+        await _guardarVentaYDescontarStockEnBD(ventaTerminada);
 
-      await controladorFinanzas.registrarIngreso(
-        'Venta completada: ${ventaTerminada.id}',
-        ventaTerminada.total,
-      );
+        // Recargar el historial directamente desde SQLite para asegurar sincronización 100% real
+        await cargarVentasHistorial();
 
-      _ventaActual = null;
+        await controladorFinanzas.registrarIngreso(
+          'Venta completada: ${ventaTerminada.id}',
+          ventaTerminada.total,
+        );
 
-      // Calibración reactiva local de la IA de compras
-      if (controladorIA != null) {
-        try {
-          await controladorIA!.recalibrarPorVenta(
-            venta: ventaTerminada,
-            todasLasVentas: _ventas,
-          );
-        } catch (_) {}
+        _ventaActual = null;
+
+        // Calibración reactiva local de la IA de compras
+        if (controladorIA != null) {
+          try {
+            await controladorIA!.recalibrarPorVenta(
+              venta: ventaTerminada,
+              todasLasVentas: _ventas,
+            );
+          } catch (e) {
+            debugPrint('Aviso: recalibración IA completada con fallback: $e');
+          }
+        }
+
+        notifyListeners();
+      } catch (e, stack) {
+        debugPrint('CRÍTICO: Error al completar venta: $e\n$stack');
+        rethrow;
       }
     }
   }
@@ -259,30 +313,46 @@ class ControladorVentas {
 
     final db = await BaseDeDatos.instancia.database;
     await db.transaction((txn) async {
-      final ventasQuery = await txn.query(
+      // 1. Manejo seguro de tipos para whereArgs (compatibilidad String vs int)
+      final String idStr = ventaId.trim();
+      final int? idInt = int.tryParse(idStr);
+
+      final String whereClause = idInt != null ? 'id = ? OR id = ?' : 'id = ?';
+      final List<dynamic> whereArgs = idInt != null ? [idStr, idInt] : [idStr];
+
+      final List<Map<String, dynamic>> ventasQuery = await txn.query(
         'ventas',
-        where: 'id = ?',
-        whereArgs: [ventaId],
+        where: whereClause,
+        whereArgs: whereArgs,
       );
 
-      if (ventasQuery.isEmpty) {
-        throw Exception('Venta no encontrada en la base de datos');
+      // 2. Extracción segura sin lanzar 'Bad state: No element'
+      final Map<String, dynamic>? mapaVenta =
+          ventasQuery.isNotEmpty ? ventasQuery.first : null;
+
+      // 3. Validación de nulidad controlada
+      if (mapaVenta == null) {
+        throw Exception('No se encontró el folio o registro de la venta #$ventaId');
       }
 
-      final mapaVenta = ventasQuery.first;
-      final articulosQuery = await txn.query(
+      // Consulta de artículos vinculados con compatibilidad de tipo
+      final String artWhere = idInt != null ? 'venta_id = ? OR venta_id = ?' : 'venta_id = ?';
+      final List<dynamic> artArgs = idInt != null ? [idStr, idInt] : [idStr];
+
+      final List<Map<String, dynamic>> articulosQuery = await txn.query(
         'articulos_venta',
-        where: 'venta_id = ?',
-        whereArgs: [ventaId],
+        where: artWhere,
+        whereArgs: artArgs,
       );
 
       double subtotalVenta = 0.0;
       for (var art in articulosQuery) {
-        subtotalVenta +=
-            (art['cantidad'] as num) * (art['precioUnitario'] as num);
+        final cant = (art['cantidad'] as num?)?.toDouble() ?? 0.0;
+        final precio = (art['precioUnitario'] as num?)?.toDouble() ?? 0.0;
+        subtotalVenta += cant * precio;
       }
       final bool aplicarIva = mapaVenta['aplicarIva'] == 1;
-      final double pctIva = (mapaVenta['porcentajeIva'] as num).toDouble();
+      final double pctIva = (mapaVenta['porcentajeIva'] as num?)?.toDouble() ?? 0.16;
       final double totalVenta =
           subtotalVenta + (aplicarIva ? subtotalVenta * pctIva : 0.0);
 
@@ -304,36 +374,36 @@ class ControladorVentas {
 
       final abono = Abono(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        ventaId: ventaId,
+        ventaId: idStr,
         monto: monto,
         fecha: DateTime.now(),
         metodoPago: metodoPago,
       );
 
-      // 1. Insertar el abono en el registro histórico
+      // 4. Insertar el abono en el registro histórico
       await txn.insert('abonos_venta', abono.toMap());
 
-      // 2. Actualizar monto acumulado y estado de la venta
+      // 5. Actualizar monto acumulado y estado de la venta
       await txn.update(
         'ventas',
         {
           'montoPagado': nuevoMontoPagado,
           'estado': nuevoEstado,
         },
-        where: 'id = ?',
-        whereArgs: [ventaId],
+        where: whereClause,
+        whereArgs: whereArgs,
       );
 
-      // 3. Registrar el ingreso financiero correspondiente
+      // 6. Registrar el ingreso financiero correspondiente
       final cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
       await txn.insert('transacciones', {
         'id': '${abono.id}_ingreso',
-        'tipo': 'INGRESO',
+        'tipo': TipoTransaccion.ingreso.name,
         'monto': monto,
         'fecha': DateTime.now().toIso8601String(),
         'descripcion': liquidada
-            ? 'Liquidación final cuenta por cobrar (Venta #$ventaId - $cliente)'
-            : 'Abono recibido (Venta #$ventaId - $cliente)',
+            ? 'Liquidación final cuenta por cobrar (Venta #$idStr - $cliente)'
+            : 'Abono recibido (Venta #$idStr - $cliente)',
       });
     });
 
@@ -347,10 +417,10 @@ class ControladorVentas {
     required String ventaId,
     String metodoPago = 'Efectivo',
   }) async {
-    final venta = _ventas.firstWhere(
-      (v) => v.id == ventaId,
-      orElse: () => throw Exception('Venta no encontrada'),
-    );
+    final venta = _ventas.where((v) => v.id == ventaId).firstOrNull;
+    if (venta == null) {
+      throw Exception('Cuenta de deudor no encontrada en el sistema');
+    }
     if (venta.saldoPendiente <= 0) return;
     await registrarAbono(
       ventaId: ventaId,
@@ -363,12 +433,26 @@ class ControladorVentas {
   /// Inserta una venta sin alterar el inventario (ej. ventas canceladas).
   Future<void> _guardarVentaEnBD(Venta venta) async {
     final db = await BaseDeDatos.instancia.database;
-    await db.transaction((txn) async {
-      await txn.insert('ventas', venta.toMap());
-      for (var articulo in venta.articulos) {
-        await txn.insert('articulos_venta', articulo.toMap(venta.id));
-      }
-    });
+    try {
+      await db.transaction((txn) async {
+        await txn.insert(
+          'ventas',
+          venta.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        for (var articulo in venta.articulos) {
+          await txn.insert(
+            'articulos_venta',
+            articulo.toMap(venta.id),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+      debugPrint('Venta guardada en SQLite (sin alterar stock): ${venta.id}');
+    } catch (e, stackTrace) {
+      debugPrint('CRÍTICO: Error al insertar venta en SQLite (_guardarVentaEnBD): $e\n$stackTrace');
+      rethrow;
+    }
   }
 
   /// Guarda la venta y descuenta el stock de inventario de forma estrictamente atómica.
@@ -377,57 +461,76 @@ class ControladorVentas {
   Future<void> _guardarVentaYDescontarStockEnBD(Venta venta) async {
     final db = await BaseDeDatos.instancia.database;
 
-    await db.transaction((txn) async {
-      // 1. Descontar el stock de cada producto dentro de la transacción
-      for (var articulo in venta.articulos) {
-        final List<Map<String, dynamic>> res = await txn.query(
-          'productos',
-          columns: ['cantidadEnInventario', 'nombre'],
-          where: 'id = ?',
-          whereArgs: [articulo.producto.id],
-        );
-
-        if (res.isNotEmpty) {
-          final int stockActual =
-              (res.first['cantidadEnInventario'] as int?) ?? 0;
-          final int nuevoStock = stockActual - articulo.cantidad;
-
-          if (nuevoStock < 0) {
-            throw Exception(
-              'Stock insuficiente para "${articulo.producto.nombre}". '
-              'Disponible: $stockActual, Solicitado: ${articulo.cantidad}.',
-            );
-          }
-
-          await txn.update(
+    try {
+      await db.transaction((txn) async {
+        // 1. Descontar el stock de cada producto dentro de la transacción
+        for (var articulo in venta.articulos) {
+          final List<Map<String, dynamic>> res = await txn.query(
             'productos',
-            {'cantidadEnInventario': nuevoStock},
+            columns: ['cantidadEnInventario', 'nombre'],
             where: 'id = ?',
             whereArgs: [articulo.producto.id],
           );
-        } else {
-          final prod = controladorInventario.obtenerProducto(articulo.producto.id) ?? articulo.producto;
-          final nuevoStock = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
-          final mapProd = prod.toMap();
-          mapProd['cantidadEnInventario'] = nuevoStock;
-          await txn.insert('productos', mapProd);
+
+          if (res.isNotEmpty) {
+            final int stockActual =
+                (res.first['cantidadEnInventario'] as int?) ?? 0;
+            final int nuevoStock = stockActual - articulo.cantidad;
+
+            if (nuevoStock < 0) {
+              throw Exception(
+                'Stock insuficiente para "${articulo.producto.nombre}". '
+                'Disponible: $stockActual, Solicitado: ${articulo.cantidad}.',
+              );
+            }
+
+            await txn.update(
+              'productos',
+              {'cantidadEnInventario': nuevoStock},
+              where: 'id = ?',
+              whereArgs: [articulo.producto.id],
+            );
+          } else {
+            final prod = controladorInventario.obtenerProducto(articulo.producto.id) ?? articulo.producto;
+            final nuevoStock = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
+            final mapProd = prod.toMap();
+            mapProd['cantidadEnInventario'] = nuevoStock;
+            await txn.insert(
+              'productos',
+              mapProd,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
         }
-      }
 
-      // 2. Registrar la venta en la tabla principal
-      await txn.insert('ventas', venta.toMap());
+        // 2. Registrar la venta en la tabla principal con validación explícita
+        final int rowIdVenta = await txn.insert(
+          'ventas',
+          venta.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        debugPrint('Venta insertada en SQLite: ${venta.id} (Row ID: $rowIdVenta)');
 
-      // 3. Registrar los artículos de la venta
+        // 3. Registrar los artículos de la venta
+        for (var articulo in venta.articulos) {
+          final int rowIdArticulo = await txn.insert(
+            'articulos_venta',
+            articulo.toMap(venta.id),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          debugPrint('Artículo de venta insertado: ${articulo.producto.nombre} x${articulo.cantidad} (Row ID: $rowIdArticulo)');
+        }
+      });
+
+      // 4. Tras confirmarse el COMMIT exitoso de la transacción, sincronizamos la memoria local
       for (var articulo in venta.articulos) {
-        await txn.insert('articulos_venta', articulo.toMap(venta.id));
+        final prodMemoria =
+            controladorInventario.obtenerProducto(articulo.producto.id);
+        prodMemoria?.reducirInventario(articulo.cantidad);
       }
-    });
-
-    // 4. Tras confirmarse el COMMIT exitoso de la transacción, sincronizamos la memoria local
-    for (var articulo in venta.articulos) {
-      final prodMemoria =
-          controladorInventario.obtenerProducto(articulo.producto.id);
-      prodMemoria?.reducirInventario(articulo.cantidad);
+    } catch (e, stackTrace) {
+      debugPrint('CRÍTICO: Fallo al guardar venta en SQLite: $e\n$stackTrace');
+      rethrow;
     }
   }
 }

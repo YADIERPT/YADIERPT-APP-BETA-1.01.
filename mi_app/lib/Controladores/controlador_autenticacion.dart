@@ -1,15 +1,27 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../Modelos/colaborador.dart';
 import '../BaseDatos/base_datos.dart';
 import '../Servicios/servicio_criptografia.dart';
 
-class ControladorAutenticacion {
+/// Alias semántico para el controlador de personal / colaboradores
+typedef ControladorEmpleados = ControladorAutenticacion;
+
+class ControladorAutenticacion extends ChangeNotifier {
   Colaborador? _usuarioActual;
+  List<Colaborador> _colaboradores = [];
 
   Colaborador? get usuarioActual => _usuarioActual;
+  List<Colaborador> get colaboradores => _colaboradores;
+
+  /// Permite establecer el usuario actual en memoria (útil para pruebas unitarias y de widgets)
+  void establecerUsuarioParaPruebas(Colaborador? colaborador) {
+    _usuarioActual = colaborador;
+    notifyListeners();
+  }
 
   /// Método legado síncrono para hashes SHA-256 (mantenido para retrocompatibilidad)
   static String hashearClave(String clave, String salt) {
@@ -50,6 +62,7 @@ class ControladorAutenticacion {
     final map = nuevo.toMap();
     map['clave'] = claveFinal;
     await db.insert('colaboradores', map);
+    await obtenerColaboradores();
   }
 
   Future<bool> iniciarSesion(String id, String clave) async {
@@ -124,8 +137,70 @@ class ControladorAutenticacion {
 
   Future<List<Colaborador>> obtenerColaboradores() async {
     final db = await BaseDeDatos.instancia.database;
+    final resultados = await db.query('colaboradores', orderBy: 'nombre ASC');
+    _colaboradores =
+        resultados.map((mapa) => Colaborador.fromMap(mapa)).toList();
+    notifyListeners();
+    return _colaboradores;
+  }
+
+  /// Actualiza los datos de un empleado (nombre, rol y opcionalmente su clave hasheada)
+  Future<void> actualizarColaborador(
+    Colaborador colaborador, {
+    String? nuevaClave,
+  }) async {
+    final db = await BaseDeDatos.instancia.database;
+    final map = <String, dynamic>{
+      'nombre': colaborador.nombre,
+      'rol': colaborador.rol.valor,
+    };
+
+    if (nuevaClave != null && nuevaClave.trim().isNotEmpty) {
+      map['clave'] = await hashearClaveKdf(nuevaClave.trim(), colaborador.id);
+    }
+
+    await db.update(
+      'colaboradores',
+      map,
+      where: 'id = ?',
+      whereArgs: [colaborador.id],
+    );
+
+    if (_usuarioActual != null && _usuarioActual!.id == colaborador.id) {
+      _usuarioActual = _usuarioActual!.copyWith(
+        nombre: colaborador.nombre,
+        rol: colaborador.rol,
+        clave: map['clave'] as String? ?? _usuarioActual!.clave,
+      );
+    }
+
+    await obtenerColaboradores();
+  }
+
+  /// Valida la clave de seguridad contra la cuenta de Dueña o Administrador activo en SQLite
+  Future<bool> verificarClaveAdmin(String clave) async {
+    if (clave.trim().isEmpty) return false;
+
+    // 1. Si el usuario en sesión es Dueña o Gerente, validamos directamente contra su credencial
+    if (_usuarioActual != null &&
+        (_usuarioActual!.rol.esDuena || _usuarioActual!.rol.esGerente)) {
+      final esValida = await verificarClave(_usuarioActual!, clave.trim());
+      if (esValida) return true;
+    }
+
+    // 2. Si no o si falla, buscar en SQLite cualquier cuenta con rol Dueña o Admin
+    final db = await BaseDeDatos.instancia.database;
     final resultados = await db.query('colaboradores');
-    return resultados.map((mapa) => Colaborador.fromMap(mapa)).toList();
+
+    for (var mapa in resultados) {
+      final colab = Colaborador.fromMap(mapa);
+      if (colab.rol.esDuena || colab.rol.esGerente) {
+        final esValida = await verificarClave(colab, clave.trim());
+        if (esValida) return true;
+      }
+    }
+
+    return false;
   }
 
   Future<void> cambiarClave(String id, String nuevaClave) async {

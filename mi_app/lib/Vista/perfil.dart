@@ -198,45 +198,46 @@ class _PerfilVistaState extends State<PerfilVista> {
                 iconColor: AppColors.turquoise,
                 onTap: _mostrarDialogoTema,
               ),
-              _buildListTile(
-                Icons.notifications_active_outlined,
-                'Alertas y Notificaciones',
-                'Configurar alertas de stock',
-                iconBgColor: AppColors.subtleAmber,
-                iconColor: AppColors.amber,
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: AppColors.card,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      title: Text(
-                        'Alertas de Stock',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      content: Text(
-                        'El sistema te alerta automáticamente cuando un producto baja a su umbral de stock crítico configurado (por defecto 5 unidades o menos). Puedes personalizar el umbral de cada planta desde el botón Añadir en Inventario.',
-                        style: TextStyle(color: AppColors.textPrimary),
-                      ),
-                      actions: [
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Aceptar'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              // [SOLICITUD TÉCNICA]: Apartado de Alertas y Notificaciones ocultado/desactivado
+              // _buildListTile(
+              //   Icons.notifications_active_outlined,
+              //   'Alertas y Notificaciones',
+              //   'Configurar alertas de stock',
+              //   iconBgColor: AppColors.subtleAmber,
+              //   iconColor: AppColors.amber,
+              //   onTap: () {
+              //     showDialog(
+              //       context: context,
+              //       builder: (ctx) => AlertDialog(
+              //         backgroundColor: AppColors.card,
+              //         shape: RoundedRectangleBorder(
+              //           borderRadius: BorderRadius.circular(16),
+              //         ),
+              //         title: Text(
+              //           'Alertas de Stock',
+              //           style: TextStyle(
+              //             color: AppColors.primary,
+              //             fontWeight: FontWeight.bold,
+              //           ),
+              //         ),
+              //         content: Text(
+              //           'El sistema te alerta automáticamente cuando un producto baja a su umbral de stock crítico configurado (por defecto 5 unidades o menos). Puedes personalizar el umbral de cada planta desde el botón Añadir en Inventario.',
+              //           style: TextStyle(color: AppColors.textPrimary),
+              //         ),
+              //         actions: [
+              //           ElevatedButton(
+              //             onPressed: () => Navigator.pop(ctx),
+              //             style: ElevatedButton.styleFrom(
+              //               backgroundColor: AppColors.primary,
+              //               foregroundColor: Colors.white,
+              //             ),
+              //             child: const Text('Aceptar'),
+              //           ),
+              //         ],
+              //       ),
+              //     );
+              //   },
+              // ),
 
               const SizedBox(height: 16),
               _buildSectionTitle('Negocio'),
@@ -512,37 +513,42 @@ class _PerfilVistaState extends State<PerfilVista> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border, width: 1),
       ),
-      child: ListTile(
-        dense: true,
-        leading: Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: bg,
-            shape: BoxShape.circle,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          dense: true,
+          leading: Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: bg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: fg, size: 20),
           ),
-          child: Icon(icon, color: fg, size: 20),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: AppColors.textPrimary,
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+            ),
           ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: 12,
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          trailing: Icon(
+            Icons.chevron_right,
             color: AppColors.textSecondary,
+            size: 20,
           ),
+          onTap: onTap,
         ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: AppColors.textSecondary,
-          size: 20,
-        ),
-        onTap: onTap,
       ),
     );
   }

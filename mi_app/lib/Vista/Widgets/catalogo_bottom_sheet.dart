@@ -27,12 +27,15 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Producto> filtrados =
-        widget.controladorInventario.buscarProductos(_busqueda);
-    final bool isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    return ListenableBuilder(
+      listenable: widget.controladorInventario,
+      builder: (context, _) {
+        final List<Producto> filtrados =
+            widget.controladorInventario.buscarProductos(_busqueda);
+        final bool isLandscape =
+            MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return Container(
+        return Container(
       height: MediaQuery.of(context).size.height * (isLandscape ? 0.95 : 0.85),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -118,13 +121,10 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
               itemCount: filtrados.length,
               itemBuilder: (context, index) {
                 final prod = filtrados[index];
-                int cantidadEnTicket = 0;
-                try {
-                  final art = widget.ventaActual.articulos.firstWhere(
-                    (a) => a.producto.id == prod.id,
-                  );
-                  cantidadEnTicket = art.cantidad;
-                } catch (_) {}
+                final art = widget.ventaActual.articulos
+                    .where((a) => a.producto.id == prod.id)
+                    .firstOrNull;
+                final int cantidadEnTicket = art?.cantidad ?? 0;
 
                 final bool enTicket = cantidadEnTicket > 0;
                 final bool sinUnidades = prod.cantidadEnInventario == 0;
@@ -297,6 +297,8 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

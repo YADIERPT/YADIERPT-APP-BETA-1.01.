@@ -232,6 +232,22 @@ class AppColors {
             Color(0xFFFFFFFF),
           ],
         );
+
+  // Tarjetas de Inicio (Dashboard): Matiz botánico reposado en modo oscuro
+  static Color get homeCardBackground =>
+      isDark ? const Color(0xFF1E2620) : const Color(0xFFFFFFFF);
+  static Color get homeCardBorder =>
+      isDark ? const Color(0xFF2E3D31) : const Color(0xFFEAE5DC);
+  static LinearGradient? get homeCardGradient => isDark
+      ? const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF202A22),
+            Color(0xFF19221B),
+          ],
+        )
+      : null;
 }
 
 class AppTheme {
@@ -271,6 +287,14 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Color(0xFFFFFFFF),
+        modalBackgroundColor: Color(0xFFFFFFFF),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
     );
   }
 
@@ -308,6 +332,14 @@ class AppTheme {
           color: Color(0xFFF4F4F4),
           fontSize: 18,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Color(0xFF242424),
+        modalBackgroundColor: Color(0xFF242424),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
     );

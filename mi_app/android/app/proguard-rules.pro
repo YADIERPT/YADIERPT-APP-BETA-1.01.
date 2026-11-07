@@ -33,3 +33,14 @@
 
 # 7. Supresión de advertencias para componentes opcionales de Google Play Store (App 100% offline)
 -dontwarn com.google.android.play.core.**
+
+# 8. Visor y Apertura de Archivos Locales (open_filex)
+-keep class com.crazecoder.openfile.** { *; }
+-dontwarn com.crazecoder.openfile.**
+
+# 9. Generación e Impresión de Documentos PDF (printing & pdf)
+-keep class net.nfet.flutter.printing.** { *; }
+-dontwarn net.nfet.flutter.printing.**
+
+# 10. Proveedor de Rutas de Almacenamiento (path_provider)
+-keep class io.flutter.plugins.pathprovider.** { *; }

@@ -14,6 +14,7 @@ import 'login.dart';
 import 'Widgets/dashboard_vista.dart';
 import 'Widgets/notificaciones_stock_sheet.dart';
 import 'Widgets/app_logo.dart';
+import '../Servicios/secure_storage_service.dart';
 
 class InicioVista extends StatefulWidget {
   final ControladorInicio controladorInicio;
@@ -74,8 +75,11 @@ class _InicioVistaState extends State<InicioVista> {
         controladorVentas: widget.controladorVentas,
         controladorAutenticacion: widget.controladorAutenticacion,
         controladorBiometrico: widget.controladorInicio.controladorBiometrico,
-        onLogout: () {
+        onLogout: () async {
+          await SecureStorageService.instancia
+              .guardar('planteapp_recordar_sesion', 'false');
           widget.controladorAutenticacion.cerrarSesion();
+          if (!mounted) return;
           Navigator.of(context, rootNavigator: true).pushReplacement(
             MaterialPageRoute(
               builder: (context) => LoginVista(
@@ -164,7 +168,10 @@ class _InicioVistaState extends State<InicioVista> {
     );
 
     if (salir == true && mounted) {
+      await SecureStorageService.instancia
+          .guardar('planteapp_recordar_sesion', 'false');
       widget.controladorAutenticacion.cerrarSesion();
+      if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushReplacement(
         MaterialPageRoute(
           builder: (context) => LoginVista(
@@ -316,18 +323,12 @@ class _InicioVistaState extends State<InicioVista> {
                           children: [
                             GestureDetector(
                               onTap: () {
-                                showModalBottomSheet(
+                                NotificacionesStockSheet.mostrar(
                                   context: context,
-                                  backgroundColor: AppColors.card,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(24),
-                                    ),
-                                  ),
-                                  builder: (context) =>
-                                      NotificacionesStockSheet(
-                                    productosBajoStock: productosBajoStock,
-                                  ),
+                                  productosBajoStock: productosBajoStock,
+                                  onNavegarAInventario: () {
+                                    _navegarA(2);
+                                  },
                                 );
                               },
                               child: Container(

@@ -51,6 +51,8 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   provider: ^6.1.2
   path_provider: ^2.1.2
+  open_filex: ^5.0.0
+  intl: ^0.20.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

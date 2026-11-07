@@ -8,6 +8,7 @@ import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
+import '../Servicios/secure_storage_service.dart';
 
 class LoginVista extends StatefulWidget {
   final ControladorInicio controladorInicio;
@@ -36,6 +37,28 @@ class _LoginVistaState extends State<LoginVista> {
   bool _isSuccess = false;
 
   @override
+  void initState() {
+    super.initState();
+    _cargarUltimoUsuario();
+  }
+
+  Future<void> _cargarUltimoUsuario() async {
+    try {
+      final secureStorage = SecureStorageService.instancia;
+      final ultimoId = await secureStorage.leer('planteapp_ultimo_usuario_id');
+      final recordar = await secureStorage.leer('planteapp_recordar_sesion');
+      if (mounted) {
+        setState(() {
+          if (ultimoId != null && ultimoId.isNotEmpty) {
+            _usuarioController.text = ultimoId;
+          }
+          _recordarTerminal = (recordar == 'true');
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
     _usuarioController.dispose();
     _claveController.dispose();
@@ -57,6 +80,14 @@ class _LoginVistaState extends State<LoginVista> {
     if (!mounted) return;
 
     if (exito) {
+      final secureStorage = SecureStorageService.instancia;
+      if (_recordarTerminal) {
+        await secureStorage.guardar('planteapp_recordar_sesion', 'true');
+        await secureStorage.guardar('planteapp_ultimo_usuario_id', id);
+      } else {
+        await secureStorage.guardar('planteapp_recordar_sesion', 'false');
+      }
+
       setState(() {
         _isLoading = false;
         _isSuccess = true;

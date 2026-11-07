@@ -14,9 +14,10 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <application
-        android:label="mi_app"
+        android:label="Planteapp"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true">
         <!-- Deshabilita Impeller en Android para prevenir pantalla negra de Vulkan en resumen de actividades externas (Cámara) -->

@@ -1,15 +1,28 @@
+import 'package:flutter/foundation.dart';
+
 import '../Modelos/producto.dart';
 import '../BaseDatos/base_datos.dart';
 
-class ControladorInventario {
+/// Controlador reactivo de inventario para Planteapp.
+///
+/// Gestiona el catálogo de plantas y artículos botánicos, notificando a todos
+/// los observadores (`ChangeNotifier`) ante cualquier alta, baja o ajuste de existencias.
+class ControladorInventario extends ChangeNotifier {
   List<Producto> _productos = [];
 
   List<Producto> get productos => _productos;
 
+  /// Recarga el inventario completo desde SQLite y notifica a los escuchas reactivos
   Future<void> cargarProductos() async {
     final db = await BaseDeDatos.instancia.database;
     final mapas = await db.query('productos');
     _productos = mapas.map((mapa) => Producto.fromMap(mapa)).toList();
+    notifyListeners();
+  }
+
+  /// Alias de compatibilidad semántica para recargar el inventario
+  Future<void> cargarInventario() async {
+    await cargarProductos();
   }
 
   Future<void> agregarProducto(Producto nuevoProducto) async {
@@ -20,12 +33,14 @@ class ControladorInventario {
     final db = await BaseDeDatos.instancia.database;
     await db.insert('productos', nuevoProducto.toMap());
     _productos.add(nuevoProducto);
+    notifyListeners();
   }
 
   Future<void> eliminarProducto(String id) async {
     final db = await BaseDeDatos.instancia.database;
     await db.delete('productos', where: 'id = ?', whereArgs: [id]);
     _productos.removeWhere((p) => p.id == id);
+    notifyListeners();
   }
 
   Future<void> registrarMerma(String productoId, int cantidad) async {
@@ -121,6 +136,7 @@ class ControladorInventario {
       where: 'id = ?',
       whereArgs: [producto.id],
     );
+    notifyListeners();
   }
 
   List<Producto> buscarProductos(String consulta) {
@@ -129,10 +145,6 @@ class ControladorInventario {
   }
 
   Producto? obtenerProducto(String id) {
-    try {
-      return _productos.firstWhere((p) => p.id == id);
-    } catch (e) {
-      return null;
-    }
+    return _productos.where((p) => p.id == id).firstOrNull;
   }
 }

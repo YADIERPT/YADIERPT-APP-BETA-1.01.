@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'Tema/app_theme.dart';
-import 'Vista/login.dart';
+import 'Vista/splash_vista.dart';
 
 import 'BaseDatos/base_datos.dart';
 import 'Servicios/secure_storage_service.dart';
@@ -100,11 +100,11 @@ void main() async {
         Provider<SecureStorageService>.value(value: secureStorage),
 
         // Controladores de lógica de negocio y repositorios
-        Provider<ControladorInventario>.value(value: controladorInventario),
+        ChangeNotifierProvider<ControladorInventario>.value(value: controladorInventario),
         Provider<ControladorFinanzas>.value(value: controladorFinanzas),
         Provider<ControladorPerfil>.value(value: controladorPerfil),
-        Provider<ControladorAutenticacion>.value(value: controladorAutenticacion),
-        Provider<ControladorVentas>.value(value: controladorVentas),
+        ChangeNotifierProvider<ControladorAutenticacion>.value(value: controladorAutenticacion),
+        ChangeNotifierProvider<ControladorVentas>.value(value: controladorVentas),
         Provider<ControladorInicio>.value(value: controladorInicio),
 
         // Controlador de IA reactivo (ChangeNotifier)
@@ -157,7 +157,7 @@ class ViverApp extends StatelessWidget {
               child: contenido,
             );
           },
-          home: LoginVista(
+          home: SplashVista(
             controladorInicio: cInicio,
             controladorInventario: cInventario,
             controladorVentas: cVentas,

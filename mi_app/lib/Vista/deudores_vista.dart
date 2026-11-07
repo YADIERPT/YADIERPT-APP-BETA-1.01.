@@ -109,16 +109,26 @@ class _DeudoresVistaState extends State<DeudoresVista> {
   }
 
   void _abrirModalAbono(Venta venta) {
+    // Consulta segura del deudor evitando 'Bad state: No element'
+    final deudorActual = _cuentas.where((v) => v.id == venta.id).firstOrNull;
+    if (deudorActual == null) {
+      _mostrarToast(
+        'Error: No se encontró la cuenta o el deudor seleccionado.',
+        esError: true,
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _ModalAbonoSheet(
-        venta: venta,
+        venta: deudorActual,
         onRegistrar: (monto, metodoPago) async {
           try {
             await widget.controladorVentas.registrarAbono(
-              ventaId: venta.id,
+              ventaId: deudorActual.id,
               monto: monto,
               metodoPago: metodoPago,
             );
@@ -135,7 +145,17 @@ class _DeudoresVistaState extends State<DeudoresVista> {
   }
 
   Future<void> _confirmarLiquidacionTotal(Venta venta) async {
-    final saldo = venta.saldoPendiente;
+    // Consulta segura del deudor
+    final deudorActual = _cuentas.where((v) => v.id == venta.id).firstOrNull;
+    if (deudorActual == null) {
+      _mostrarToast(
+        'Error: No se encontró la cuenta del deudor para liquidar.',
+        esError: true,
+      );
+      return;
+    }
+
+    final saldo = deudorActual.saldoPendiente;
     final bool? confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -173,7 +193,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '¿Deseas saldar en su totalidad la deuda de ${venta.cliente}?',
+              '¿Deseas saldar en su totalidad la deuda de ${deudorActual.cliente}?',
               style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -237,7 +257,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
 
     if (confirmar == true && mounted) {
       try {
-        await widget.controladorVentas.liquidarDeudaTotal(ventaId: venta.id);
+        await widget.controladorVentas.liquidarDeudaTotal(ventaId: deudorActual.id);
         await _cargarCuentas();
         _mostrarToast('Cuenta liquidada en su totalidad con éxito.');
       } catch (e) {
@@ -247,12 +267,21 @@ class _DeudoresVistaState extends State<DeudoresVista> {
   }
 
   void _verHistorialAbonos(Venta venta) {
+    final deudorActual = _cuentas.where((v) => v.id == venta.id).firstOrNull;
+    if (deudorActual == null) {
+      _mostrarToast(
+        'Error: No se encontró la cuenta para consultar historial.',
+        esError: true,
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _HistorialAbonosSheet(
-        venta: venta,
+        venta: deudorActual,
         controladorVentas: widget.controladorVentas,
       ),
     );

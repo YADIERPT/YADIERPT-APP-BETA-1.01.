@@ -351,8 +351,11 @@ class _VentaVistaState extends State<VentaVista> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: ThemeManager.instance,
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ThemeManager.instance,
+        widget.controladorInventario,
+      ]),
       builder: (context, _) {
         if (widget.controladorVentas.ventaActual == null) {
           widget.controladorVentas.iniciarVenta();

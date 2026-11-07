@@ -73,11 +73,17 @@ class Venta {
     Map<String, dynamic> map,
     List<ArticuloVenta> articulosCargados,
   ) {
+    final estadoRaw = map['estado']?.toString().toLowerCase().trim() ?? '';
     return Venta(
-      id: map['id'],
-      fecha: DateTime.parse(map['fecha']),
-      estado: EstadoVenta.values.firstWhere((e) => e.name == map['estado']),
-      porcentajeIva: (map['porcentajeIva'] as num).toDouble(),
+      id: map['id']?.toString() ?? '',
+      fecha: map['fecha'] != null
+          ? DateTime.tryParse(map['fecha'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      estado: EstadoVenta.values.firstWhere(
+        (e) => e.name.toLowerCase() == estadoRaw,
+        orElse: () => EstadoVenta.enProceso,
+      ),
+      porcentajeIva: (map['porcentajeIva'] as num?)?.toDouble() ?? 0.16,
       aplicarIva: map['aplicarIva'] != null ? map['aplicarIva'] == 1 : true,
       cliente: map['cliente']?.toString() ?? 'Cliente Mostrador',
       montoPagado: (map['montoPagado'] as num?)?.toDouble() ?? 0.0,
