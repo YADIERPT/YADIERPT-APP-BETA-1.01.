@@ -106,148 +106,374 @@ class ThemeManager extends ChangeNotifier with WidgetsBindingObserver {
   }
 }
 
+/// Extensión de tema declarativa y reactiva nativa para Planteapp.
+/// Permite inyectar y consumir la paleta botánica a través del árbol de widgets
+/// mediante `Theme.of(context).extension<BotanicalThemeColors>()` o `context.botanicalColors`.
+@immutable
+class BotanicalThemeColors extends ThemeExtension<BotanicalThemeColors> {
+  final Color primary;
+  final Color onPrimary;
+  final Color primaryContainer;
+  final Color onPrimaryContainer;
+  final Color secondary;
+  final Color onSecondary;
+  final Color secondaryContainer;
+  final Color onSecondaryContainer;
+  final Color tertiary;
+  final Color onTertiary;
+  final Color appBackground;
+  final Color screenBackground;
+  final Color card;
+  final Color secondarySurface;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color border;
+  final Color error;
+  final Color onError;
+  final Color brightGreen;
+  final Color amber;
+  final Color coral;
+  final Color turquoise;
+  final Color subtleGreen;
+  final Color subtleAmber;
+  final Color subtleCoral;
+  final Color subtleTurquoise;
+  final Color homeCardBackground;
+  final Color homeCardBorder;
+  final LinearGradient darkCardGradient;
+  final LinearGradient? homeCardGradient;
+
+  const BotanicalThemeColors({
+    required this.primary,
+    required this.onPrimary,
+    required this.primaryContainer,
+    required this.onPrimaryContainer,
+    required this.secondary,
+    required this.onSecondary,
+    required this.secondaryContainer,
+    required this.onSecondaryContainer,
+    required this.tertiary,
+    required this.onTertiary,
+    required this.appBackground,
+    required this.screenBackground,
+    required this.card,
+    required this.secondarySurface,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.border,
+    required this.error,
+    required this.onError,
+    required this.brightGreen,
+    required this.amber,
+    required this.coral,
+    required this.turquoise,
+    required this.subtleGreen,
+    required this.subtleAmber,
+    required this.subtleCoral,
+    required this.subtleTurquoise,
+    required this.homeCardBackground,
+    required this.homeCardBorder,
+    required this.darkCardGradient,
+    this.homeCardGradient,
+  });
+
+  // Accesores semánticos adicionales
+  Color get surface => screenBackground;
+  Color get warning => secondary;
+  Color get onWarning => onSecondary;
+
+  @override
+  BotanicalThemeColors copyWith({
+    Color? primary,
+    Color? onPrimary,
+    Color? primaryContainer,
+    Color? onPrimaryContainer,
+    Color? secondary,
+    Color? onSecondary,
+    Color? secondaryContainer,
+    Color? onSecondaryContainer,
+    Color? tertiary,
+    Color? onTertiary,
+    Color? appBackground,
+    Color? screenBackground,
+    Color? card,
+    Color? secondarySurface,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? border,
+    Color? error,
+    Color? onError,
+    Color? brightGreen,
+    Color? amber,
+    Color? coral,
+    Color? turquoise,
+    Color? subtleGreen,
+    Color? subtleAmber,
+    Color? subtleCoral,
+    Color? subtleTurquoise,
+    Color? homeCardBackground,
+    Color? homeCardBorder,
+    LinearGradient? darkCardGradient,
+    LinearGradient? homeCardGradient,
+  }) {
+    return BotanicalThemeColors(
+      primary: primary ?? this.primary,
+      onPrimary: onPrimary ?? this.onPrimary,
+      primaryContainer: primaryContainer ?? this.primaryContainer,
+      onPrimaryContainer: onPrimaryContainer ?? this.onPrimaryContainer,
+      secondary: secondary ?? this.secondary,
+      onSecondary: onSecondary ?? this.onSecondary,
+      secondaryContainer: secondaryContainer ?? this.secondaryContainer,
+      onSecondaryContainer: onSecondaryContainer ?? this.onSecondaryContainer,
+      tertiary: tertiary ?? this.tertiary,
+      onTertiary: onTertiary ?? this.onTertiary,
+      appBackground: appBackground ?? this.appBackground,
+      screenBackground: screenBackground ?? this.screenBackground,
+      card: card ?? this.card,
+      secondarySurface: secondarySurface ?? this.secondarySurface,
+      textPrimary: textPrimary ?? this.textPrimary,
+      textSecondary: textSecondary ?? this.textSecondary,
+      border: border ?? this.border,
+      error: error ?? this.error,
+      onError: onError ?? this.onError,
+      brightGreen: brightGreen ?? this.brightGreen,
+      amber: amber ?? this.amber,
+      coral: coral ?? this.coral,
+      turquoise: turquoise ?? this.turquoise,
+      subtleGreen: subtleGreen ?? this.subtleGreen,
+      subtleAmber: subtleAmber ?? this.subtleAmber,
+      subtleCoral: subtleCoral ?? this.subtleCoral,
+      subtleTurquoise: subtleTurquoise ?? this.subtleTurquoise,
+      homeCardBackground: homeCardBackground ?? this.homeCardBackground,
+      homeCardBorder: homeCardBorder ?? this.homeCardBorder,
+      darkCardGradient: darkCardGradient ?? this.darkCardGradient,
+      homeCardGradient: homeCardGradient ?? this.homeCardGradient,
+    );
+  }
+
+  @override
+  BotanicalThemeColors lerp(ThemeExtension<BotanicalThemeColors>? other, double t) {
+    if (other is! BotanicalThemeColors) {
+      return this;
+    }
+    return BotanicalThemeColors(
+      primary: Color.lerp(primary, other.primary, t)!,
+      onPrimary: Color.lerp(onPrimary, other.onPrimary, t)!,
+      primaryContainer: Color.lerp(primaryContainer, other.primaryContainer, t)!,
+      onPrimaryContainer: Color.lerp(onPrimaryContainer, other.onPrimaryContainer, t)!,
+      secondary: Color.lerp(secondary, other.secondary, t)!,
+      onSecondary: Color.lerp(onSecondary, other.onSecondary, t)!,
+      secondaryContainer: Color.lerp(secondaryContainer, other.secondaryContainer, t)!,
+      onSecondaryContainer: Color.lerp(onSecondaryContainer, other.onSecondaryContainer, t)!,
+      tertiary: Color.lerp(tertiary, other.tertiary, t)!,
+      onTertiary: Color.lerp(onTertiary, other.onTertiary, t)!,
+      appBackground: Color.lerp(appBackground, other.appBackground, t)!,
+      screenBackground: Color.lerp(screenBackground, other.screenBackground, t)!,
+      card: Color.lerp(card, other.card, t)!,
+      secondarySurface: Color.lerp(secondarySurface, other.secondarySurface, t)!,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      error: Color.lerp(error, other.error, t)!,
+      onError: Color.lerp(onError, other.onError, t)!,
+      brightGreen: Color.lerp(brightGreen, other.brightGreen, t)!,
+      amber: Color.lerp(amber, other.amber, t)!,
+      coral: Color.lerp(coral, other.coral, t)!,
+      turquoise: Color.lerp(turquoise, other.turquoise, t)!,
+      subtleGreen: Color.lerp(subtleGreen, other.subtleGreen, t)!,
+      subtleAmber: Color.lerp(subtleAmber, other.subtleAmber, t)!,
+      subtleCoral: Color.lerp(subtleCoral, other.subtleCoral, t)!,
+      subtleTurquoise: Color.lerp(subtleTurquoise, other.subtleTurquoise, t)!,
+      homeCardBackground: Color.lerp(homeCardBackground, other.homeCardBackground, t)!,
+      homeCardBorder: Color.lerp(homeCardBorder, other.homeCardBorder, t)!,
+      darkCardGradient: LinearGradient.lerp(darkCardGradient, other.darkCardGradient, t)!,
+      homeCardGradient: LinearGradient.lerp(homeCardGradient, other.homeCardGradient, t),
+    );
+  }
+
+  /// Paleta Botánica para Modo Claro
+  static const BotanicalThemeColors light = BotanicalThemeColors(
+    primary: Color(0xFF2E8B57),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryContainer: Color(0xFFEAE5DC),
+    onPrimaryContainer: Color(0xFF2E8B57),
+    secondary: Color(0xFFE3A813),
+    onSecondary: Color(0xFF7B5900),
+    secondaryContainer: Color(0xFFEFE9E0),
+    onSecondaryContainer: Color(0xFFE3A813),
+    tertiary: Color(0xFF0B1D0F),
+    onTertiary: Color(0xFFFFFFFF),
+    appBackground: Color(0xFFFAF7F2),
+    screenBackground: Color(0xFFFAF7F2),
+    card: Color(0xFFFFFFFF),
+    secondarySurface: Color(0xFFEAE5DC),
+    textPrimary: Color(0xFF171717),
+    textSecondary: Color(0xFF737373),
+    border: Color(0xFFEAE5DC),
+    error: Color(0xFFBA1A1A),
+    onError: Color(0xFFFFFFFF),
+    brightGreen: Color(0xFF2E8B57),
+    amber: Color(0xFFE3A813),
+    coral: Color(0xFFBA1A1A),
+    turquoise: Color(0xFF00897B),
+    subtleGreen: Color(0x1F2E8B57),
+    subtleAmber: Color(0x1FE3A813),
+    subtleCoral: Color(0x1FBA1A1A),
+    subtleTurquoise: Color(0x1F00897B),
+    homeCardBackground: Color(0xFFFFFFFF),
+    homeCardBorder: Color(0xFFEAE5DC),
+    darkCardGradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFFFFFFFF), Color(0xFFFFFFFF)],
+    ),
+    homeCardGradient: null,
+  );
+
+  /// Paleta Botánica para Modo Oscuro
+  static const BotanicalThemeColors dark = BotanicalThemeColors(
+    primary: Color(0xFF437046),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryContainer: Color(0xFF2A2A2A),
+    onPrimaryContainer: Color(0xFF71B675),
+    secondary: Color(0xFFE5B655),
+    onSecondary: Color(0xFF161616),
+    secondaryContainer: Color(0xFF2A2A2A),
+    onSecondaryContainer: Color(0xFFE5B655),
+    tertiary: Color(0xFFA1D3A0),
+    onTertiary: Color(0xFF000000),
+    appBackground: Color(0xFF161616),
+    screenBackground: Color(0xFF1A1A1A),
+    card: Color(0xFF242424),
+    secondarySurface: Color(0xFF2A2A2A),
+    textPrimary: Color(0xFFF4F4F4),
+    textSecondary: Color(0xFFA0A0A0),
+    border: Color(0xFF333333),
+    error: Color(0xFFBA1A1A),
+    onError: Color(0xFFFFFFFF),
+    brightGreen: Color(0xFF71B675),
+    amber: Color(0xFFE5B655),
+    coral: Color(0xFFE8836B),
+    turquoise: Color(0xFF4FC3B8),
+    subtleGreen: Color(0x2971B675),
+    subtleAmber: Color(0x29E5B655),
+    subtleCoral: Color(0x29E8836B),
+    subtleTurquoise: Color(0x294FC3B8),
+    homeCardBackground: Color(0xFF1E2620),
+    homeCardBorder: Color(0xFF2E3D31),
+    darkCardGradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFF1E3524), Color(0xFF242424)],
+    ),
+    homeCardGradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFF202A22), Color(0xFF19221B)],
+    ),
+  );
+}
+
+/// Extensión de conveniencia en [BuildContext] para acceso declarativo inmediato
+extension BotanicalThemeContext on BuildContext {
+  /// Obtiene los tokens de diseño [BotanicalThemeColors] inyectados por el tema actual
+  BotanicalThemeColors get botanicalColors {
+    return Theme.of(this).extension<BotanicalThemeColors>() ??
+        (Theme.of(this).brightness == Brightness.dark
+            ? BotanicalThemeColors.dark
+            : BotanicalThemeColors.light);
+  }
+
+  /// Determina reactivamente si el contexto actual corresponde a modo oscuro
+  bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
+}
+
+/// Adaptador para retrocompatibilidad total con código preexistente
 class AppColors {
   static bool isDark = false;
 
+  static BotanicalThemeColors get _current =>
+      isDark ? BotanicalThemeColors.dark : BotanicalThemeColors.light;
+
   // Primario
-  static Color get primary =>
-      isDark ? const Color(0xFF437046) : const Color(0xFF2E8B57);
-  static Color get onPrimary => const Color(0xFFFFFFFF);
-  static Color get primaryContainer =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEAE5DC);
-  static Color get onPrimaryContainer =>
-      isDark ? const Color(0xFF71B675) : const Color(0xFF2E8B57);
-  static Color get primaryFixed =>
-      isDark ? const Color(0xFF437046) : const Color(0xFF2E8B57);
-  static Color get onPrimaryFixed =>
-      isDark ? const Color(0xFFA1D3A0) : const Color(0xFF0B1D0F);
+  static Color get primary => _current.primary;
+  static Color get onPrimary => _current.onPrimary;
+  static Color get primaryContainer => _current.primaryContainer;
+  static Color get onPrimaryContainer => _current.onPrimaryContainer;
+  static Color get primaryFixed => _current.primary;
+  static Color get onPrimaryFixed => _current.onPrimaryContainer;
 
   // Verdes claros / Acentos
-  static Color get lightGreen =>
-      isDark ? const Color(0xFF71B675) : const Color(0xFF2E8B57);
-  static Color get lightGreenAccent =>
-      isDark ? const Color(0xFFA1D3A0) : const Color(0xFF0B1D0F);
-  static Color get darkGreen =>
-      isDark ? const Color(0xFFA1D3A0) : const Color(0xFF0B1D0F);
+  static Color get lightGreen => _current.brightGreen;
+  static Color get lightGreenAccent => _current.brightGreen;
+  static Color get darkGreen => _current.tertiary;
 
   // Advertencia / Stock bajo
-  static Color get warning =>
-      isDark ? const Color(0xFFE5B655) : const Color(0xFFE3A813);
-  static Color get onWarning =>
-      isDark ? const Color(0xFF161616) : const Color(0xFF7B5900);
-  static Color get secondary => warning;
-  static Color get onSecondary => onWarning;
-  static Color get secondaryContainer =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEFE9E0);
-  static Color get onSecondaryContainer => warning;
+  static Color get warning => _current.secondary;
+  static Color get onWarning => _current.onSecondary;
+  static Color get secondary => _current.secondary;
+  static Color get onSecondary => _current.onSecondary;
+  static Color get secondaryContainer => _current.secondaryContainer;
+  static Color get onSecondaryContainer => _current.onSecondaryContainer;
 
   // Terciario
-  static Color get tertiary => darkGreen;
-  static Color get onTertiary => const Color(0xFFFFFFFF);
-  static Color get tertiaryContainer =>
-      isDark ? const Color(0xFF242424) : const Color(0xFFEAE5DC);
+  static Color get tertiary => _current.tertiary;
+  static Color get onTertiary => _current.onTertiary;
+  static Color get tertiaryContainer => _current.secondarySurface;
 
   // Fondos y Superficies
-  static Color get appBackground =>
-      isDark ? const Color(0xFF161616) : const Color(0xFFFAF7F2);
-  static Color get screenBackground =>
-      isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFAF7F2);
-  static Color get surface => screenBackground;
+  static Color get appBackground => _current.appBackground;
+  static Color get screenBackground => _current.screenBackground;
+  static Color get surface => _current.screenBackground;
 
   // Tarjetas
-  static Color get card =>
-      isDark ? const Color(0xFF242424) : const Color(0xFFFFFFFF);
-  static Color get surfaceContainerLowest => card;
+  static Color get card => _current.card;
+  static Color get surfaceContainerLowest => _current.card;
 
   // Tarjetas secundarias / campos / chips
-  static Color get secondarySurface =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEAE5DC);
-  static Color get surfaceContainerLow =>
-      isDark ? const Color(0xFF242424) : const Color(0xFFFAF7F2);
-  static Color get surfaceContainer =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEAE5DC);
-  static Color get surfaceContainerHigh =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEFE9E0);
-  static Color get surfaceContainerHighest =>
-      isDark ? const Color(0xFF333333) : const Color(0xFFEAE5DC);
-  static Color get surfaceVariant =>
-      isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEFE9E0);
+  static Color get secondarySurface => _current.secondarySurface;
+  static Color get surfaceContainerLow => _current.card;
+  static Color get surfaceContainer => _current.secondarySurface;
+  static Color get surfaceContainerHigh => _current.secondarySurface;
+  static Color get surfaceContainerHighest => _current.border;
+  static Color get surfaceVariant => _current.secondarySurface;
 
   // Textos
-  static Color get textPrimary =>
-      isDark ? const Color(0xFFF4F4F4) : const Color(0xFF171717);
-  static Color get onSurface => textPrimary;
-  static Color get textSecondary =>
-      isDark ? const Color(0xFFA0A0A0) : const Color(0xFF737373);
-  static Color get onSurfaceVariant => textSecondary;
+  static Color get textPrimary => _current.textPrimary;
+  static Color get onSurface => _current.textPrimary;
+  static Color get textSecondary => _current.textSecondary;
+  static Color get onSurfaceVariant => _current.textSecondary;
 
   // Bordes y elementos inactivos
-  static Color get border =>
-      isDark ? const Color(0xFF333333) : const Color(0xFFEAE5DC);
-  static Color get outline => border;
-  static Color get outlineVariant => border;
+  static Color get border => _current.border;
+  static Color get outline => _current.border;
+  static Color get outlineVariant => _current.border;
 
   // Destructivo / Error
   static const Color error = Color(0xFFBA1A1A);
   static const Color onError = Color(0xFFFFFFFF);
 
-  static Color get surfaceTint =>
-      isDark ? const Color(0xFF71B675) : const Color(0xFF2E8B57);
+  static Color get surfaceTint => _current.primary;
 
   // Módulo 7: Tokens de Acento para Modo Oscuro y Jerarquía Visual
-  static Color get brightGreen =>
-      isDark ? const Color(0xFF71B675) : const Color(0xFF2E8B57);
-  static Color get amber =>
-      isDark ? const Color(0xFFE5B655) : const Color(0xFFE3A813);
-  static Color get coral =>
-      isDark ? const Color(0xFFE8836B) : const Color(0xFFBA1A1A);
-  static Color get turquoise =>
-      isDark ? const Color(0xFF4FC3B8) : const Color(0xFF00897B);
+  static Color get brightGreen => _current.brightGreen;
+  static Color get amber => _current.amber;
+  static Color get coral => _current.coral;
+  static Color get turquoise => _current.turquoise;
 
   // Fondos tenues para círculos de opciones, alertas y chips
-  static Color get subtleGreen =>
-      isDark ? const Color(0xFF71B675).withValues(alpha: 0.16) : const Color(0xFF2E8B57).withValues(alpha: 0.12);
-  static Color get subtleAmber =>
-      isDark ? const Color(0xFFE5B655).withValues(alpha: 0.16) : const Color(0xFFE3A813).withValues(alpha: 0.12);
-  static Color get subtleCoral =>
-      isDark ? const Color(0xFFE8836B).withValues(alpha: 0.16) : const Color(0xFFBA1A1A).withValues(alpha: 0.12);
-  static Color get subtleTurquoise =>
-      isDark ? const Color(0xFF4FC3B8).withValues(alpha: 0.16) : const Color(0xFF00897B).withValues(alpha: 0.12);
+  static Color get subtleGreen => _current.subtleGreen;
+  static Color get subtleAmber => _current.subtleAmber;
+  static Color get subtleCoral => _current.subtleCoral;
+  static Color get subtleTurquoise => _current.subtleTurquoise;
 
   // Degradado sutil para tarjetas principales en modo oscuro
-  static LinearGradient get darkCardGradient => isDark
-      ? const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E3524), // Verde oscuro
-            Color(0xFF242424), // Superficie de tarjeta
-          ],
-        )
-      : const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFFFFFF),
-            Color(0xFFFFFFFF),
-          ],
-        );
+  static LinearGradient get darkCardGradient => _current.darkCardGradient;
 
   // Tarjetas de Inicio (Dashboard): Matiz botánico reposado en modo oscuro
-  static Color get homeCardBackground =>
-      isDark ? const Color(0xFF1E2620) : const Color(0xFFFFFFFF);
-  static Color get homeCardBorder =>
-      isDark ? const Color(0xFF2E3D31) : const Color(0xFFEAE5DC);
-  static LinearGradient? get homeCardGradient => isDark
-      ? const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF202A22),
-            Color(0xFF19221B),
-          ],
-        )
-      : null;
+  static Color get homeCardBackground => _current.homeCardBackground;
+  static Color get homeCardBorder => _current.homeCardBorder;
+  static LinearGradient? get homeCardGradient => _current.homeCardGradient;
 }
 
 class AppTheme {
@@ -255,6 +481,9 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      extensions: const [
+        BotanicalThemeColors.light,
+      ],
       colorScheme: const ColorScheme.light(
         primary: Color(0xFF2E8B57),
         onPrimary: Color(0xFFFFFFFF),
@@ -302,6 +531,9 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      extensions: const [
+        BotanicalThemeColors.dark,
+      ],
       colorScheme: const ColorScheme.dark(
         primary: Color(0xFF437046),
         onPrimary: Color(0xFFFFFFFF),
