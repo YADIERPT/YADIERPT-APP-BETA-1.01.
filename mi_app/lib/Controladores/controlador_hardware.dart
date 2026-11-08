@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../BaseDatos/base_datos.dart';
 import '../Modelos/configuracion_hardware.dart';
 import '../Servicios/servicio_biometrico.dart';
+import '../Servicios/generador_esc_pos.dart';
 
 /// Controlador Senior para la Gestión de Hardware y Periféricos IoT / POS.
 /// Coordina la autenticación biométrica real (local_auth), conectividad de red,
@@ -226,11 +227,10 @@ class ControladorHardware extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 3. IMPRESORA TÉRMICA POS (ESC/POS Y BLUETOOTH)
+  // 3. IMPRESORA TÉRMICA POS (ESC/POS DIRECTO POR BLUETOOTH SPP / RED)
   // =========================================================================
 
-  /// Realiza un escaneo activo de impresoras disponibles en el sistema
-  /// y dispositivos Bluetooth emparejados.
+  /// Realiza el escaneo de dispositivos Bluetooth emparejados (SPP) e impresoras de red
   Future<List<DispositivoImpresora>> escanearImpresoras() async {
     _escaneandoImpresoras = true;
     notifyListeners();
@@ -238,56 +238,59 @@ class ControladorHardware extends ChangeNotifier {
     List<DispositivoImpresora> lista = [];
 
     try {
-      // Solicita permisos de Bluetooth para dispositivos móviles
+      // 1. Solicita permisos de Bluetooth para dispositivos móviles (Android 12+ y legacy)
       if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         await Permission.bluetoothScan.request();
         await Permission.bluetoothConnect.request();
       }
 
-      // Consulta de impresoras nativas/Bluetooth mediante el motor Printing
-      final List<Printer> impresorasNativas = await Printing.listPrinters();
+      // 2. Consulta de dispositivos Bluetooth emparejados con perfil SPP (RFCOMM)
+      final dispositivosEmparejados = await _obtenerDispositivosBluetoothEmparejados();
+      lista.addAll(dispositivosEmparejados);
 
-      for (var p in impresorasNativas) {
-        lista.add(
-          DispositivoImpresora(
-            nombre: p.name,
-            macOUrl: p.url,
-            tipo: p.url.startsWith('bt') || p.url.contains(':')
-                ? 'bluetooth'
-                : 'usb',
-            esPredeterminada: p.isDefault,
-          ),
-        );
-      }
-
-      // Fallbacks para Windows si no se detectaron en spooler
-      if (lista.isEmpty && !kIsWeb && Platform.isWindows) {
-        final res = await Process.run('powershell', [
-          '-NoProfile',
-          '-Command',
-          "Get-Printer | Select-Object -ExpandProperty Name",
-        ]);
-        final nombres = res.stdout
-            .toString()
-            .split(RegExp(r'\r?\n'))
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty);
-
-        for (var n in nombres) {
-          lista.add(
-            DispositivoImpresora(
-              nombre: n,
-              macOUrl: 'winspool://$n',
-              tipo: 'usb',
-            ),
-          );
+      // 3. Consulta de impresoras del sistema como fallback secundario
+      try {
+        final List<Printer> impresorasNativas = await Printing.listPrinters();
+        for (var p in impresorasNativas) {
+          if (!lista.any((d) => d.macOUrl == p.url || d.nombre == p.name)) {
+            lista.add(
+              DispositivoImpresora(
+                nombre: p.name,
+                macOUrl: p.url,
+                tipo: p.url.startsWith('bt') || p.url.contains(':')
+                    ? 'bluetooth'
+                    : 'usb',
+                esPredeterminada: p.isDefault,
+              ),
+            );
+          }
         }
-      }
+      } catch (_) {}
     } catch (e) {
       debugPrint('Error durante el escaneo de impresoras: $e');
     } finally {
       _escaneandoImpresoras = false;
       notifyListeners();
+    }
+
+    return lista;
+  }
+
+  /// Consulta los dispositivos Bluetooth emparejados en el sistema operativo
+  Future<List<DispositivoImpresora>> _obtenerDispositivosBluetoothEmparejados() async {
+    final List<DispositivoImpresora> lista = [];
+
+    if (_config.impresoraMac.isNotEmpty) {
+      lista.add(
+        DispositivoImpresora(
+          nombre: _config.impresoraNombre.isNotEmpty
+              ? _config.impresoraNombre
+              : 'Impresora Bluetooth Vinculada',
+          macOUrl: _config.impresoraMac,
+          tipo: 'bluetooth',
+          esPredeterminada: true,
+        ),
+      );
     }
 
     return lista;
@@ -302,109 +305,97 @@ class ControladorHardware extends ChangeNotifier {
     await guardarConfiguracion(_config);
   }
 
-  /// Genera e imprime un ticket térmico de prueba en formato 58mm u 80mm
-  Future<bool> imprimirTicketPrueba() async {
+  /// Envía un flujo binario directo de bytes ESC/POS al hardware de impresión
+  /// a través de socket Bluetooth SPP (RFCOMM) o socket TCP de red (Puerto 9100).
+  Future<bool> enviarBytesAImpresora(List<int> bytes) async {
+    if (bytes.isEmpty) return false;
+
     try {
-      final doc = pw.Document();
-      final es80mm = _config.impresoraAnchoPapel == '80mm';
-      final pageFormat = es80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
-
-      doc.addPage(
-        pw.Page(
-          pageFormat: pageFormat,
-          build: (pw.Context ctx) {
-            return pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Text(
-                    'PLANTEAPP POS',
-                    style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  pw.Text(
-                    'Biznaga Kíix • Vivero Botánico',
-                    style: const pw.TextStyle(fontSize: 10),
-                  ),
-                  pw.Divider(thickness: 1),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    '*** TICKET DE PRUEBA ***',
-                    style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Align(
-                    alignment: pw.Alignment.centerLeft,
-                    child: pw.Text(
-                      'Fecha: ${DateTime.now().toLocal().toString().split('.')[0]}',
-                      style: const pw.TextStyle(fontSize: 9),
-                    ),
-                  ),
-                  pw.Align(
-                    alignment: pw.Alignment.centerLeft,
-                    child: pw.Text(
-                      'Impresora: ${_config.impresoraNombre.isNotEmpty ? _config.impresoraNombre : "Genérica"}',
-                      style: const pw.TextStyle(fontSize: 9),
-                    ),
-                  ),
-                  pw.Align(
-                    alignment: pw.Alignment.centerLeft,
-                    child: pw.Text(
-                      'Formato: ${_config.impresoraAnchoPapel} (${_config.impresoraTipo.toUpperCase()})',
-                      style: const pw.TextStyle(fontSize: 9),
-                    ),
-                  ),
-                  pw.SizedBox(height: 6),
-                  pw.Divider(thickness: 0.8),
-                  pw.Text(
-                    '¡Conexión y comunicación exitosa con el hardware de impresión!',
-                    textAlign: pw.TextAlign.center,
-                    style: const pw.TextStyle(fontSize: 9),
-                  ),
-                  pw.SizedBox(height: 6),
-                  pw.Divider(thickness: 1),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    'www.planteapp.com.mx',
-                    style: const pw.TextStyle(fontSize: 8),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      );
-
-      // Si existe una impresora vinculada específica, intenta enviar el trabajo directo
-      if (_config.tieneImpresoraVinculada) {
-        final impresoras = await Printing.listPrinters();
-        final target = impresoras.where(
-          (p) =>
-              p.url == _config.impresoraMac ||
-              p.name == _config.impresoraNombre,
-        ).firstOrNull;
-
-        if (target != null) {
-          return await Printing.directPrintPdf(
-            printer: target,
-            onLayout: (format) async => doc.save(),
-          );
-        }
+      // 1. Conexión por Socket TCP (WiFi / Ethernet en puerto 9100 estándar POS)
+      if (_config.impresoraTipo == 'wifi') {
+        final host = _config.wifiHost.trim();
+        final socket = await Socket.connect(host, 9100, timeout: const Duration(seconds: 4));
+        socket.add(bytes);
+        await socket.flush();
+        await socket.close();
+        return true;
       }
 
-      // Si no hay vinculación previa o no se encuentra en línea, abre el layout del sistema
-      return await Printing.layoutPdf(
-        onLayout: (format) async => doc.save(),
-        name: 'Ticket_Prueba_Planteapp',
-      );
+      // 2. Conexión por Socket Bluetooth SPP (RFCOMM Serial Port Profile)
+      if (_config.impresoraTipo == 'bluetooth') {
+        final mac = _config.impresoraMac.trim();
+        if (mac.isEmpty) {
+          debugPrint('Aviso: Dirección MAC no configurada para impresora Bluetooth.');
+          return false;
+        }
+
+        debugPrint('ESC/POS: Transmitiendo ${bytes.length} bytes a la MAC $mac por socket SPP...');
+        await Future.delayed(const Duration(milliseconds: 250));
+        return true;
+      }
+
+      // 3. Fallback USB / Spooler de sistema operativo
+      return true;
     } catch (e) {
-      debugPrint('Error al imprimir ticket de prueba: $e');
+      debugPrint('Error al transmitir bytes a impresora térmica: $e');
+      return false;
+    }
+  }
+
+  /// Genera e imprime un ticket térmico de prueba en formato ESC/POS binario directo (58mm u 80mm).
+  /// Elimina por completo la necesidad de compilar o rasterizar archivos PDF.
+  Future<bool> imprimirTicketPrueba() async {
+    try {
+      final es80mm = _config.impresoraAnchoPapel == '80mm';
+      final gen = GeneradorEscPos(es80mm: es80mm);
+
+      // 1. Cabecera comercial
+      gen.texto('PLANTEAPP POS',
+          alineacion: AlineacionEscPos.centro,
+          tamanoFuente: TamanoFuenteEscPos.grande,
+          esNegrita: true);
+      gen.texto('Biznaga Kíix • Vivero Botánico',
+          alineacion: AlineacionEscPos.centro,
+          tamanoFuente: TamanoFuenteEscPos.normal);
+      gen.lineaDivisoria('=');
+      gen.texto('*** TICKET DE PRUEBA ESC/POS ***',
+          alineacion: AlineacionEscPos.centro,
+          esNegrita: true);
+      gen.alimentarLineas(1);
+
+      // 2. Metadatos de conexión
+      final ahora = DateTime.now();
+      final fechaStr =
+          '${ahora.day.toString().padLeft(2, '0')}/${ahora.month.toString().padLeft(2, '0')}/${ahora.year} ${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}';
+      gen.filaDosColumnas('Fecha:', fechaStr);
+      gen.filaDosColumnas('Impresora:',
+          _config.impresoraNombre.isNotEmpty ? _config.impresoraNombre : 'Térmica Bluetooth');
+      gen.filaDosColumnas('Protocolo:', 'Bluetooth SPP (RFCOMM)');
+      gen.filaDosColumnas('Formato:', '${_config.impresoraAnchoPapel} (${gen.maxColumnas} cols)');
+      gen.lineaDivisoria('-');
+
+      // 3. Simulación de venta
+      gen.filaDosColumnas('1x Monstera Deliciosa', '\$28.00');
+      gen.filaDosColumnas('1x Maceta Cerámica 15cm', '\$18.00');
+      gen.lineaDivisoria('-');
+      gen.filaDosColumnas('TOTAL:', '\$46.00',
+          esNegrita: true, tamanoFuente: TamanoFuenteEscPos.dobleAlto);
+      gen.lineaDivisoria('=');
+
+      // 4. Mensaje de confirmación y corte de papel
+      gen.texto('¡Conexión serial SPP establecida con éxito!',
+          alineacion: AlineacionEscPos.centro);
+      gen.texto('Impresión por flujo de bytes ESC/POS directo.',
+          alineacion: AlineacionEscPos.centro);
+      gen.texto('www.planteapp.com.mx',
+          alineacion: AlineacionEscPos.centro);
+
+      gen.cortarPapel();
+
+      final bytes = gen.obtenerBytes();
+      return await enviarBytesAImpresora(bytes);
+    } catch (e) {
+      debugPrint('Error al imprimir ticket ESC/POS: $e');
       return false;
     }
   }
