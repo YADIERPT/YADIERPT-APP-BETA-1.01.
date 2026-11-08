@@ -42,7 +42,7 @@ class BaseDeDatos {
       return await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 10,
+        version: 11,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -53,7 +53,7 @@ class BaseDeDatos {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -248,6 +248,15 @@ class BaseDeDatos {
         )
       ''');
     }
+    if (oldVersion < 11) {
+      // Índices de alto rendimiento para acelerar consultas y ordenamientos frecuentes
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas (fecha DESC)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_estado ON ventas (estado)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_articulos_venta_id ON articulos_venta (venta_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_abonos_venta_id ON abonos_venta (venta_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones (fecha DESC)');
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -383,6 +392,14 @@ class BaseDeDatos {
         FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
       )
     ''');
+
+    // Índices de alto rendimiento para acelerar consultas y ordenamientos frecuentes
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas (fecha DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_estado ON ventas (estado)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_articulos_venta_id ON articulos_venta (venta_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_abonos_venta_id ON abonos_venta (venta_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones (fecha DESC)');
   }
 
   Future cerrar() async {
