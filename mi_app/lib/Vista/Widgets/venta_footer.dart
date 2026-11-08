@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
 import '../../Constantes/limites.dart';
+import '../../Utilidades/formateador.dart';
 
 class VentaFooter extends StatelessWidget {
   final Venta venta;
@@ -26,11 +27,13 @@ class VentaFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double recibido =
-        double.tryParse(montoRecibidoController.text) ?? 0.0;
+    // Sanitización rigurosa de comas antes de convertir a double
+    final String textoLimpio =
+        montoRecibidoController.text.replaceAll(',', '').trim();
+    final double recibido = double.tryParse(textoLimpio) ?? 0.0;
     final double cambio = recibido - venta.total;
     final bool montoSuficiente =
-        montoRecibidoController.text.isNotEmpty && recibido >= venta.total;
+        textoLimpio.isNotEmpty && recibido >= venta.total;
 
     final double verticalSpacing = isLandscape ? 8.0 : 12.0;
 
@@ -80,7 +83,7 @@ class VentaFooter extends StatelessWidget {
               ),
             ),
             Text(
-              '\$${(venta.aplicarIva ? venta.subtotalVenta : venta.total).toStringAsFixed(2)}',
+              Formateador.moneda(venta.aplicarIva ? venta.subtotalVenta : venta.total),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -104,7 +107,7 @@ class VentaFooter extends StatelessWidget {
                 ),
               ),
               Text(
-                '\$${venta.totalIva.toStringAsFixed(2)}',
+                Formateador.moneda(venta.totalIva),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -126,7 +129,7 @@ class VentaFooter extends StatelessWidget {
                 ),
               ),
               Text(
-                '\$${venta.total.toStringAsFixed(2)}',
+                Formateador.moneda(venta.total),
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   color: AppColors.primary,
@@ -150,7 +153,7 @@ class VentaFooter extends StatelessWidget {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FormateadorMonetario(max: LimitesApp.maxMontoMonetario),
+              FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
             ],
             onChanged: (_) => onMontoCambiado(),
             style: TextStyle(
@@ -234,7 +237,7 @@ class VentaFooter extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        '\$${cambio.toStringAsFixed(2)}',
+                        Formateador.moneda(cambio),
                         style: TextStyle(
                           color: AppColors.onSecondary,
                           fontWeight: FontWeight.w900,
@@ -281,7 +284,7 @@ class VentaFooter extends StatelessWidget {
                 : FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      'Cobrar \$${venta.total.toStringAsFixed(2)}',
+                      'Cobrar ${Formateador.moneda(venta.total)}',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,

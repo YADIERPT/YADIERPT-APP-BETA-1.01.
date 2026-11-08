@@ -1,4 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+
+import '../Constantes/limites.dart';
 
 /// Helper centralizado y extensiones para estandarizar el formato numérico y monetario en Planteapp.
 ///
@@ -57,6 +60,20 @@ class Formateador {
     final pct = p <= 1.0 ? p * 100 : p;
     return '${NumberFormat('#,##0.0', 'en_US').format(pct)}%';
   }
+
+  /// Sanitiza una cadena numérica eliminando comas de miles y espacios antes de convertirla a double.
+  ///
+  /// Evita FormatException cuando un TextField contiene números formateados como "18,805.50".
+  ///
+  /// Ejemplo:
+  /// ```dart
+  /// Formateador.parsearMoneda("18,805.50") // -> 18805.50
+  /// ```
+  static double parsearMoneda(String? texto, {double valorPorDefecto = 0.0}) {
+    if (texto == null || texto.trim().isEmpty) return valorPorDefecto;
+    final String limpio = texto.replaceAll(',', '').trim();
+    return double.tryParse(limpio) ?? valorPorDefecto;
+  }
 }
 
 /// Extensiones de conveniencia sobre [num] para sintaxis fluida y legible en widgets de UI.
@@ -107,4 +124,120 @@ extension FormatoMonedaNullableNumExtension on num? {
     return Formateador.entero(this);
   }
 }
+
+/// Formateador de texto dinámico para campos monetarios que aplica separación
+/// de miles con coma (,) en tiempo real conforme el usuario escribe, permitiendo
+/// hasta 2 posiciones decimales y conservando la posición correcta del cursor.
+class FormateadorMilesMonetario extends TextInputFormatter {
+  final double? max;
+  static final NumberFormat _formatter = NumberFormat('#,##0', 'en_US');
+
+  FormateadorMilesMonetario({this.max = LimitesApp.maxMontoMonetario});
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    TextEditingValue valorModificado = newValue;
+
+    // Si el usuario intentó borrar una coma con Backspace, eliminamos el dígito previo a la coma
+    if (oldValue.text.length - newValue.text.length == 1 &&
+        oldValue.selection.baseOffset > 0 &&
+        oldValue.selection.baseOffset <= oldValue.text.length &&
+        oldValue.text[oldValue.selection.baseOffset - 1] == ',') {
+      final int posBorrar = oldValue.selection.baseOffset - 2;
+      if (posBorrar >= 0) {
+        final String textoAjustado = oldValue.text.substring(0, posBorrar) +
+            oldValue.text.substring(posBorrar + 1);
+        final int cursorAjustado = posBorrar;
+        valorModificado = TextEditingValue(
+          text: textoAjustado,
+          selection: TextSelection.collapsed(offset: cursorAjustado),
+        );
+      }
+    }
+
+    // Normalizar comas a fin de validar los caracteres numéricos
+    String clean = valorModificado.text.replaceAll(',', '').trim();
+    if (clean.isEmpty) {
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // Si escribe solo el punto decimal, asistimos completando a '0.'
+    if (clean == '.') {
+      return const TextEditingValue(
+        text: '0.',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+    }
+
+    // Validar: solo dígitos y máximo un punto con hasta 2 decimales
+    final regex = RegExp(r'^\d*(\.\d{0,2})?$');
+    if (!regex.hasMatch(clean)) {
+      return oldValue;
+    }
+
+    // Validar límite superior si aplica
+    final double? valorNumerico = double.tryParse(clean);
+    if (valorNumerico != null && max != null && valorNumerico > max!) {
+      return oldValue;
+    }
+
+    // Separar en parte entera y parte decimal
+    final bool tienePunto = clean.contains('.');
+    final List<String> partes = clean.split('.');
+    final String parteEntera = partes[0];
+    final String parteDecimal = partes.length > 1 ? partes[1] : '';
+
+    String enteraFormateada = '';
+    if (parteEntera.isNotEmpty) {
+      final int? numEntero = int.tryParse(parteEntera);
+      if (numEntero != null) {
+        enteraFormateada = _formatter.format(numEntero);
+      } else {
+        enteraFormateada = parteEntera;
+      }
+    } else if (tienePunto) {
+      enteraFormateada = '0';
+    }
+
+    final String textoFormateado =
+        tienePunto ? '$enteraFormateada.$parteDecimal' : enteraFormateada;
+
+    // Calcular la posición exacta del cursor compensando las comas insertadas
+    final int rawOffset = valorModificado.selection.baseOffset;
+    int digitosPrevios = 0;
+    for (int i = 0; i < rawOffset && i < valorModificado.text.length; i++) {
+      if (valorModificado.text[i] != ',') {
+        digitosPrevios++;
+      }
+    }
+
+    int nuevoCursor = 0;
+    int digitosContados = 0;
+    while (nuevoCursor < textoFormateado.length && digitosContados < digitosPrevios) {
+      if (textoFormateado[nuevoCursor] != ',') {
+        digitosContados++;
+      }
+      nuevoCursor++;
+    }
+
+    return TextEditingValue(
+      text: textoFormateado,
+      selection: TextSelection.collapsed(offset: nuevoCursor),
+    );
+  }
+}
+
+/// Alias alternativo para compatibilidad y semántica técnica
+typedef CustomCurrencyFormatter = FormateadorMilesMonetario;
+
 

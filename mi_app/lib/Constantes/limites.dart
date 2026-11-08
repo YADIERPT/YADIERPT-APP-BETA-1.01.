@@ -6,7 +6,7 @@ class LimitesApp {
   static const int maxLongitudNombreProducto = 40;
 
   // Montos monetarios y porcentajes
-  static const double maxMontoMonetario = 99999.99;
+  static const double maxMontoMonetario = 999999.99;
   static const double maxPorcentajeIva = 100.0;
 
   // Unidades e inventario

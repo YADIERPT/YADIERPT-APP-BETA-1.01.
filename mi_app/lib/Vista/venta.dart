@@ -10,6 +10,7 @@ import 'Widgets/catalogo_bottom_sheet.dart';
 import 'Widgets/articulo_ticket_item.dart';
 import 'Widgets/venta_footer.dart';
 import 'impresion_ticket.dart';
+import '../Utilidades/formateador.dart';
 
 class VentaVista extends StatefulWidget {
   final ControladorVentas controladorVentas;
@@ -111,8 +112,10 @@ class _VentaVistaState extends State<VentaVista> {
     if (venta == null || venta.articulos.isEmpty) return;
 
     final double total = venta.total;
-    final double recibido =
-        double.tryParse(_montoRecibidoController.text) ?? 0.0;
+    // Sanitización rigurosa de comas antes de convertir a double
+    final String textoLimpio =
+        _montoRecibidoController.text.replaceAll(',', '').trim();
+    final double recibido = double.tryParse(textoLimpio) ?? 0.0;
     if (recibido < total) return;
     final double cambio = recibido - total;
 
@@ -172,7 +175,7 @@ class _VentaVistaState extends State<VentaVista> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Monto recibido: \$${recibido.toStringAsFixed(2)}',
+                  'Monto recibido: ${Formateador.moneda(recibido)}',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -184,7 +187,7 @@ class _VentaVistaState extends State<VentaVista> {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    'Cambio a devolver: \$${cambio.toStringAsFixed(2)}',
+                    'Cambio a devolver: ${Formateador.moneda(cambio)}',
                     style: TextStyle(
                       color: AppColors.secondary,
                       fontSize: 18,
