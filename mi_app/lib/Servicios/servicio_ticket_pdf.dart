@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
@@ -335,7 +338,12 @@ class ServicioTicketPdf {
     }
 
     final archivo = File('$rutaDirectorio/ticket_$folio.pdf');
-    final bytes = await pdf.save();
+
+    // Compilación y serialización del PDF en un Isolate secundario para no bloquear el Main Thread (60 FPS sin Jank)
+    final Uint8List bytes = kIsWeb
+        ? await pdf.save()
+        : await Isolate.run(() => pdf.save());
+
     await archivo.writeAsBytes(bytes);
 
     return archivo;

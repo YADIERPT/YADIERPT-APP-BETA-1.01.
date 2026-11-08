@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'nuevo_lote.dart';
@@ -35,11 +36,41 @@ class InventarioVista extends StatefulWidget {
 class _InventarioVistaState extends State<InventarioVista> {
   String _busqueda = '';
   String _filtroActivo = 'todos'; // 'todos', 'plantas', 'articulos', 'critico'
+  final TextEditingController _busquedaController = TextEditingController();
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     _cargarInventario();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _busquedaController.dispose();
+    super.dispose();
+  }
+
+  /// Efecto Debounce de 300 ms: cancela temporizadores previos y solo filtra
+  /// el catálogo cuando el usuario detiene la escritura durante 300 ms.
+  void _onBusquedaChanged(String val) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _busqueda = val.trim();
+        });
+      }
+    });
+  }
+
+  void _limpiarBusqueda() {
+    _debounceTimer?.cancel();
+    _busquedaController.clear();
+    setState(() {
+      _busqueda = '';
+    });
   }
 
   Future<void> _cargarInventario() async {
@@ -277,13 +308,10 @@ class _InventarioVistaState extends State<InventarioVista> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // 1. Buscador
+                        // 1. Buscador con Debounce de 300 ms
                         TextField(
-                          onChanged: (val) {
-                            setState(() {
-                              _busqueda = val;
-                            });
-                          },
+                          controller: _busquedaController,
+                          onChanged: _onBusquedaChanged,
                           style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
                           decoration: InputDecoration(
                             hintText: 'Buscar planta o artículo...',
@@ -294,15 +322,11 @@ class _InventarioVistaState extends State<InventarioVista> {
                               color: AppColors.textSecondary,
                               size: 20,
                             ),
-                            suffixIcon: _busqueda.isNotEmpty
+                            suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
                                 ? IconButton(
                                     icon: Icon(Icons.clear,
                                         color: AppColors.textSecondary, size: 18),
-                                    onPressed: () {
-                                      setState(() {
-                                        _busqueda = '';
-                                      });
-                                    },
+                                    onPressed: _limpiarBusqueda,
                                   )
                                 : null,
                             filled: true,
