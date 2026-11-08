@@ -159,7 +159,7 @@ class _ConfiguracionFinancieraVistaState
           },
         );
       },
-    );
+    ).whenComplete(() => controller.dispose());
   }
 
   @override

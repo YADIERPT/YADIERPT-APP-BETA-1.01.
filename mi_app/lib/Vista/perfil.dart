@@ -345,20 +345,24 @@ class _PerfilVistaState extends State<PerfilVista> {
                   ).then((_) => setState(() {}));
                 },
               ),
-              _buildListTile(
-                Icons.devices_other_outlined,
-                'Hardware y Periféricos',
-                'Lector de huellas, impresoras y conexiones',
-                iconBgColor: AppColors.subtleAmber,
-                iconColor: AppColors.amber,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HardwareVista(
-                      controladorBiometrico: widget.controladorBiometrico ?? ControladorBiometrico(),
+              RoleGuard.gerencia(
+                rolActual: usuario?.rol,
+                modo: RoleGuardMode.ocultar,
+                child: _buildListTile(
+                  Icons.devices_other_outlined,
+                  'Hardware y Periféricos',
+                  'Lector de huellas, impresoras y conexiones',
+                  iconBgColor: AppColors.subtleAmber,
+                  iconColor: AppColors.amber,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => HardwareVista(
+                        controladorBiometrico: widget.controladorBiometrico ?? ControladorBiometrico(),
+                      ),
                     ),
-                  ),
-                ).then((_) => setState(() {})),
+                  ).then((_) => setState(() {})),
+                ),
               ),
               _buildListTile(
                 Icons.help_outline,

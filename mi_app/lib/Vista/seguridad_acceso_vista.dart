@@ -220,6 +220,9 @@ class _SeguridadAccesoVistaState extends State<SeguridadAccesoVista> {
       },
     );
 
+    final String etiquetaHuella = nombreHuellaCtrl.text.trim();
+    nombreHuellaCtrl.dispose();
+
     if (confirmar == true) {
       final compatible = await widget.controladorBiometrico.servicio
           .verificarSoporteBiometrico();
@@ -233,7 +236,7 @@ class _SeguridadAccesoVistaState extends State<SeguridadAccesoVista> {
 
       final exito = await widget.controladorBiometrico.registrarHuella(
         colaboradorId: idColaboradorSeleccionado,
-        nombreHuella: nombreHuellaCtrl.text,
+        nombreHuella: etiquetaHuella.isNotEmpty ? etiquetaHuella : 'Huella Dactilar',
       );
 
       if (mounted) {

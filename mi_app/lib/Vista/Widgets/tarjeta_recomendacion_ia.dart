@@ -156,7 +156,7 @@ class TarjetaRecomendacionIA extends StatelessWidget {
           ],
         );
       },
-    );
+    ).whenComplete(() => controller.dispose());
   }
 
   @override

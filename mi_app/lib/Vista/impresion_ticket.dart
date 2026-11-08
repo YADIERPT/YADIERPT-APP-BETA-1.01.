@@ -20,11 +20,17 @@ class ImpresionTicket {
             children: [
               pw.Center(
                 child: pw.Text(
-                  'VIVERO POS',
+                  'PLANTEAPP POS',
                   style: pw.TextStyle(
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: pw.FontWeight.bold,
                   ),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  'Biznaga Kíix • Vivero Botánico',
+                  style: const pw.TextStyle(fontSize: 10),
                 ),
               ),
               pw.SizedBox(height: 10),

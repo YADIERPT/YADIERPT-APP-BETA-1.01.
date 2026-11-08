@@ -796,8 +796,7 @@ class _DialogoApartadoVentaState extends State<DialogoApartadoVenta> {
     final nombre = _nombreCtrl.text.trim();
     if (nombre.isEmpty) return;
 
-    final anticipo =
-        double.tryParse(_anticipoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    final anticipo = Formateador.parsearMoneda(_anticipoCtrl.text);
 
     setState(() {
       _procesando = true;
@@ -871,6 +870,9 @@ class _DialogoApartadoVentaState extends State<DialogoApartadoVenta> {
             TextField(
               controller: _anticipoCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
+              ],
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
               decoration: InputDecoration(
                 labelText: 'Anticipo / Abono Inicial (\$)',

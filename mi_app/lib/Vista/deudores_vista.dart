@@ -5,6 +5,7 @@ import '../Tema/app_theme.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Modelos/venta.dart';
 import '../Modelos/abono.dart';
+import '../Utilidades/formateador.dart';
 
 class DeudoresVista extends StatefulWidget {
   final ControladorVentas controladorVentas;
@@ -888,8 +889,8 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
   }
 
   void _validarMonto() {
-    final valor = double.tryParse(_montoCtrl.text.replaceAll(',', '.'));
-    if (valor == null || valor <= 0) {
+    final valor = Formateador.parsearMoneda(_montoCtrl.text);
+    if (valor <= 0) {
       setState(() => _errorTexto = 'Ingresa un monto válido mayor a 0');
     } else if (valor > widget.venta.saldoPendiente + 0.01) {
       setState(() => _errorTexto = 'Supera el saldo pendiente');
@@ -902,8 +903,8 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
     _validarMonto();
     if (_errorTexto != null) return;
 
-    final monto = double.tryParse(_montoCtrl.text.replaceAll(',', '.'));
-    if (monto != null && monto > 0) {
+    final monto = Formateador.parsearMoneda(_montoCtrl.text);
+    if (monto > 0) {
       Navigator.pop(context);
       widget.onRegistrar(monto, _metodoPago);
     }
@@ -1014,7 +1015,7 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
               controller: _montoCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d+[\.,]?\d{0,2}')),
+                FormateadorMilesMonetario(max: widget.venta.saldoPendiente + 0.01),
               ],
               onChanged: (_) => _validarMonto(),
               style: TextStyle(

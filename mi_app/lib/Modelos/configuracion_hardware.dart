@@ -115,3 +115,4 @@ class DispositivoImpresora {
     this.esPredeterminada = false,
   });
 }
+
