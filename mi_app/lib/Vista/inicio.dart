@@ -9,6 +9,7 @@ import '../Tema/app_theme.dart';
 import '../Tema/isometric_cube_icon.dart';
 import 'pos_vista.dart';
 import 'inventario_vista.dart';
+import 'nuevo_lote.dart';
 import 'perfil.dart';
 import 'login.dart';
 import 'Widgets/dashboard_vista.dart';
@@ -185,6 +186,47 @@ class _InicioVistaState extends State<InicioVista> {
     }
   }
 
+  /// Construye dinámicamente el botón flotante según la pestaña activa del Scaffold principal.
+  /// Evita la aparición de botones fantasma al regresar de subpantallas (como Empleados).
+  Widget? _buildFloatingActionButton() {
+    switch (_indiceActual) {
+      case 2: // Pestaña de Inventario
+        final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+        final bool puedeModificar = rolActual?.puedeModificarInventario ?? true;
+        if (!puedeModificar) return null;
+
+        return FloatingActionButton(
+          key: const ValueKey('fab_inventario_principal'),
+          heroTag: 'fab_inventario_principal',
+          tooltip: 'Añadir nuevo producto',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NuevoLoteVista(
+                  controladorInventario: widget.controladorInventario,
+                ),
+              ),
+            ).then((_) {
+              widget.controladorInventario.cargarProductos();
+              if (mounted) setState(() {});
+            });
+          },
+          backgroundColor: AppColors.secondary,
+          foregroundColor: AppColors.onSecondary,
+          elevation: 3,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add, size: 28),
+        );
+
+      case 3: // Pestaña de "Mi Cuenta": estrictamente null para evitar botones fantasma
+      case 0: // Inicio / Dashboard
+      case 1: // Punto de Venta
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isLandscape =
@@ -222,6 +264,7 @@ class _InicioVistaState extends State<InicioVista> {
           child: Scaffold(
             resizeToAvoidBottomInset: false,
             backgroundColor: AppColors.surface,
+            floatingActionButton: _buildFloatingActionButton(),
             body: SafeArea(
               child: Column(
                 children: [

@@ -258,28 +258,7 @@ class _InventarioVistaState extends State<InventarioVista> {
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
-          floatingActionButton: RoleGuard.gerencia(
-            rolActual: rolActual,
-            modo: RoleGuardMode.ocultar,
-            child: FloatingActionButton(
-              tooltip: 'Añadir nuevo producto',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => NuevoLoteVista(
-                      controladorInventario: widget.controladorInventario,
-                    ),
-                  ),
-                ).then((_) => _cargarInventario());
-              },
-              backgroundColor: AppColors.secondary,
-              foregroundColor: AppColors.onSecondary,
-              elevation: 3,
-              shape: const CircleBorder(),
-              child: const Icon(Icons.add, size: 28),
-            ),
-          ),
+          floatingActionButton: null,
           body: SafeArea(
             child: RefreshIndicator(
               color: AppColors.primary,

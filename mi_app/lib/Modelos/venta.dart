@@ -1,6 +1,6 @@
 import 'producto.dart';
 
-enum EstadoVenta { enProceso, completada, cancelada, apartada }
+enum EstadoVenta { enProceso, completada, cancelada, apartada, liquidada }
 
 class ArticuloVenta {
   Producto producto;
@@ -124,8 +124,13 @@ class Venta {
   /// Determina si la venta mantiene un saldo adeudado
   bool get tieneSaldoPendiente => saldoPendiente > 0.001;
 
-  /// Indica si la venta corresponde a un apartado
-  bool get esApartada => estado == EstadoVenta.apartada;
+  /// Indica si la venta corresponde a un apartado o cuenta por cobrar
+  bool get esApartada =>
+      estado == EstadoVenta.apartada || estado == EstadoVenta.liquidada;
+
+  /// Determina si la cuenta está completamente liquidada (saldo restante $0.00)
+  bool get esLiquidada =>
+      estado == EstadoVenta.liquidada || (!tieneSaldoPendiente && esApartada);
 
   /// Proporción del monto pagado sobre el total (0.0 a 1.0)
   double get porcentajePagado =>

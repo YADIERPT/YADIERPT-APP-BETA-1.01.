@@ -103,7 +103,8 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final ventasFiltradas = _filtrarVentasPorPeriodo().reversed.toList();
+        final ventasFiltradas = _filtrarVentasPorPeriodo().toList()
+          ..sort((a, b) => b.fecha.compareTo(a.fecha));
         final double ventaAcumulada =
             ventasFiltradas.fold(0.0, (sum, v) => sum + v.total);
         final int pedidosCompletados = ventasFiltradas.length;

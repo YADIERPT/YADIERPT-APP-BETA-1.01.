@@ -80,6 +80,10 @@ class _DeudoresVistaState extends State<DeudoresVista> {
     return _cuentas.where((v) => v.tieneSaldoPendiente).length;
   }
 
+  int get _cantidadLiquidados {
+    return _cuentas.where((v) => !v.tieneSaldoPendiente).length;
+  }
+
   void _mostrarToast(String mensaje, {bool esError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -386,7 +390,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
                       const SizedBox(width: 8),
                       _buildChipFiltro('todos', 'Todos (${_cuentas.length})'),
                       const SizedBox(width: 8),
-                      _buildChipFiltro('liquidados', 'Liquidados'),
+                      _buildChipFiltro('liquidados', 'Liquidados ($_cantidadLiquidados)'),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -824,7 +828,9 @@ class _DeudoresVistaState extends State<DeudoresVista> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Sin cuentas por cobrar',
+            _filtroActivo == 'liquidados'
+                ? 'Sin cuentas liquidadas'
+                : 'Sin cuentas por cobrar',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -835,7 +841,9 @@ class _DeudoresVistaState extends State<DeudoresVista> {
           Text(
             _busqueda.isNotEmpty
                 ? 'No se encontraron resultados para "$_busqueda".'
-                : 'No hay deudas o apartados pendientes en esta sección.',
+                : _filtroActivo == 'liquidados'
+                    ? 'Aún no hay cuentas liquidadas registradas en el historial.'
+                    : 'No hay deudas o apartados pendientes en esta sección.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,

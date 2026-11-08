@@ -80,9 +80,12 @@ class _DashboardVistaState extends State<DashboardVista> {
     final double ticketPromedio =
         cantidadVentas > 0 ? totalVentas / cantidadVentas : 0.0;
 
-    final ventasRecientes = ventasPeriodo.reversed.take(4).toList();
+    // Ordenar explícitamente de más reciente a más antigua
+    final ventasOrdenadas = [...ventasPeriodo]
+      ..sort((a, b) => b.fecha.compareTo(a.fecha));
+    final ventasRecientes = ventasOrdenadas.take(4).toList();
 
-    // Cuentas por cobrar y deudores pendientes
+    // Cuentas por cobrar y deudores pendientes ordenados por fecha descendente
     final deudoresPendientes = widget.controladorVentas.ventas
         .where((v) =>
             v.estado == EstadoVenta.apartada ||
@@ -94,7 +97,9 @@ class _DashboardVistaState extends State<DashboardVista> {
       (sum, v) => sum + v.saldoPendiente,
     );
 
-    final deudoresRecientes = deudoresPendientes.reversed.take(4).toList();
+    final deudoresOrdenados = [...deudoresPendientes]
+      ..sort((a, b) => b.fecha.compareTo(a.fecha));
+    final deudoresRecientes = deudoresOrdenados.take(4).toList();
 
     final List<Map<String, dynamic>> puntosGrafico = [
       {'hora': '8:00', 'monto': 0.0, 'conteo': 0},
@@ -147,6 +152,8 @@ class _DashboardVistaState extends State<DashboardVista> {
       builder: (context, _) {
         final usuarioActual = widget.controladorAutenticacion.usuarioActual;
         final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
+        final bool tienePermisoFinanzas = usuarioActual?.rol == RolUsuario.duena ||
+            usuarioActual?.rol == RolUsuario.gerente;
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -165,39 +172,83 @@ class _DashboardVistaState extends State<DashboardVista> {
             children: [
                 if (!esEmpleado) ...[
                   // Tarjeta Financiera de Ingresos y Gráficos (Oculta para Rol Empleado)
-                  Container(
-                decoration: BoxDecoration(
-                  color: AppColors.homeCardBackground,
-                  gradient: AppColors.homeCardGradient,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.homeCardBorder, width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.25 : 0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Ingresos Totales',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w500,
+                  Material(
+                    color: Colors.transparent,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: AppColors.homeCardBackground,
+                        gradient: AppColors.homeCardGradient,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.homeCardBorder, width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: AppColors.isDark ? 0.25 : 0.04,
+                            ),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        splashColor: AppColors.primary.withValues(alpha: 0.12),
+                        highlightColor: AppColors.primary.withValues(alpha: 0.06),
+                        onTap: tienePermisoFinanzas
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => HistorialVentasVista(
+                                      controladorVentas: widget.controladorVentas,
+                                    ),
                                   ),
-                                ),
+                                );
+                              }
+                            : () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    content: const Text(
+                                      'Acceso restringido: Solo la Dueña y Gerencia pueden consultar el reporte detallado.',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                );
+                              },
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Ingresos Totales',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Icon(
+                                              Icons.arrow_forward_ios_rounded,
+                                              size: 11,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ],
+                                        ),
                                 const SizedBox(height: 4),
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
@@ -467,7 +518,9 @@ class _DashboardVistaState extends State<DashboardVista> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+            ),
+          ),
+          const SizedBox(height: 20),
             ] else ...[
               // Banner Operativo para Rol Empleado (Métricas financieras ocultadas)
               Container(
