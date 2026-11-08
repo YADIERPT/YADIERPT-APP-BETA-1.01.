@@ -42,7 +42,7 @@ class BaseDeDatos {
       return await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 11,
+        version: 12,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -53,7 +53,7 @@ class BaseDeDatos {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -257,6 +257,17 @@ class BaseDeDatos {
       await db.execute('CREATE INDEX IF NOT EXISTS idx_abonos_venta_id ON abonos_venta (venta_id)');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones (fecha DESC)');
     }
+    if (oldVersion < 12) {
+      // Migración para Soft Delete (Borrado Lógico) de Productos
+      try {
+        await db.execute(
+          'ALTER TABLE productos ADD COLUMN activo INTEGER NOT NULL DEFAULT 1',
+        );
+      } catch (_) {}
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos (activo)',
+      );
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -278,7 +289,8 @@ class BaseDeDatos {
         cantidadEnInventario INTEGER NOT NULL,
         imagenes TEXT,
         umbralStockCritico INTEGER NOT NULL DEFAULT 5,
-        tipo TEXT NOT NULL DEFAULT 'planta'
+        tipo TEXT NOT NULL DEFAULT 'planta',
+        activo INTEGER NOT NULL DEFAULT 1
       )
     ''');
     await db.execute('''
@@ -395,6 +407,7 @@ class BaseDeDatos {
 
     // Índices de alto rendimiento para acelerar consultas y ordenamientos frecuentes
     await db.execute('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos (activo)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas (fecha DESC)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_estado ON ventas (estado)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_articulos_venta_id ON articulos_venta (venta_id)');

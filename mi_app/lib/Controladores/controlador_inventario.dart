@@ -12,10 +12,21 @@ class ControladorInventario extends ChangeNotifier {
 
   List<Producto> get productos => _productos;
 
-  /// Recarga el inventario completo desde SQLite y notifica a los escuchas reactivos
+  /// Recarga el inventario completo de productos activos desde SQLite y notifica a los escuchas reactivos.
+  /// Aplica borrado lógico (`activo = 1`) y auto-recuperación de esquema para bases de datos previas.
   Future<void> cargarProductos() async {
     final db = await BaseDeDatos.instancia.database;
-    final mapas = await db.query('productos');
+    try {
+      await db.execute(
+        'ALTER TABLE productos ADD COLUMN activo INTEGER NOT NULL DEFAULT 1',
+      );
+    } catch (_) {
+      // La columna ya existe o ya fue migrada
+    }
+    final mapas = await db.query(
+      'productos',
+      where: 'activo = 1',
+    );
     _productos = mapas.map((mapa) => Producto.fromMap(mapa)).toList();
     notifyListeners();
   }
@@ -31,14 +42,42 @@ class ControladorInventario extends ChangeNotifier {
     }
 
     final db = await BaseDeDatos.instancia.database;
-    await db.insert('productos', nuevoProducto.toMap());
+
+    // Verificar si el registro ya existe en SQLite (ej. borrado lógicamente con anterioridad)
+    final coincidentes = await db.query(
+      'productos',
+      where: 'id = ?',
+      whereArgs: [nuevoProducto.id],
+    );
+
+    if (coincidentes.isNotEmpty) {
+      // Reactivar el producto existente y actualizar sus datos
+      nuevoProducto.activo = true;
+      await db.update(
+        'productos',
+        nuevoProducto.toMap(),
+        where: 'id = ?',
+        whereArgs: [nuevoProducto.id],
+      );
+    } else {
+      await db.insert('productos', nuevoProducto.toMap());
+    }
+
     _productos.add(nuevoProducto);
     notifyListeners();
   }
 
+  /// Realiza un borrado lógico (Soft Delete) del producto actualizando `activo = 0`.
+  /// Esto previene el error `FOREIGN KEY constraint failed (code 787)` al preservar
+  /// la integridad referencial con `articulos_venta` y mantener intacto el historial de ventas.
   Future<void> eliminarProducto(String id) async {
     final db = await BaseDeDatos.instancia.database;
-    await db.delete('productos', where: 'id = ?', whereArgs: [id]);
+    await db.update(
+      'productos',
+      {'activo': 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     _productos.removeWhere((p) => p.id == id);
     notifyListeners();
   }
@@ -146,5 +185,25 @@ class ControladorInventario extends ChangeNotifier {
 
   Producto? obtenerProducto(String id) {
     return _productos.where((p) => p.id == id).firstOrNull;
+  }
+
+  /// Obtiene un producto por ID desde SQLite incluyendo aquellos desactivados (`activo = 0`).
+  /// Esencial para renderizar con total exactitud detalles de ventas históricas y recibos.
+  Future<Producto?> obtenerProductoHistoricoAsync(String id) async {
+    final enMemoria = obtenerProducto(id);
+    if (enMemoria != null) return enMemoria;
+
+    final db = await BaseDeDatos.instancia.database;
+    final int? idInt = int.tryParse(id);
+    final res = await db.query(
+      'productos',
+      where: idInt != null ? 'id = ? OR id = ?' : 'id = ?',
+      whereArgs: idInt != null ? [id, idInt] : [id],
+      limit: 1,
+    );
+    if (res.isNotEmpty) {
+      return Producto.fromMap(res.first);
+    }
+    return null;
   }
 }
