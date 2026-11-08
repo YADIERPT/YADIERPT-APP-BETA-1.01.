@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
+import '../../Tema/app_svg_icons.dart';
 
 class ArticuloTicketItem extends StatelessWidget {
   final ArticuloVenta art;
@@ -310,35 +311,38 @@ class ArticuloTicketItem extends StatelessWidget {
   }
 
   Widget _buildImagenProducto(double iconSize) {
-    if (art.producto.imagenes.isNotEmpty) {
-      final imgPath = art.producto.imagenes.first;
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: imgPath.startsWith('http')
-            ? Image.network(
-                imgPath,
-                fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => Icon(
-                  Icons.local_florist,
-                  color: AppColors.primary,
-                  size: iconSize,
-                ),
-              )
-            : Image.file(
-                File(imgPath),
-                fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => Icon(
-                  Icons.local_florist,
-                  color: AppColors.primary,
-                  size: iconSize,
-                ),
-              ),
-      );
+    if (art.producto.imagenes.isNotEmpty && art.producto.imagenes.first.trim().isNotEmpty) {
+      final imgPath = art.producto.imagenes.first.trim();
+      if (imgPath.startsWith('assets/')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.asset(
+            imgPath,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(iconSize),
+          ),
+        );
+      } else {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.file(
+            File(imgPath),
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(iconSize),
+          ),
+        );
+      }
     }
-    return Icon(
-      Icons.local_florist,
-      color: AppColors.primary,
-      size: iconSize,
+    return _buildPlaceholder(iconSize);
+  }
+
+  Widget _buildPlaceholder(double iconSize) {
+    return Center(
+      child: SvgIconWidget(
+        art.producto.esPlanta ? AppSvgIcons.planta : AppSvgIcons.articulo,
+        size: iconSize,
+        color: AppColors.primary,
+      ),
     );
   }
 }

@@ -141,8 +141,8 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
     }
     if (!_imagenEliminada && widget.producto.imagenes.isNotEmpty) {
       final img = widget.producto.imagenes.first;
-      if (img.startsWith('http')) {
-        return Image.network(
+      if (img.startsWith('assets/')) {
+        return Image.asset(
           img,
           fit: BoxFit.cover,
           width: double.infinity,

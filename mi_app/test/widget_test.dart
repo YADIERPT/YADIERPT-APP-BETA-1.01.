@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:mi_app/Controladores/controlador_autenticacion.dart';
+import 'package:mi_app/Controladores/controlador_biometrico.dart';
 import 'package:mi_app/Modelos/colaborador.dart';
 import 'package:mi_app/Modelos/producto.dart';
 import 'package:mi_app/Modelos/venta.dart';
@@ -631,15 +633,21 @@ void main() {
         controladorPerfil: ctrlPerfil,
       );
       final ctrlAuth = ControladorAutenticacion();
+      final ctrlBio = ControladorBiometrico();
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PerfilVista(
-              controladorPerfil: ctrlPerfil,
-              controladorVentas: ctrlVentas,
-              controladorAutenticacion: ctrlAuth,
-              onLogout: () {},
+        MultiProvider(
+          providers: [
+            Provider<ControladorPerfil>.value(value: ctrlPerfil),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: PerfilVista(
+                onLogout: () {},
+              ),
             ),
           ),
         ),
@@ -676,14 +684,18 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DashboardVista(
-              controladorInicio: ctrlInicio,
-              controladorInventario: ctrlInv,
-              controladorVentas: ctrlVentas,
-              controladorAutenticacion: ctrlAuth,
-              alNavegar: (_) {},
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInicio>.value(value: ctrlInicio),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: DashboardVista(
+                alNavegar: (_) {},
+              ),
             ),
           ),
         ),
@@ -725,14 +737,18 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DashboardVista(
-              controladorInicio: ctrlInicio,
-              controladorInventario: ctrlInv,
-              controladorVentas: ctrlVentas,
-              controladorAutenticacion: ctrlAuth,
-              alNavegar: (_) {},
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInicio>.value(value: ctrlInicio),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: DashboardVista(
+                alNavegar: (_) {},
+              ),
             ),
           ),
         ),

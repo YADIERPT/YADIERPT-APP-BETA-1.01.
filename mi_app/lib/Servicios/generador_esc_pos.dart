@@ -146,3 +146,4 @@ class GeneradorEscPos {
     _buffer.addAll([0x1B, 0x70, 0x00, 0x19, 0xFA]);
   }
 }
+

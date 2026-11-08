@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_perfil.dart';
@@ -18,18 +19,10 @@ import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
 
 class PerfilVista extends StatefulWidget {
-  final ControladorPerfil controladorPerfil;
-  final ControladorVentas controladorVentas;
-  final ControladorAutenticacion controladorAutenticacion;
-  final ControladorBiometrico? controladorBiometrico;
   final VoidCallback onLogout;
 
   const PerfilVista({
     super.key,
-    required this.controladorPerfil,
-    required this.controladorVentas,
-    required this.controladorAutenticacion,
-    this.controladorBiometrico,
     required this.onLogout,
   });
 
@@ -140,10 +133,13 @@ class _PerfilVistaState extends State<PerfilVista> {
 
   @override
   Widget build(BuildContext context) {
+    final cAuth = context.watch<ControladorAutenticacion>();
+    final cBiometrico = context.watch<ControladorBiometrico>();
+
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final usuario = widget.controladorAutenticacion.usuarioActual;
+        final usuario = cAuth.usuarioActual;
         final nombreUsuario = usuario?.nombre ?? 'Administrador';
         final rolUsuario = usuario?.rol.etiqueta ?? 'Administrador';
 
@@ -258,7 +254,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => ConfiguracionFinancieraVista(
-                        controladorPerfil: widget.controladorPerfil,
+                        controladorPerfil: context.read<ControladorPerfil>(),
                       ),
                     ),
                   ),
@@ -277,7 +273,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => EmpleadosVista(
-                        controladorAutenticacion: widget.controladorAutenticacion,
+                        controladorAutenticacion: context.read<ControladorAutenticacion>(),
                       ),
                     ),
                   ),
@@ -293,7 +289,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DeudoresVista(
-                      controladorVentas: widget.controladorVentas,
+                      controladorVentas: context.read<ControladorVentas>(),
                     ),
                   ),
                 ),
@@ -308,7 +304,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => HistorialVentasVista(
-                      controladorVentas: widget.controladorVentas,
+                      controladorVentas: context.read<ControladorVentas>(),
                     ),
                   ),
                 ),
@@ -319,7 +315,7 @@ class _PerfilVistaState extends State<PerfilVista> {
               _buildListTile(
                 Icons.shield_outlined,
                 'Seguridad y Acceso',
-                (widget.controladorBiometrico?.tieneHuellaRegistrada ?? false)
+                cBiometrico.tieneHuellaRegistrada
                     ? 'Huella activa · Contraseña protegida'
                     : 'Acceso biométrico y contraseña',
                 iconBgColor: AppColors.subtleGreen,
@@ -327,8 +323,8 @@ class _PerfilVistaState extends State<PerfilVista> {
                 onTap: () async {
                   final bool verificado = await VerificacionSeguridadSheet.solicitar(
                     context: context,
-                    controladorAutenticacion: widget.controladorAutenticacion,
-                    controladorBiometrico: widget.controladorBiometrico,
+                    controladorAutenticacion: context.read<ControladorAutenticacion>(),
+                    controladorBiometrico: context.read<ControladorBiometrico>(),
                     titulo: 'Acceso a Seguridad',
                     motivo: 'Confirma tu identidad para configurar biometría o cambiar tu contraseña.',
                   );
@@ -338,8 +334,8 @@ class _PerfilVistaState extends State<PerfilVista> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => SeguridadAccesoVista(
-                        controladorAutenticacion: widget.controladorAutenticacion,
-                        controladorBiometrico: widget.controladorBiometrico ?? ControladorBiometrico(),
+                        controladorAutenticacion: context.read<ControladorAutenticacion>(),
+                        controladorBiometrico: context.read<ControladorBiometrico>(),
                       ),
                     ),
                   ).then((_) => setState(() {}));
@@ -358,7 +354,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => HardwareVista(
-                        controladorBiometrico: widget.controladorBiometrico ?? ControladorBiometrico(),
+                        controladorBiometrico: context.read<ControladorBiometrico>(),
                       ),
                     ),
                   ).then((_) => setState(() {})),

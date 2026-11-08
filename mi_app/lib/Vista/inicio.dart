@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
@@ -18,18 +19,7 @@ import 'Widgets/app_logo.dart';
 import '../Servicios/secure_storage_service.dart';
 
 class InicioVista extends StatefulWidget {
-  final ControladorInicio controladorInicio;
-  final ControladorInventario controladorInventario;
-  final ControladorVentas controladorVentas;
-  final ControladorAutenticacion controladorAutenticacion;
-
-  const InicioVista({
-    super.key,
-    required this.controladorInicio,
-    required this.controladorInventario,
-    required this.controladorVentas,
-    required this.controladorAutenticacion,
-  });
+  const InicioVista({super.key});
 
   @override
   State<InicioVista> createState() => _InicioVistaState();
@@ -43,8 +33,9 @@ class _InicioVistaState extends State<InicioVista> {
   @override
   void initState() {
     super.initState();
+    final authCtrl = context.read<ControladorAutenticacion>();
     final esEmpleado =
-        widget.controladorAutenticacion.usuarioActual?.rol == RolUsuario.empleado;
+        authCtrl.usuarioActual?.rol == RolUsuario.empleado;
     if (esEmpleado) {
       _indiceActual = 1;
       _historialTabs.clear();
@@ -52,43 +43,21 @@ class _InicioVistaState extends State<InicioVista> {
     }
     _paginas = [
       DashboardVista(
-        controladorInicio: widget.controladorInicio,
-        controladorInventario: widget.controladorInventario,
-        controladorVentas: widget.controladorVentas,
-        controladorAutenticacion: widget.controladorAutenticacion,
         alNavegar: (indice) {
           _navegarA(indice);
         },
       ),
-      PosVista(
-        controladorInicio: widget.controladorInicio,
-        controladorInventario: widget.controladorInventario,
-        controladorVentas: widget.controladorVentas,
-      ),
-      InventarioVista(
-        controladorInventario: widget.controladorInventario,
-        controladorIA: widget.controladorInicio.controladorIA,
-        controladorVentas: widget.controladorVentas,
-        controladorAutenticacion: widget.controladorAutenticacion,
-      ),
+      const PosVista(),
+      const InventarioVista(),
       PerfilVista(
-        controladorPerfil: widget.controladorInicio.controladorPerfil,
-        controladorVentas: widget.controladorVentas,
-        controladorAutenticacion: widget.controladorAutenticacion,
-        controladorBiometrico: widget.controladorInicio.controladorBiometrico,
         onLogout: () async {
           await SecureStorageService.instancia
               .guardar('planteapp_recordar_sesion', 'false');
-          widget.controladorAutenticacion.cerrarSesion();
           if (!mounted) return;
+          context.read<ControladorAutenticacion>().cerrarSesion();
           Navigator.of(context, rootNavigator: true).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => LoginVista(
-                controladorInicio: widget.controladorInicio,
-                controladorInventario: widget.controladorInventario,
-                controladorVentas: widget.controladorVentas,
-                controladorAutenticacion: widget.controladorAutenticacion,
-              ),
+              builder: (context) => const LoginVista(),
             ),
           );
         },
@@ -171,16 +140,11 @@ class _InicioVistaState extends State<InicioVista> {
     if (salir == true && mounted) {
       await SecureStorageService.instancia
           .guardar('planteapp_recordar_sesion', 'false');
-      widget.controladorAutenticacion.cerrarSesion();
+      context.read<ControladorAutenticacion>().cerrarSesion();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => LoginVista(
-            controladorInicio: widget.controladorInicio,
-            controladorInventario: widget.controladorInventario,
-            controladorVentas: widget.controladorVentas,
-            controladorAutenticacion: widget.controladorAutenticacion,
-          ),
+          builder: (context) => const LoginVista(),
         ),
       );
     }
@@ -191,7 +155,7 @@ class _InicioVistaState extends State<InicioVista> {
   Widget? _buildFloatingActionButton() {
     switch (_indiceActual) {
       case 2: // Pestaña de Inventario
-        final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+        final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
         final bool puedeModificar = rolActual?.puedeModificarInventario ?? true;
         if (!puedeModificar) return null;
 
@@ -204,11 +168,11 @@ class _InicioVistaState extends State<InicioVista> {
               context,
               MaterialPageRoute(
                 builder: (context) => NuevoLoteVista(
-                  controladorInventario: widget.controladorInventario,
+                  controladorInventario: context.read<ControladorInventario>(),
                 ),
               ),
             ).then((_) {
-              widget.controladorInventario.cargarProductos();
+              context.read<ControladorInventario>().cargarProductos();
               if (mounted) setState(() {});
             });
           },
@@ -235,7 +199,8 @@ class _InicioVistaState extends State<InicioVista> {
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final productosBajoStock = widget.controladorInventario.productos
+        final cInventario = context.watch<ControladorInventario>();
+        final productosBajoStock = cInventario.productos
             .where((p) => p.esStockCritico)
             .toList();
 

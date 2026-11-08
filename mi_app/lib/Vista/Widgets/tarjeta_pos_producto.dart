@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
+import '../../Tema/app_svg_icons.dart';
 
 class TarjetaPosProducto extends StatelessWidget {
   final Producto producto;
@@ -60,34 +61,7 @@ class TarjetaPosProducto extends StatelessWidget {
                         color: AppColors.secondarySurface,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: producto.imagenes.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: producto.imagenes.first.startsWith('http')
-                                  ? Image.network(
-                                      producto.imagenes.first,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (c, e, s) => Icon(
-                                        Icons.local_florist,
-                                        size: 36,
-                                        color: AppColors.primary,
-                                      ),
-                                    )
-                                  : Image.file(
-                                      File(producto.imagenes.first),
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (c, e, s) => Icon(
-                                        Icons.local_florist,
-                                        size: 36,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                            )
-                          : Icon(
-                              Icons.local_florist,
-                              size: 36,
-                              color: AppColors.primary,
-                            ),
+                      child: _buildImagen(),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -224,6 +198,42 @@ class TarjetaPosProducto extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImagen() {
+    if (producto.imagenes.isNotEmpty && producto.imagenes.first.trim().isNotEmpty) {
+      final imgPath = producto.imagenes.first.trim();
+      if (imgPath.startsWith('assets/')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            imgPath,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(),
+          ),
+        );
+      } else {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            File(imgPath),
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(),
+          ),
+        );
+      }
+    }
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Center(
+      child: SvgIconWidget(
+        producto.esPlanta ? AppSvgIcons.planta : AppSvgIcons.articulo,
+        size: 36,
+        color: AppColors.primary,
       ),
     );
   }

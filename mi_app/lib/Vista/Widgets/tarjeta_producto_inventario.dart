@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../Modelos/producto.dart';
 import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
+import '../../Tema/app_svg_icons.dart';
 import 'role_guard.dart';
 
 class TarjetaProductoInventario extends StatelessWidget {
@@ -51,33 +52,7 @@ class TarjetaProductoInventario extends StatelessWidget {
                   color: AppColors.secondarySurface,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: prod.imagenes.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: prod.imagenes.first.startsWith('http')
-                            ? Image.network(
-                                prod.imagenes.first,
-                                fit: BoxFit.cover,
-                                errorBuilder: (c, e, s) => Icon(
-                                  prod.esPlanta
-                                      ? Icons.spa_outlined
-                                      : Icons.inventory_2_outlined,
-                                  color: AppColors.primary,
-                                  size: 32,
-                                ),
-                              )
-                            : Image.file(
-                                File(prod.imagenes.first),
-                                fit: BoxFit.cover,
-                              ),
-                      )
-                    : Icon(
-                        prod.esPlanta
-                            ? Icons.spa_outlined
-                            : Icons.inventory_2_outlined,
-                        color: AppColors.primary,
-                        size: 32,
-                      ),
+                child: _buildImagenProducto(76, 76),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -337,6 +312,50 @@ class TarjetaProductoInventario extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Construye la imagen del producto 100% offline.
+  /// Soporta rutas locales de assets ('assets/...') o archivos guardados en el dispositivo ('/data/...').
+  /// En caso de no existir o fallar, renderiza un ícono botánico SVG nativo sin requerir internet.
+  Widget _buildImagenProducto(double width, double height) {
+    if (prod.imagenes.isNotEmpty && prod.imagenes.first.trim().isNotEmpty) {
+      final imgPath = prod.imagenes.first.trim();
+      if (imgPath.startsWith('assets/')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            imgPath,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
+          ),
+        );
+      } else {
+        final file = File(imgPath);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            file,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
+          ),
+        );
+      }
+    }
+    return _buildPlaceholderIcon();
+  }
+
+  Widget _buildPlaceholderIcon() {
+    return Center(
+      child: SvgIconWidget(
+        prod.esPlanta ? AppSvgIcons.planta : AppSvgIcons.articulo,
+        size: 32,
+        color: AppColors.primary,
       ),
     );
   }

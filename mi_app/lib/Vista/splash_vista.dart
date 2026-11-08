@@ -16,18 +16,7 @@ import '../Controladores/controlador_autenticacion.dart';
 /// logotipo corporativo centrado respetando el modo oscuro, y transición fluida
 /// hacia la pantalla de inicio de sesión (Login).
 class SplashVista extends StatefulWidget {
-  final ControladorInicio? controladorInicio;
-  final ControladorInventario? controladorInventario;
-  final ControladorVentas? controladorVentas;
-  final ControladorAutenticacion? controladorAutenticacion;
-
-  const SplashVista({
-    super.key,
-    this.controladorInicio,
-    this.controladorInventario,
-    this.controladorVentas,
-    this.controladorAutenticacion,
-  });
+  const SplashVista({super.key});
 
   @override
   State<SplashVista> createState() => _SplashVistaState();
@@ -79,10 +68,7 @@ class _SplashVistaState extends State<SplashVista>
   Future<void> _evaluarSesionYDestino() async {
     if (!mounted) return;
 
-    final cInicio = widget.controladorInicio ?? context.read<ControladorInicio>();
-    final cInventario = widget.controladorInventario ?? context.read<ControladorInventario>();
-    final cVentas = widget.controladorVentas ?? context.read<ControladorVentas>();
-    final cAuth = widget.controladorAutenticacion ?? context.read<ControladorAutenticacion>();
+    final cAuth = context.read<ControladorAutenticacion>();
 
     try {
       final secureStorage = SecureStorageService.instancia;
@@ -96,12 +82,7 @@ class _SplashVistaState extends State<SplashVista>
             PageRouteBuilder(
               transitionDuration: const Duration(milliseconds: 500),
               pageBuilder: (context, animation, secondaryAnimation) {
-                return InicioVista(
-                  controladorInicio: cInicio,
-                  controladorInventario: cInventario,
-                  controladorVentas: cVentas,
-                  controladorAutenticacion: cAuth,
-                );
+                return const InicioVista();
               },
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                 return FadeTransition(
@@ -124,12 +105,7 @@ class _SplashVistaState extends State<SplashVista>
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 500),
         pageBuilder: (context, animation, secondaryAnimation) {
-          return LoginVista(
-            controladorInicio: cInicio,
-            controladorInventario: cInventario,
-            controladorVentas: cVentas,
-            controladorAutenticacion: cAuth,
-          );
+          return const LoginVista();
         },
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(

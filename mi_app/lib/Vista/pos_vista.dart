@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
@@ -8,16 +9,7 @@ import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
 
 class PosVista extends StatefulWidget {
-  final ControladorInicio controladorInicio;
-  final ControladorInventario controladorInventario;
-  final ControladorVentas controladorVentas;
-
-  const PosVista({
-    super.key,
-    required this.controladorInicio,
-    required this.controladorInventario,
-    required this.controladorVentas,
-  });
+  const PosVista({super.key});
 
   @override
   State<PosVista> createState() => _PosVistaState();
@@ -30,13 +22,19 @@ class _PosVistaState extends State<PosVista> {
   @override
   void initState() {
     super.initState();
-    if (widget.controladorVentas.ventaActual == null) {
-      widget.controladorVentas.iniciarVenta();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cVentas = context.read<ControladorVentas>();
+      if (cVentas.ventaActual == null) {
+        cVentas.iniciarVenta();
+      }
+    });
   }
 
   void _abrirCobroModal() {
-    final venta = widget.controladorVentas.ventaActual;
+    final cVentas = context.read<ControladorVentas>();
+    final cInventario = context.read<ControladorInventario>();
+    final venta = cVentas.ventaActual;
     if (venta == null || venta.articulos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -50,8 +48,8 @@ class _PosVistaState extends State<PosVista> {
       context,
       MaterialPageRoute(
         builder: (context) => VentaVista(
-          controladorVentas: widget.controladorVentas,
-          controladorInventario: widget.controladorInventario,
+          controladorVentas: cVentas,
+          controladorInventario: cInventario,
         ),
       ),
     ).then((_) {
@@ -86,10 +84,12 @@ class _PosVistaState extends State<PosVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    final cInventario = widget.controladorInventario;
+    // Inyección declarativa de dependencias mediante Provider
+    final cInventario = context.watch<ControladorInventario>();
+    final cVentas = context.watch<ControladorVentas>();
 
-    return ListenableBuilder(
-      listenable: Listenable.merge([ThemeManager.instance, cInventario]),
+    return AnimatedBuilder(
+      animation: ThemeManager.instance,
       builder: (context, _) {
         final productos =
             cInventario.buscarProductos(_busqueda).where((p) {
@@ -98,7 +98,7 @@ class _PosVistaState extends State<PosVista> {
           return true;
         }).toList();
 
-        final ventaActual = widget.controladorVentas.ventaActual;
+        final ventaActual = cVentas.ventaActual;
         final totalArticulos = ventaActual != null
             ? ventaActual.articulos.fold<int>(0, (sum, a) => sum + a.cantidad)
             : 0;
@@ -152,22 +152,16 @@ class _PosVistaState extends State<PosVista> {
                               producto: producto,
                               cantidadEnTicket: cantidadEnTicket,
                               onAgregar: () {
-                                setState(() {
-                                  widget.controladorVentas
-                                      .agregarProductoAVentaActual(
-                                    producto.id,
-                                    1,
-                                  );
-                                });
+                                context.read<ControladorVentas>().agregarProductoAVentaActual(
+                                  producto.id,
+                                  1,
+                                );
                               },
                               onIncrementar: () {
-                                setState(() {
-                                  widget.controladorVentas
-                                      .agregarProductoAVentaActual(
-                                    producto.id,
-                                    1,
-                                  );
-                                });
+                                context.read<ControladorVentas>().agregarProductoAVentaActual(
+                                  producto.id,
+                                  1,
+                                );
                               },
                               onDecrementar: () {
                                 setState(() {

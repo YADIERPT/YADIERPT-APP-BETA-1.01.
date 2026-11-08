@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../Tema/app_theme.dart';
 import 'inicio.dart';
@@ -8,21 +9,11 @@ import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
+import '../Controladores/controlador_biometrico.dart';
 import '../Servicios/secure_storage_service.dart';
 
 class LoginVista extends StatefulWidget {
-  final ControladorInicio controladorInicio;
-  final ControladorInventario controladorInventario;
-  final ControladorVentas controladorVentas;
-  final ControladorAutenticacion controladorAutenticacion;
-
-  const LoginVista({
-    super.key,
-    required this.controladorInicio,
-    required this.controladorInventario,
-    required this.controladorVentas,
-    required this.controladorAutenticacion,
-  });
+  const LoginVista({super.key});
 
   @override
   State<LoginVista> createState() => _LoginVistaState();
@@ -72,7 +63,7 @@ class _LoginVistaState extends State<LoginVista> {
 
     final id = _usuarioController.text.trim();
     final clave = _claveController.text.trim();
-    final exito = await widget.controladorAutenticacion.iniciarSesion(
+    final exito = await context.read<ControladorAutenticacion>().iniciarSesion(
       id,
       clave,
     );
@@ -98,12 +89,7 @@ class _LoginVistaState extends State<LoginVista> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => InicioVista(
-              controladorInicio: widget.controladorInicio,
-              controladorInventario: widget.controladorInventario,
-              controladorVentas: widget.controladorVentas,
-              controladorAutenticacion: widget.controladorAutenticacion,
-            ),
+            builder: (context) => const InicioVista(),
           ),
         );
       }
@@ -147,7 +133,7 @@ class _LoginVistaState extends State<LoginVista> {
   }
 
   Future<void> _iniciarSesionConHuella() async {
-    final bioCtrl = widget.controladorInicio.controladorBiometrico;
+    final bioCtrl = context.read<ControladorBiometrico>();
     if (!bioCtrl.tieneHuellaRegistrada) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -165,7 +151,7 @@ class _LoginVistaState extends State<LoginVista> {
 
     if (usuarioId != null) {
       final bool exito =
-          await widget.controladorAutenticacion.iniciarSesionPorId(usuarioId);
+          await context.read<ControladorAutenticacion>().iniciarSesionPorId(usuarioId);
 
       if (!mounted) return;
 
@@ -179,12 +165,7 @@ class _LoginVistaState extends State<LoginVista> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => InicioVista(
-                controladorInicio: widget.controladorInicio,
-                controladorInventario: widget.controladorInventario,
-                controladorVentas: widget.controladorVentas,
-                controladorAutenticacion: widget.controladorAutenticacion,
-              ),
+              builder: (context) => const InicioVista(),
             ),
           );
         }
@@ -448,7 +429,7 @@ class _LoginVistaState extends State<LoginVista> {
               ),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(
-                  color: widget.controladorInicio.controladorBiometrico
+                  color: context.read<ControladorBiometrico>()
                           .tieneHuellaRegistrada
                       ? AppColors.primary
                       : AppColors.border,

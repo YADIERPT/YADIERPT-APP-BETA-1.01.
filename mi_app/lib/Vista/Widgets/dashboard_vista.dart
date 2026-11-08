@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../Controladores/controlador_inicio.dart';
 import '../../Controladores/controlador_inventario.dart';
@@ -12,19 +13,11 @@ import '../historial_ventas_vista.dart';
 import '../deudores_vista.dart';
 
 class DashboardVista extends StatefulWidget {
-  final ControladorInicio controladorInicio;
-  final ControladorInventario controladorInventario;
-  final ControladorVentas controladorVentas;
-  final ControladorAutenticacion controladorAutenticacion;
-  final Function(int) alNavegar;
+  final Function(int)? alNavegar;
 
   const DashboardVista({
     super.key,
-    required this.controladorInicio,
-    required this.controladorInventario,
-    required this.controladorVentas,
-    required this.controladorAutenticacion,
-    required this.alNavegar,
+    this.alNavegar,
   });
 
   @override
@@ -32,10 +25,8 @@ class DashboardVista extends StatefulWidget {
 }
 
 class _DashboardVistaState extends State<DashboardVista> {
-  String _periodoSeleccionado = 'Hoy';
-
   Future<void> _handleRefresh() async {
-    await widget.controladorInicio.inicializarDatosOffline();
+    await context.read<ControladorInicio>().inicializarDatosOffline();
     await Future.delayed(const Duration(milliseconds: 300));
     if (mounted) {
       setState(() {});
@@ -44,113 +35,31 @@ class _DashboardVistaState extends State<DashboardVista> {
 
   @override
   Widget build(BuildContext context) {
-    final productosBajoStock = widget.controladorInventario.productos
-        .where((p) => p.esStockCritico)
-        .toList();
-
-    final hoy = DateTime.now();
-    final List<Venta> ventasPeriodo;
-    if (_periodoSeleccionado == 'Semana') {
-      final hace7Dias = hoy.subtract(const Duration(days: 7));
-      ventasPeriodo = widget.controladorVentas.ventas
-          .where((v) =>
-              v.estado == EstadoVenta.completada &&
-              v.fecha.isAfter(hace7Dias))
-          .toList();
-    } else if (_periodoSeleccionado == 'Mes') {
-      final hace30Dias = hoy.subtract(const Duration(days: 30));
-      ventasPeriodo = widget.controladorVentas.ventas
-          .where((v) =>
-              v.estado == EstadoVenta.completada &&
-              v.fecha.isAfter(hace30Dias))
-          .toList();
-    } else {
-      ventasPeriodo = widget.controladorVentas.ventas
-          .where((v) =>
-              v.estado == EstadoVenta.completada &&
-              v.fecha.year == hoy.year &&
-              v.fecha.month == hoy.month &&
-              v.fecha.day == hoy.day)
-          .toList();
-    }
-
-    final double totalVentas =
-        ventasPeriodo.fold(0.0, (sum, v) => sum + v.total);
-    final int cantidadVentas = ventasPeriodo.length;
-    final double ticketPromedio =
-        cantidadVentas > 0 ? totalVentas / cantidadVentas : 0.0;
-
-    // Ordenar explícitamente de más reciente a más antigua
-    final ventasOrdenadas = [...ventasPeriodo]
-      ..sort((a, b) => b.fecha.compareTo(a.fecha));
-    final ventasRecientes = ventasOrdenadas.take(4).toList();
-
-    // Cuentas por cobrar y deudores pendientes ordenados por fecha descendente
-    final deudoresPendientes = widget.controladorVentas.ventas
-        .where((v) =>
-            v.estado == EstadoVenta.apartada ||
-            (v.estado != EstadoVenta.cancelada && v.tieneSaldoPendiente))
-        .toList();
-
-    final double totalPorCobrar = deudoresPendientes.fold(
-      0.0,
-      (sum, v) => sum + v.saldoPendiente,
-    );
-
-    final deudoresOrdenados = [...deudoresPendientes]
-      ..sort((a, b) => b.fecha.compareTo(a.fecha));
-    final deudoresRecientes = deudoresOrdenados.take(4).toList();
-
-    final List<Map<String, dynamic>> puntosGrafico = [
-      {'hora': '8:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '10:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '12:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '14:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '16:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '18:00', 'monto': 0.0, 'conteo': 0},
-    ];
-
-    for (var v in ventasPeriodo) {
-      int hr = v.fecha.hour;
-      int idx = -1;
-      if (hr < 9) {
-        idx = 0;
-      } else if (hr < 11) {
-        idx = 1;
-      } else if (hr < 13) {
-        idx = 2;
-      } else if (hr < 15) {
-        idx = 3;
-      } else if (hr < 17) {
-        idx = 4;
-      } else {
-        idx = 5;
-      }
-
-      if (idx != -1) {
-        puntosGrafico[idx]['monto'] += v.total;
-        puntosGrafico[idx]['conteo'] += 1;
-      }
-    }
-
-    double maxMonto = 0;
-    int idxDestacado = 3;
-    for (int i = 0; i < puntosGrafico.length; i++) {
-      if (puntosGrafico[i]['monto'] > maxMonto) {
-        maxMonto = puntosGrafico[i]['monto'];
-        idxDestacado = i;
-      }
-    }
-
-    final pDestacado = puntosGrafico[idxDestacado];
-    final String horaTooltip = pDestacado['hora'];
-    final double montoTooltip = pDestacado['monto'];
-    final int ventasTooltip = pDestacado['conteo'];
+    // 1. Inyección declarativa y escucha reactiva vía context.watch
+    final cInicio = context.watch<ControladorInicio>();
+    final cAuth = context.watch<ControladorAutenticacion>();
 
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final usuarioActual = widget.controladorAutenticacion.usuarioActual;
+        // Consumo directo de métricas precomputadas en O(1) desde el controlador
+        final metricas = cInicio.metricasDashboard;
+        final productosBajoStock = metricas.productosBajoStock;
+        final totalVentas = metricas.totalVentas;
+        final cantidadVentas = metricas.cantidadVentas;
+        final ticketPromedio = metricas.ticketPromedio;
+        final ventasRecientes = metricas.ventasRecientes;
+        final deudoresPendientes = metricas.deudoresPendientes;
+        final totalPorCobrar = metricas.totalPorCobrar;
+        final deudoresRecientes = metricas.deudoresRecientes;
+        final puntosGrafico = metricas.puntosGrafico;
+        final maxMonto = metricas.maxMonto;
+        final horaTooltip = metricas.horaTooltip;
+        final montoTooltip = metricas.montoTooltip;
+        final ventasTooltip = metricas.ventasTooltip;
+        final periodoSeleccionado = cInicio.periodoSeleccionado;
+
+        final usuarioActual = cAuth.usuarioActual;
         final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
         final bool tienePermisoFinanzas = usuarioActual?.rol == RolUsuario.duena ||
             usuarioActual?.rol == RolUsuario.gerente;
@@ -200,7 +109,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => HistorialVentasVista(
-                                      controladorVentas: widget.controladorVentas,
+                                      controladorVentas: context.read<ControladorVentas>(),
                                     ),
                                   ),
                                 );
@@ -279,12 +188,10 @@ class _DashboardVistaState extends State<DashboardVista> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: ['Hoy', 'Semana', 'Mes'].map((opcion) {
-                                final bool activa = _periodoSeleccionado == opcion;
+                                final bool activa = periodoSeleccionado == opcion;
                                 return GestureDetector(
                                   onTap: () {
-                                    setState(() {
-                                      _periodoSeleccionado = opcion;
-                                    });
+                                    context.read<ControladorInicio>().cambiarPeriodo(opcion);
                                   },
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 150),
@@ -821,7 +728,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => DeudoresVista(
-                            controladorVentas: widget.controladorVentas,
+                            controladorVentas: context.read<ControladorVentas>(),
                           ),
                         ),
                       );
@@ -984,7 +891,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   MaterialPageRoute(
                                     builder: (context) => DeudoresVista(
                                       controladorVentas:
-                                          widget.controladorVentas,
+                                          context.read<ControladorVentas>(),
                                     ),
                                   ),
                                 );
@@ -1107,7 +1014,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => HistorialVentasVista(
-                            controladorVentas: widget.controladorVentas,
+                            controladorVentas: context.read<ControladorVentas>(),
                           ),
                         ),
                       );

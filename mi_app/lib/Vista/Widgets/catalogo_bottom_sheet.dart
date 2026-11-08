@@ -5,6 +5,7 @@ import '../../Controladores/controlador_inventario.dart';
 import '../../Modelos/producto.dart';
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
+import '../../Tema/app_svg_icons.dart';
 
 class CatalogoBottomSheet extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -181,34 +182,7 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
                                 color: AppColors.secondarySurface,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: prod.imagenes.isNotEmpty
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: prod.imagenes.first.startsWith('http')
-                                          ? Image.network(
-                                              prod.imagenes.first,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => Icon(
-                                                Icons.local_florist,
-                                                color: AppColors.primary,
-                                                size: 36,
-                                              ),
-                                            )
-                                          : Image.file(
-                                              File(prod.imagenes.first),
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => Icon(
-                                                Icons.local_florist,
-                                                color: AppColors.primary,
-                                                size: 36,
-                                              ),
-                                            ),
-                                    )
-                                  : Icon(
-                                      Icons.local_florist,
-                                      color: AppColors.primary,
-                                      size: 36,
-                                    ),
+                              child: _buildImagenProducto(prod),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -299,6 +273,42 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
       ),
     );
       },
+    );
+  }
+
+  Widget _buildImagenProducto(Producto prod) {
+    if (prod.imagenes.isNotEmpty && prod.imagenes.first.trim().isNotEmpty) {
+      final imgPath = prod.imagenes.first.trim();
+      if (imgPath.startsWith('assets/')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.asset(
+            imgPath,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(prod),
+          ),
+        );
+      } else {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.file(
+            File(imgPath),
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _buildPlaceholder(prod),
+          ),
+        );
+      }
+    }
+    return _buildPlaceholder(prod);
+  }
+
+  Widget _buildPlaceholder(Producto prod) {
+    return Center(
+      child: SvgIconWidget(
+        prod.esPlanta ? AppSvgIcons.planta : AppSvgIcons.articulo,
+        size: 36,
+        color: AppColors.primary,
+      ),
     );
   }
 }

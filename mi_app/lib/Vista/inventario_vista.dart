@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'nuevo_lote.dart';
 import 'sugerencias_ia_vista.dart';
@@ -16,18 +17,7 @@ import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
 
 class InventarioVista extends StatefulWidget {
-  final ControladorInventario controladorInventario;
-  final ControladorIACompras? controladorIA;
-  final ControladorVentas? controladorVentas;
-  final ControladorAutenticacion? controladorAutenticacion;
-
-  const InventarioVista({
-    super.key,
-    required this.controladorInventario,
-    this.controladorIA,
-    this.controladorVentas,
-    this.controladorAutenticacion,
-  });
+  const InventarioVista({super.key});
 
   @override
   State<InventarioVista> createState() => _InventarioVistaState();
@@ -74,17 +64,17 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   Future<void> _cargarInventario() async {
-    await widget.controladorInventario.cargarProductos();
+    await context.read<ControladorInventario>().cargarProductos();
     if (mounted) {
       setState(() {});
     }
   }
 
   Future<void> _handleRefresh() async {
-    await widget.controladorInventario.cargarProductos();
-    if (widget.controladorIA != null && widget.controladorVentas != null) {
-      await widget.controladorIA!.inicializar(widget.controladorVentas!.ventas);
-    }
+    await context.read<ControladorInventario>().cargarProductos();
+    final cIA = context.read<ControladorIACompras>();
+    final cVentas = context.read<ControladorVentas>();
+    await cIA.inicializar(cVentas.ventas);
     await Future.delayed(const Duration(milliseconds: 300));
     if (mounted) {
       setState(() {});
@@ -125,7 +115,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirEditarProducto(Producto producto) {
-    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
     if (rolActual != null && !rolActual.puedeModificarInventario) {
       _mostrarToast('Acceso restringido: no tienes permisos de edición');
       return;
@@ -136,7 +126,7 @@ class _InventarioVistaState extends State<InventarioVista> {
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) => EditarProductoSheet(
         producto: producto,
-        controladorInventario: widget.controladorInventario,
+        controladorInventario: context.read<ControladorInventario>(),
         onActualizado: () {
           _cargarInventario();
           _mostrarToast('Producto actualizado correctamente');
@@ -146,7 +136,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirAjuste(Producto producto) {
-    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
     if (rolActual != null && !rolActual.puedeModificarInventario) {
       _mostrarToast('Acceso restringido: no puedes realizar ajustes de existencias');
       return;
@@ -157,7 +147,7 @@ class _InventarioVistaState extends State<InventarioVista> {
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) => AjusteStockSheet(
         producto: producto,
-        controladorInventario: widget.controladorInventario,
+        controladorInventario: context.read<ControladorInventario>(),
         onActualizado: () {
           _cargarInventario();
           _mostrarToast('Existencias y umbral actualizados');
@@ -167,14 +157,13 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirSugerenciasIA() {
-    if (widget.controladorIA == null || widget.controladorVentas == null) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (ctx) => SugerenciasIAVista(
-          controladorIA: widget.controladorIA!,
-          controladorInventario: widget.controladorInventario,
-          controladorVentas: widget.controladorVentas!,
+          controladorIA: context.read<ControladorIACompras>(),
+          controladorInventario: context.read<ControladorInventario>(),
+          controladorVentas: context.read<ControladorVentas>(),
         ),
       ),
     ).then((_) {
@@ -183,7 +172,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirBorrarProducto(Producto producto) {
-    final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
     if (rolActual != null && !rolActual.puedeModificarInventario) {
       _mostrarToast('Acceso restringido: no tienes permisos para dar de baja productos');
       return;
@@ -218,7 +207,7 @@ class _InventarioVistaState extends State<InventarioVista> {
             ElevatedButton(
               onPressed: () async {
                 try {
-                  await widget.controladorInventario.eliminarProducto(
+                  await context.read<ControladorInventario>().eliminarProducto(
                     producto.id,
                   );
                   await _cargarInventario();
@@ -248,16 +237,20 @@ class _InventarioVistaState extends State<InventarioVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
+    final cInventario = context.watch<ControladorInventario>();
+    final cAuth = context.watch<ControladorAutenticacion>();
+    final cIA = context.watch<ControladorIACompras>();
+
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
         List<Producto> productos =
-            widget.controladorInventario.buscarProductos(_busqueda);
+            cInventario.buscarProductos(_busqueda);
 
         int totalPlantas = 0;
         int stockCritico = 0;
         int totalArticulos = 0;
-        for (final p in widget.controladorInventario.productos) {
+        for (final p in cInventario.productos) {
           if (p.esPlanta) totalPlantas++;
           if (p.esArticulo) totalArticulos++;
           if (p.esStockCritico) stockCritico++;
@@ -282,7 +275,7 @@ class _InventarioVistaState extends State<InventarioVista> {
           tituloLista = 'Catálogo · Artículos ($totalArticulos)';
         }
 
-        final rolActual = widget.controladorAutenticacion?.usuarioActual?.rol;
+        final rolActual = cAuth.usuarioActual?.rol;
         final bool puedeModificar =
             rolActual?.puedeModificarInventario ?? true;
 
@@ -350,7 +343,7 @@ class _InventarioVistaState extends State<InventarioVista> {
                           totalSkus: totalArticulos,
                           filtroActivo: _filtroActivo,
                           onFiltroSeleccionado: _cambiarFiltro,
-                          controladorIA: widget.controladorIA,
+                          controladorIA: cIA,
                           onVerSugerencias: _abrirSugerenciasIA,
                         ),
                         SizedBox(height: isLandscape ? 10 : 16),
