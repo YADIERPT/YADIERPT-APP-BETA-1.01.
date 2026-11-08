@@ -11,6 +11,7 @@ import 'Widgets/articulo_ticket_item.dart';
 import 'Widgets/venta_footer.dart';
 import 'impresion_ticket.dart';
 import '../Utilidades/formateador.dart';
+import '../Constantes/limites.dart';
 
 class VentaVista extends StatefulWidget {
   final ControladorVentas controladorVentas;
