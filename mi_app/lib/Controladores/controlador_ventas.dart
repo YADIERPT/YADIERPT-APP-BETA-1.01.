@@ -39,93 +39,195 @@ class ControladorVentas extends ChangeNotifier {
   }
 
   /// Carga la totalidad de las ventas registradas ordenadas descendentemente por fecha.
+  /// Ejecuta una única consulta optimizada con LEFT JOIN (eliminando por completo el problema N+1).
   Future<void> cargarVentas() async {
     try {
       final db = await BaseDeDatos.instancia.database;
-      final mapasVentas = await db.query(
-        'ventas',
-        orderBy: 'fecha DESC',
-      );
+      const sql = '''
+        SELECT 
+          v.id AS v_id,
+          v.fecha AS v_fecha,
+          v.estado AS v_estado,
+          v.porcentajeIva AS v_porcentajeIva,
+          v.aplicarIva AS v_aplicarIva,
+          v.cliente AS v_cliente,
+          v.montoPagado AS v_montoPagado,
+          v.notas AS v_notas,
+          a.id AS a_id,
+          a.cantidad AS a_cantidad,
+          a.precioUnitario AS a_precioUnitario,
+          a.producto_id AS a_producto_id,
+          p.id AS p_id,
+          p.nombre AS p_nombre,
+          p.notas AS p_notas,
+          p.precioVenta AS p_precioVenta,
+          p.costo AS p_costo,
+          p.cantidadEnInventario AS p_cantidadEnInventario,
+          p.imagenes AS p_imagenes,
+          p.umbralStockCritico AS p_umbralStockCritico,
+          p.tipo AS p_tipo,
+          p.activo AS p_activo
+        FROM ventas v
+        LEFT JOIN articulos_venta a ON v.id = a.venta_id
+        LEFT JOIN productos p ON a.producto_id = p.id
+        ORDER BY v.fecha DESC, a.id ASC
+      ''';
 
-      final ventasCargadas = await _mapearVentasDesdeSQLite(db, mapasVentas);
+      final filas = await db.rawQuery(sql);
+      final ventasCargadas = _agruparVentasDesdeFilasJoin(filas);
+
       _ventas.clear();
       _ventas.addAll(ventasCargadas);
       notifyListeners();
     } catch (e, stackTrace) {
-      debugPrint('CRÍTICO: Error al cargar ventas desde SQLite: $e\n$stackTrace');
+      debugPrint('CRÍTICO: Error al cargar ventas desde SQLite con LEFT JOIN: $e\n$stackTrace');
       rethrow;
     }
   }
 
   /// Consulta en SQLite las últimas ventas registradas con orden descendente (más reciente arriba)
-  /// y límite configurable (ej. para alimentar el Dashboard con las 3 a 5 más recientes).
+  /// y límite configurable en un solo viaje optimizado mediante subconsulta y LEFT JOIN.
   Future<List<Venta>> cargarUltimasVentas({int limite = 5}) async {
     try {
       final db = await BaseDeDatos.instancia.database;
-      final mapasVentas = await db.query(
-        'ventas',
-        orderBy: 'fecha DESC',
-        limit: limite,
-      );
+      const sql = '''
+        SELECT 
+          v.id AS v_id,
+          v.fecha AS v_fecha,
+          v.estado AS v_estado,
+          v.porcentajeIva AS v_porcentajeIva,
+          v.aplicarIva AS v_aplicarIva,
+          v.cliente AS v_cliente,
+          v.montoPagado AS v_montoPagado,
+          v.notas AS v_notas,
+          a.id AS a_id,
+          a.cantidad AS a_cantidad,
+          a.precioUnitario AS a_precioUnitario,
+          a.producto_id AS a_producto_id,
+          p.id AS p_id,
+          p.nombre AS p_nombre,
+          p.notas AS p_notas,
+          p.precioVenta AS p_precioVenta,
+          p.costo AS p_costo,
+          p.cantidadEnInventario AS p_cantidadEnInventario,
+          p.imagenes AS p_imagenes,
+          p.umbralStockCritico AS p_umbralStockCritico,
+          p.tipo AS p_tipo,
+          p.activo AS p_activo
+        FROM (
+          SELECT * FROM ventas ORDER BY fecha DESC LIMIT ?
+        ) v
+        LEFT JOIN articulos_venta a ON v.id = a.venta_id
+        LEFT JOIN productos p ON a.producto_id = p.id
+        ORDER BY v.fecha DESC, a.id ASC
+      ''';
 
-      return await _mapearVentasDesdeSQLite(db, mapasVentas);
+      final filas = await db.rawQuery(sql, [limite]);
+      return _agruparVentasDesdeFilasJoin(filas);
     } catch (e, stackTrace) {
-      debugPrint('Error al consultar últimas ventas en SQLite: $e\n$stackTrace');
+      debugPrint('Error al consultar últimas ventas en SQLite con LEFT JOIN: $e\n$stackTrace');
       return _ventas.take(limite).toList();
     }
   }
 
-  /// Mapea de forma segura los registros crudos de SQLite a objetos Venta y sus ArticuloVenta
-  Future<List<Venta>> _mapearVentasDesdeSQLite(
-    Database db,
-    List<Map<String, dynamic>> mapasVentas,
-  ) async {
-    List<Venta> lista = [];
-    for (var mapaVenta in mapasVentas) {
-      final ventaId = mapaVenta['id'].toString();
-      final int? ventaIdInt = int.tryParse(ventaId);
+  /// Agrupa en memoria en O(n) los registros planos obtenidos de la consulta LEFT JOIN
+  /// para reconstruir la lista de objetos [Venta] con sus correspondientes [ArticuloVenta].
+  /// No realiza ninguna llamada asíncrona ni consulta adicional a SQLite dentro del bucle.
+  List<Venta> _agruparVentasDesdeFilasJoin(
+    List<Map<String, dynamic>> filas,
+  ) {
+    // LinkedHashMap preserva estrictamente el orden de inserción de las ventas (fecha DESC)
+    final Map<String, Venta> mapaVentas = {};
 
-      // Consulta compatible con identificadores String o int en SQLite
-      final mapasArticulos = await db.query(
-        'articulos_venta',
-        where: ventaIdInt != null ? 'venta_id = ? OR venta_id = ?' : 'venta_id = ?',
-        whereArgs: ventaIdInt != null ? [ventaId, ventaIdInt] : [ventaId],
-      );
+    for (final fila in filas) {
+      final ventaId = fila['v_id']?.toString() ?? '';
+      if (ventaId.isEmpty) continue;
 
-      List<ArticuloVenta> articulos = [];
-      for (var mapaArticulo in mapasArticulos) {
-        final productoId = mapaArticulo['producto_id'].toString();
-        var producto = controladorInventario.obtenerProducto(productoId);
-
-        // Si el producto no está cargado en memoria, buscarlo directamente en la BD
-        if (producto == null) {
-          final int? prodIdInt = int.tryParse(productoId);
-          final prodMaps = await db.query(
-            'productos',
-            where: prodIdInt != null ? 'id = ? OR id = ?' : 'id = ?',
-            whereArgs: prodIdInt != null ? [productoId, prodIdInt] : [productoId],
-          );
-          if (prodMaps.isNotEmpty) {
-            producto = Producto.fromMap(prodMaps.first);
-          }
-        }
-
-        // Fallback defensivo para asegurar que ningún artículo ni total se pierda
-        producto ??= Producto(
-          id: productoId,
-          nombre: 'Producto #$productoId',
-          precioVenta: (mapaArticulo['precioUnitario'] as num?)?.toDouble() ?? 0.0,
-          costo: 0.0,
-          cantidadEnInventario: 0,
-          tipo: 'articulo',
+      if (!mapaVentas.containsKey(ventaId)) {
+        final estadoRaw =
+            fila['v_estado']?.toString().toLowerCase().trim() ?? '';
+        final estado = EstadoVenta.values.firstWhere(
+          (e) => e.name.toLowerCase() == estadoRaw,
+          orElse: () => EstadoVenta.enProceso,
         );
 
-        articulos.add(ArticuloVenta.fromMap(mapaArticulo, producto));
+        mapaVentas[ventaId] = Venta(
+          id: ventaId,
+          fecha: fila['v_fecha'] != null
+              ? DateTime.tryParse(fila['v_fecha'].toString()) ?? DateTime.now()
+              : DateTime.now(),
+          estado: estado,
+          porcentajeIva:
+              (fila['v_porcentajeIva'] as num?)?.toDouble() ?? 0.16,
+          aplicarIva:
+              fila['v_aplicarIva'] != null ? fila['v_aplicarIva'] == 1 : true,
+          cliente: fila['v_cliente']?.toString() ?? 'Cliente Mostrador',
+          montoPagado:
+              (fila['v_montoPagado'] as num?)?.toDouble() ?? 0.0,
+          notas: fila['v_notas']?.toString() ?? '',
+          articulos: [],
+        );
       }
 
-      lista.add(Venta.fromMap(mapaVenta, articulos));
+      // Procesar artículo si la fila contiene uno (LEFT JOIN puede retornar nulo si la venta no tuvo artículos)
+      final dynamic articuloId = fila['a_id'];
+      final dynamic productoId = fila['a_producto_id'];
+
+      if (articuloId != null && productoId != null) {
+        final pIdStr = productoId.toString();
+
+        Producto producto;
+        if (fila['p_id'] != null) {
+          producto = Producto(
+            id: fila['p_id'].toString(),
+            nombre: fila['p_nombre']?.toString() ?? 'Producto #$pIdStr',
+            notas: fila['p_notas']?.toString() ?? '',
+            precioVenta: (fila['p_precioVenta'] as num?)?.toDouble() ??
+                (fila['a_precioUnitario'] as num?)?.toDouble() ??
+                0.0,
+            costo: (fila['p_costo'] as num?)?.toDouble() ?? 0.0,
+            cantidadEnInventario:
+                (fila['p_cantidadEnInventario'] as num?)?.toInt() ?? 0,
+            umbralStockCritico:
+                (fila['p_umbralStockCritico'] as num?)?.toInt() ?? 5,
+            tipo: (fila['p_tipo']?.toString().toLowerCase() == 'articulo')
+                ? 'articulo'
+                : 'planta',
+            imagenes: fila['p_imagenes'] != null &&
+                    fila['p_imagenes'].toString().isNotEmpty
+                ? fila['p_imagenes'].toString().split(',')
+                : [],
+            activo: fila['p_activo'] == null
+                ? true
+                : (fila['p_activo'] == 1 || fila['p_activo'] == true),
+          );
+        } else {
+          // Fallback en caso de inconsistencia referencial previa
+          final enMemoria = controladorInventario.obtenerProducto(pIdStr);
+          producto = enMemoria ??
+              Producto(
+                id: pIdStr,
+                nombre: 'Producto #$pIdStr',
+                precioVenta:
+                    (fila['a_precioUnitario'] as num?)?.toDouble() ?? 0.0,
+                costo: 0.0,
+                cantidadEnInventario: 0,
+                tipo: 'articulo',
+              );
+        }
+
+        final articulo = ArticuloVenta(
+          producto: producto,
+          cantidad: (fila['a_cantidad'] as num?)?.toInt() ?? 1,
+          precioUnitario: (fila['a_precioUnitario'] as num?)?.toDouble() ??
+              producto.precioVenta,
+        );
+
+        mapaVentas[ventaId]!.articulos.add(articulo);
+      }
     }
-    return lista;
+
+    return mapaVentas.values.toList();
   }
 
   void iniciarVenta() {
@@ -264,7 +366,9 @@ class ControladorVentas extends ChangeNotifier {
       }
 
       _ventaActual = null;
-      await cargarVentasHistorial();
+      // Optimización O(1): Insertar la venta apartada directamente al inicio de la lista local
+      _ventas.removeWhere((v) => v.id == venta.id);
+      _ventas.insert(0, venta);
       if (montoAbonoInicial > 0) {
         await controladorFinanzas.cargarTransacciones();
       }
@@ -280,8 +384,10 @@ class ControladorVentas extends ChangeNotifier {
         ventaTerminada.completarVenta();
         await _guardarVentaYDescontarStockEnBD(ventaTerminada);
 
-        // Recargar el historial directamente desde SQLite para asegurar sincronización 100% real
-        await cargarVentasHistorial();
+        // Optimización O(1): Insertar la venta completada directamente al inicio del historial local
+        // sin recargar innecesariamente toda la base de datos desde SQLite.
+        _ventas.removeWhere((v) => v.id == ventaTerminada.id);
+        _ventas.insert(0, ventaTerminada);
 
         await controladorFinanzas.registrarIngreso(
           'Venta completada: ${ventaTerminada.id}',
