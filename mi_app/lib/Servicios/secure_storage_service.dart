@@ -3,6 +3,23 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// Excepción de seguridad lanzada cuando el subsistema de hardware seguro
+/// (Android Keystore / iOS Keychain) no está disponible, reporta un error o falla
+/// al recuperar la clave criptográfica maestra de la base de datos.
+class KeystoreUnavailableException implements Exception {
+  final String mensaje;
+  final dynamic errorOriginal;
+
+  const KeystoreUnavailableException([
+    this.mensaje = 'El subsistema de hardware seguro (Keystore/Keychain) no está disponible o no responde.',
+    this.errorOriginal,
+  ]);
+
+  @override
+  String toString() =>
+      'KeystoreUnavailableException: $mensaje${errorOriginal != null ? ' (Causa: $errorOriginal)' : ''}';
+}
+
 /// Servicio especializado en el almacenamiento seguro de credenciales y
 /// llaves criptográficas utilizando el hardware de seguridad del dispositivo
 /// (Android Keystore / iOS Keychain).
@@ -18,13 +35,6 @@ class SecureStorageService {
 
   /// Llave utilizada para almacenar la frase de paso maestra de SQLCipher.
   static const String _keyMasterDb = 'planteapp_sqlcipher_master_key';
-
-  /// Frase de respaldo de alta entropía en caso de falla crítica del Keystore/Keychain.
-  static const String _fallbackMasterKey =
-      'Planteapp_AES256_SQLCipher_LocalVault_2026_Secure_Fallback';
-
-  /// Caché en memoria para mantener consistencia en la sesión actual si el Keystore falla.
-  String? _memoriaFallbackKey;
 
   /// Opciones de configuración segura para cada plataforma.
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
@@ -44,13 +54,15 @@ class SecureStorageService {
     ),
   );
 
-  /// Obtiene la llave maestra de cifrado para SQLCipher.
+  /// Obtiene la llave maestra de cifrado para SQLCipher desde el Keystore/Keychain.
   ///
   /// Si la llave ya existe en el Keystore/Keychain, la retorna.
   /// Si es el primer arranque, genera una llave criptográficamente segura de 256 bits,
-  /// la persiste en el almacenamiento seguro y la retorna.
-  /// Si el hardware de seguridad falla o no está disponible, activa un fallback seguro
-  /// para evitar que la aplicación falle o corrompa la base de datos.
+  /// la persiste en el hardware de seguridad y la retorna.
+  /// Si el hardware de seguridad falla o no está disponible, lanza [KeystoreUnavailableException].
+  ///
+  /// NUNCA se utiliza una clave fija de respaldo (fallback) para evitar corromper
+  /// la cabecera cifrada de la base de datos SQLite con una clave incorrecta.
   Future<String> obtenerClaveMaestraDb() async {
     try {
       final String? claveGuardada = await _storage.read(key: _keyMasterDb);
@@ -62,13 +74,29 @@ class SecureStorageService {
       // Si no existe, generamos una nueva llave aleatoria de 256 bits (32 bytes)
       final nuevaClave = generarClaveAleatoriaSegura(32);
       await _storage.write(key: _keyMasterDb, value: nuevaClave);
+
+      // Verificación de integridad: comprobar que el Keystore realmente persistió la clave
+      final verificacion = await _storage.read(key: _keyMasterDb);
+      if (verificacion == null || verificacion.trim().isEmpty) {
+        throw const KeystoreUnavailableException(
+          'Fallo de integridad: No se pudo verificar la persistencia de la clave maestra en el Keystore.',
+        );
+      }
+
       return nuevaClave;
     } on PlatformException catch (e) {
-      debugPrint('Aviso de seguridad: Keystore/Keychain no disponible: ${e.code} - ${e.message}');
-      return _obtenerFallbackSeguro();
+      debugPrint('Error crítico en Keystore/Keychain: ${e.code} - ${e.message}');
+      throw KeystoreUnavailableException(
+        'El hardware de seguridad del dispositivo reportó un fallo (${e.code}): ${e.message}',
+        e,
+      );
     } catch (e) {
-      debugPrint('Aviso de seguridad: Excepción al leer SecureStorage: $e');
-      return _obtenerFallbackSeguro();
+      debugPrint('Error crítico en SecureStorage: $e');
+      if (e is KeystoreUnavailableException) rethrow;
+      throw KeystoreUnavailableException(
+        'No se pudo acceder a la clave maestra de la base de datos de forma segura.',
+        e,
+      );
     }
   }
 
@@ -76,15 +104,12 @@ class SecureStorageService {
   Future<bool> guardarClaveMaestraDb(String clave) async {
     try {
       await _storage.write(key: _keyMasterDb, value: clave);
-      _memoriaFallbackKey = clave;
       return true;
     } on PlatformException catch (e) {
       debugPrint('Error en Keystore al escribir clave maestra: ${e.code}');
-      _memoriaFallbackKey = clave;
       return false;
     } catch (e) {
       debugPrint('Error general al escribir clave maestra: $e');
-      _memoriaFallbackKey = clave;
       return false;
     }
   }
@@ -93,11 +118,9 @@ class SecureStorageService {
   Future<bool> eliminarClaveMaestraDb() async {
     try {
       await _storage.delete(key: _keyMasterDb);
-      _memoriaFallbackKey = null;
       return true;
     } catch (e) {
       debugPrint('Error al eliminar clave maestra de SecureStorage: $e');
-      _memoriaFallbackKey = null;
       return false;
     }
   }
@@ -138,7 +161,6 @@ class SecureStorageService {
   Future<bool> limpiarTodo() async {
     try {
       await _storage.deleteAll();
-      _memoriaFallbackKey = null;
       return true;
     } catch (e) {
       debugPrint('Error al limpiar SecureStorage: $e');
@@ -153,12 +175,5 @@ class SecureStorageService {
     final random = Random.secure();
     final bytes = List<int>.generate(longitudBytes, (_) => random.nextInt(256));
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  /// Proporciona un fallback consistente durante el ciclo de vida de la aplicación
-  /// si el subsistema de hardware biométrico/seguro del dispositivo no responde.
-  String _obtenerFallbackSeguro() {
-    _memoriaFallbackKey ??= _fallbackMasterKey;
-    return _memoriaFallbackKey!;
   }
 }

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_ventas.dart';
+import '../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../Modelos/venta.dart';
 import '../Modelos/abono.dart';
 import '../Utilidades/formateador.dart';
 
 class DeudoresVista extends StatefulWidget {
-  final ControladorVentas controladorVentas;
+  final ControladorCuentasPorCobrar? controladorCuentasPorCobrar;
+  final ControladorVentas? controladorVentas;
 
   const DeudoresVista({
     super.key,
-    required this.controladorVentas,
+    this.controladorCuentasPorCobrar,
+    this.controladorVentas,
   });
 
   @override
@@ -25,6 +29,20 @@ class _DeudoresVistaState extends State<DeudoresVista> {
   String _busqueda = '';
   String _filtroActivo = 'pendientes'; // 'pendientes', 'todos', 'liquidados'
 
+  ControladorCuentasPorCobrar get _cobrables {
+    if (widget.controladorCuentasPorCobrar != null) {
+      return widget.controladorCuentasPorCobrar!;
+    }
+    try {
+      return context.read<ControladorCuentasPorCobrar>();
+    } catch (_) {
+      return ControladorCuentasPorCobrar(
+        controladorVentas: widget.controladorVentas!,
+        controladorFinanzas: widget.controladorVentas!.controladorFinanzas,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -32,7 +50,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
   }
 
   Future<void> _cargarCuentas() async {
-    final cuentas = await widget.controladorVentas.obtenerCuentasPorCobrar();
+    final cuentas = await _cobrables.obtenerCuentasPorCobrar();
     if (mounted) {
       setState(() {
         _cuentas = cuentas;
@@ -132,7 +150,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
         venta: deudorActual,
         onRegistrar: (monto, metodoPago) async {
           try {
-            await widget.controladorVentas.registrarAbono(
+            await _cobrables.registrarAbono(
               ventaId: deudorActual.id,
               monto: monto,
               metodoPago: metodoPago,
@@ -262,7 +280,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
 
     if (confirmar == true && mounted) {
       try {
-        await widget.controladorVentas.liquidarDeudaTotal(ventaId: deudorActual.id);
+        await _cobrables.liquidarDeudaTotal(ventaId: deudorActual.id);
         await _cargarCuentas();
         _mostrarToast('Cuenta liquidada en su totalidad con éxito.');
       } catch (e) {
@@ -287,7 +305,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
       isScrollControlled: true,
       builder: (ctx) => _HistorialAbonosSheet(
         venta: deudorActual,
-        controladorVentas: widget.controladorVentas,
+        controladorCuentasPorCobrar: _cobrables,
       ),
     );
   }
@@ -1159,11 +1177,13 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
 /// Sheet para consultar el historial cronológico de abonos de una cuenta
 class _HistorialAbonosSheet extends StatelessWidget {
   final Venta venta;
-  final ControladorVentas controladorVentas;
+  final ControladorCuentasPorCobrar? controladorCuentasPorCobrar;
+  final ControladorVentas? controladorVentas;
 
   const _HistorialAbonosSheet({
     required this.venta,
-    required this.controladorVentas,
+    this.controladorCuentasPorCobrar,
+    this.controladorVentas,
   });
 
   @override
@@ -1228,7 +1248,9 @@ class _HistorialAbonosSheet extends StatelessWidget {
 
           Expanded(
             child: FutureBuilder<List<Abono>>(
-              future: controladorVentas.obtenerAbonosDeVenta(venta.id),
+              future: (controladorCuentasPorCobrar ??
+                      context.read<ControladorCuentasPorCobrar>())
+                  .obtenerAbonosDeVenta(venta.id),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(

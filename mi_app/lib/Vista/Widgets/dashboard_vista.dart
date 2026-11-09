@@ -11,6 +11,7 @@ import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../historial_ventas_vista.dart';
 import '../deudores_vista.dart';
+import '../../Controladores/controlador_cuentas_por_cobrar.dart';
 
 class DashboardVista extends StatefulWidget {
   final Function(int)? alNavegar;
@@ -64,6 +65,7 @@ class _DashboardVistaState extends State<DashboardVista> {
         final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
         final bool tienePermisoFinanzas = usuarioActual?.rol == RolUsuario.duena ||
             usuarioActual?.rol == RolUsuario.gerente;
+        final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -93,7 +95,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(
-                              alpha: AppColors.isDark ? 0.25 : 0.04,
+                              alpha: isDark ? 0.25 : 0.04,
                             ),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
@@ -440,7 +442,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                   border: Border.all(color: AppColors.homeCardBorder, width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.25 : 0.04),
+                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -729,7 +731,8 @@ class _DashboardVistaState extends State<DashboardVista> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => DeudoresVista(
-                            controladorVentas: context.read<ControladorVentas>(),
+                            controladorCuentasPorCobrar:
+                                context.read<ControladorCuentasPorCobrar>(),
                           ),
                         ),
                       );
@@ -772,7 +775,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                   border: Border.all(color: AppColors.homeCardBorder, width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.20 : 0.04),
+                      color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -891,8 +894,8 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => DeudoresVista(
-                                      controladorVentas:
-                                          context.read<ControladorVentas>(),
+                                      controladorCuentasPorCobrar: context
+                                          .read<ControladorCuentasPorCobrar>(),
                                     ),
                                   ),
                                 );
@@ -1056,7 +1059,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                   border: Border.all(color: AppColors.homeCardBorder, width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: AppColors.isDark ? 0.20 : 0.04),
+                      color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),

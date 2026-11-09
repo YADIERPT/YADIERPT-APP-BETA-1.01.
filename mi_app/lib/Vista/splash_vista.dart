@@ -75,9 +75,18 @@ class _SplashVistaState extends State<SplashVista>
       final secureStorage = SecureStorageService.instancia;
       final recordar = await secureStorage.leer('planteapp_recordar_sesion');
       final ultimoId = await secureStorage.leer('planteapp_ultimo_usuario_id');
+      final tokenSesion =
+          await secureStorage.leer('planteapp_token_sesion_recordada');
 
-      if (recordar == 'true' && ultimoId != null && ultimoId.trim().isNotEmpty) {
-        final exito = await cAuth.iniciarSesionPorId(ultimoId.trim());
+      if (recordar == 'true' &&
+          ultimoId != null &&
+          ultimoId.trim().isNotEmpty &&
+          tokenSesion != null &&
+          tokenSesion.trim().isNotEmpty) {
+        final exito = await cAuth.iniciarSesionPorId(
+          id: ultimoId.trim(),
+          tokenVerificacion: tokenSesion.trim(),
+        );
         if (exito && mounted) {
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(

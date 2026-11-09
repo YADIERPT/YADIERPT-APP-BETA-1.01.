@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:crypto/crypto.dart' as legacy_crypto;
 import 'package:cryptography/cryptography.dart';
 
@@ -87,6 +88,15 @@ class ServicioCriptografia {
     }
 
     return false;
+  }
+
+  /// Genera una cadena aleatoria de alta entropía con bytes criptográficamente seguros.
+  ///
+  /// Por defecto produce 32 bytes (256 bits), codificados en formato hexadecimal.
+  static String generarClaveAleatoriaSegura([int longitudBytes = 32]) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(longitudBytes, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
 

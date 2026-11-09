@@ -16,6 +16,7 @@ import 'Controladores/controlador_perfil.dart';
 import 'Controladores/controlador_autenticacion.dart';
 import 'Controladores/controlador_biometrico.dart';
 import 'Controladores/controlador_hardware.dart';
+import 'Controladores/controlador_cuentas_por_cobrar.dart';
 import 'IA/Controladores/controlador_ia_compras.dart';
 import 'Modelos/producto.dart';
 
@@ -53,6 +54,11 @@ void main() async {
     controladorFinanzas: controladorFinanzas,
     controladorPerfil: controladorPerfil,
     controladorIA: controladorIA,
+  );
+
+  final controladorCuentasPorCobrar = ControladorCuentasPorCobrar(
+    controladorVentas: controladorVentas,
+    controladorFinanzas: controladorFinanzas,
   );
 
   final controladorInicio = ControladorInicio(
@@ -106,10 +112,11 @@ void main() async {
 
         // Controladores de lógica de negocio y repositorios
         ChangeNotifierProvider<ControladorInventario>.value(value: controladorInventario),
-        Provider<ControladorFinanzas>.value(value: controladorFinanzas),
+        ChangeNotifierProvider<ControladorFinanzas>.value(value: controladorFinanzas),
         Provider<ControladorPerfil>.value(value: controladorPerfil),
         ChangeNotifierProvider<ControladorAutenticacion>.value(value: controladorAutenticacion),
         ChangeNotifierProvider<ControladorVentas>.value(value: controladorVentas),
+        ChangeNotifierProvider<ControladorCuentasPorCobrar>.value(value: controladorCuentasPorCobrar),
         ChangeNotifierProvider<ControladorInicio>.value(value: controladorInicio),
         ChangeNotifierProvider<ControladorIACompras>.value(value: controladorIA),
         ChangeNotifierProvider<ControladorHardware>.value(value: controladorHardware),
@@ -129,6 +136,7 @@ class ViverApp extends StatelessWidget {
       animation: ThemeManager.instance,
       builder: (context, _) {
         return MaterialApp(
+          scaffoldMessengerKey: ControladorHardware.scaffoldMessengerKey,
           title: 'ViverApp POS',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,

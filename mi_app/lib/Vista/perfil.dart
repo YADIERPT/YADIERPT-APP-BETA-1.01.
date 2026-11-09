@@ -16,6 +16,7 @@ import 'Widgets/role_guard.dart';
 import 'Widgets/app_logo.dart';
 import 'Widgets/logo_biznaga.dart';
 import '../Controladores/controlador_ventas.dart';
+import '../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
 
@@ -290,7 +291,8 @@ class _PerfilVistaState extends State<PerfilVista> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DeudoresVista(
-                      controladorVentas: context.read<ControladorVentas>(),
+                      controladorCuentasPorCobrar:
+                          context.read<ControladorCuentasPorCobrar>(),
                     ),
                   ),
                 ),

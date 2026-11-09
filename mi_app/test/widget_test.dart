@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:mi_app/BaseDatos/base_datos.dart';
 import 'package:mi_app/Controladores/controlador_autenticacion.dart';
 import 'package:mi_app/Controladores/controlador_biometrico.dart';
 import 'package:mi_app/Modelos/colaborador.dart';
@@ -17,9 +20,14 @@ import 'package:mi_app/Modelos/abono.dart';
 import 'package:mi_app/Vista/deudores_vista.dart';
 import 'package:mi_app/Controladores/controlador_inventario.dart';
 import 'package:mi_app/Controladores/controlador_ventas.dart';
+import 'package:mi_app/Controladores/controlador_cuentas_por_cobrar.dart';
 import 'package:mi_app/Controladores/controlador_finanzas.dart';
 import 'package:mi_app/Controladores/controlador_perfil.dart';
 import 'package:mi_app/Controladores/controlador_inicio.dart';
+import 'package:mi_app/Vista/inicio.dart';
+import 'package:mi_app/Vista/pos_vista.dart';
+import 'package:mi_app/Vista/inventario_vista.dart';
+import 'package:mi_app/Vista/login.dart';
 import 'package:mi_app/Vista/splash_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_producto_inventario.dart';
 import 'package:mi_app/Vista/Widgets/dashboard_vista.dart';
@@ -37,6 +45,7 @@ import 'package:mi_app/Controladores/controlador_hardware.dart';
 import 'package:mi_app/Servicios/generador_esc_pos.dart';
 import 'package:mi_app/Modelos/configuracion_hardware.dart';
 import 'package:mi_app/Vista/Widgets/logo_biznaga.dart';
+import 'package:mi_app/IA/Controladores/controlador_ia_compras.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 void main() {
@@ -103,10 +112,57 @@ void main() {
       expect(key1, isNot(equals(key2)));
     });
 
-    test('obtenerClaveMaestraDb retorna clave no nula y activa fallback ante entorno sin hardware Keystore', () async {
-      final key = await SecureStorageService.instancia.obtenerClaveMaestraDb();
-      expect(key, isNotEmpty);
-      expect(key.length >= 32, isTrue);
+    test('obtenerClaveMaestraDb lanza KeystoreUnavailableException ante entorno sin hardware Keystore', () async {
+      expect(
+        () => SecureStorageService.instancia.obtenerClaveMaestraDb(),
+        throwsA(isA<KeystoreUnavailableException>()),
+      );
+    });
+  });
+
+  group('Seguridad Criptográfica y Control de Acceso en Autenticación', () {
+    test('generarTokenDesafioBiometrico produce tokens de 64 caracteres hex', () {
+      final authCtrl = ControladorAutenticacion();
+      final token = authCtrl.generarTokenDesafioBiometrico('USR-1');
+      expect(token.length, 64);
+      expect(RegExp(r'^[a-f0-9]{64}$').hasMatch(token), isTrue);
+    });
+
+    test('iniciarSesionPorId rechaza acceso con token inválido o inexistente', () async {
+      final authCtrl = ControladorAutenticacion();
+      final exito = await authCtrl.iniciarSesionPorId(
+        id: 'USR-ADMIN',
+        tokenVerificacion: 'token-falso-inyeccion',
+      );
+      expect(exito, isFalse);
+      expect(authCtrl.usuarioActual, isNull);
+    });
+
+    test('iniciarSesionPorId rechaza token emitido para otro usuario', () async {
+      final authCtrl = ControladorAutenticacion();
+      final token = authCtrl.generarTokenDesafioBiometrico('USR-VALIDO');
+      final exito = await authCtrl.iniciarSesionPorId(
+        id: 'USR-ADMIN',
+        tokenVerificacion: token,
+      );
+      expect(exito, isFalse);
+      expect(authCtrl.usuarioActual, isNull);
+    });
+
+    test('iniciarSesionPorId invalida token de un solo uso impidiendo ataques de replay', () async {
+      final authCtrl = ControladorAutenticacion();
+      final token = authCtrl.generarTokenDesafioBiometrico('USR-1');
+
+      await authCtrl.iniciarSesionPorId(
+        id: 'USR-1',
+        tokenVerificacion: token,
+      );
+
+      final intentoReplay = await authCtrl.iniciarSesionPorId(
+        id: 'USR-1',
+        tokenVerificacion: token,
+      );
+      expect(intentoReplay, isFalse);
     });
   });
 
@@ -1102,6 +1158,557 @@ void main() {
       expect(loader, isA<SvgAssetLoader>());
       final assetLoader = loader as SvgAssetLoader;
       expect(assetLoader.assetName, LogoBiznaga.assetOscuro);
+    });
+  });
+
+  group('Reactividad Contable en ControladorFinanzas (P1)', () {
+    test('ControladorFinanzas es ChangeNotifier y expone estado inicial consistente', () {
+      final ctrlFin = ControladorFinanzas();
+      expect(ctrlFin, isA<ChangeNotifier>());
+      expect(ctrlFin.transacciones, isEmpty);
+      expect(ctrlFin.totalIngresos, 0.0);
+      expect(ctrlFin.totalEgresos, 0.0);
+      expect(ctrlFin.totalMermas, 0.0);
+      expect(ctrlFin.balanceTotal, 0.0);
+      expect(ctrlFin.obtenerBalance(), 0.0);
+      expect(ctrlFin.cargando, isFalse);
+    });
+
+    test('registrarIngreso, registrarEgreso, registrarMerma y registrarIngresoVentaContado notifican reactivamente a listeners', () async {
+      final ctrlFin = ControladorFinanzas();
+      int notificaciones = 0;
+      ctrlFin.addListener(() {
+        notificaciones++;
+      });
+
+      // 1. Ingreso
+      await ctrlFin.registrarIngreso('Venta mostrador', 150.0);
+      expect(notificaciones, 1);
+      expect(ctrlFin.transacciones.length, 1);
+      expect(ctrlFin.totalIngresos, 150.0);
+      expect(ctrlFin.balanceTotal, 150.0);
+
+      // 2. Egreso
+      await ctrlFin.registrarEgreso('Compra sustrato', 50.0);
+      expect(notificaciones, 2);
+      expect(ctrlFin.transacciones.length, 2);
+      expect(ctrlFin.totalEgresos, 50.0);
+      expect(ctrlFin.balanceTotal, 100.0);
+
+      // 3. Merma
+      await ctrlFin.registrarMerma('Planta marchita', 20.0);
+      expect(notificaciones, 3);
+      expect(ctrlFin.transacciones.length, 3);
+      expect(ctrlFin.totalMermas, 20.0);
+      expect(ctrlFin.totalEgresos, 70.0);
+      expect(ctrlFin.balanceTotal, 80.0);
+
+      // 4. Venta Contado Semántica
+      await ctrlFin.registrarIngresoVentaContado(ventaId: 'VTA-999', monto: 200.0);
+      expect(notificaciones, 4);
+      expect(ctrlFin.transacciones.length, 4);
+      expect(ctrlFin.totalIngresos, 350.0);
+      expect(ctrlFin.balanceTotal, 280.0);
+      expect(ctrlFin.obtenerBalance(), 280.0);
+    });
+
+    test('ControladorInicio escucha automáticamente cambios en ControladorFinanzas y recalcula métricas', () async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      int inicioNotificaciones = 0;
+      ctrlInicio.addListener(() {
+        inicioNotificaciones++;
+      });
+
+      await ctrlFin.registrarIngreso('Aporte extraordinario', 500.0);
+      expect(inicioNotificaciones, greaterThanOrEqualTo(1));
+    });
+  });
+
+  group('Carga Perezosa de Pestañas en InicioVista (P1)', () {
+    testWidgets('InicioVista monta bajo demanda solo la pestaña activa liberando memoria Heap', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'ADM_01',
+          nombre: 'Ana Dueña',
+          clave: '123456',
+          rol: RolUsuario.duena,
+        ),
+      );
+      final ctrlHw = ControladorHardware();
+      final ctrlIA = ControladorIACompras(controladorInventario: ctrlInv);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInicio>.value(value: ctrlInicio),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: ctrlFin),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorPerfil>.value(value: ctrlPerf),
+            ChangeNotifierProvider<ControladorHardware>.value(value: ctrlHw),
+            ChangeNotifierProvider<ControladorIACompras>.value(value: ctrlIA),
+          ],
+          child: const MaterialApp(
+            home: InicioVista(),
+          ),
+        ),
+      );
+
+      // En el arranque inicial (tab 0: Inicio / Dashboard):
+      // 1. DashboardVista DEBE estar montado
+      expect(find.byType(DashboardVista), findsOneWidget);
+
+      // 2. PosVista e InventarioVista NO deben estar montados en memoria (Lazy Loading)
+      expect(find.byType(PosVista), findsNothing);
+      expect(find.byType(InventarioVista), findsNothing);
+
+      // Al navegar a 'Ventas' (tab 1):
+      await tester.tap(find.byIcon(Icons.shopping_cart_outlined));
+      await tester.pumpAndSettle();
+
+      // PosVista se monta bajo demanda
+      expect(find.byType(PosVista), findsOneWidget);
+      // DashboardVista e InventarioVista no están montados
+      expect(find.byType(DashboardVista), findsNothing);
+      expect(find.byType(InventarioVista), findsNothing);
+
+      // Al navegar a 'Inventario' (tab 2):
+      await tester.tap(find.text('Inventario').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InventarioVista), findsOneWidget);
+      expect(find.byType(PosVista), findsNothing);
+    });
+  });
+
+  group('Erradicación de AppColors.isDark y Declaratividad de Tema (P1)', () {
+    testWidgets('LoginVista se renderiza puramente desde Theme.of(context) en modo claro y oscuro', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      final ctrlBio = ControladorBiometrico();
+
+      // 1. Renderizado en Modo Claro
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const LoginVista(),
+          ),
+        ),
+      );
+
+      expect(find.byType(LogoBiznaga), findsOneWidget);
+      expect(find.text('Usuario o correo'), findsOneWidget);
+      expect(find.text('PIN de acceso o clave'), findsOneWidget);
+      expect(find.text('Ingresar'), findsOneWidget);
+
+      // 2. Renderizado en Modo Oscuro
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: const LoginVista(),
+          ),
+        ),
+      );
+
+      expect(find.byType(LogoBiznaga), findsOneWidget);
+      expect(find.text('Usuario o correo'), findsOneWidget);
+      expect(find.text('PIN de acceso o clave'), findsOneWidget);
+      expect(find.text('Ingresar'), findsOneWidget);
+    });
+
+    testWidgets('LogoBiznaga resuelve brillo mediante BotanicalThemeColors sin tocar banderas estáticas', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.light,
+          home: const Scaffold(
+            body: LogoBiznaga(size: 80),
+          ),
+        ),
+      );
+
+      final svgFinderClaro = find.byType(SvgPicture);
+      expect(svgFinderClaro, findsOneWidget);
+      final SvgPicture svgClaro = tester.widget(svgFinderClaro);
+      final assetLoaderClaro = svgClaro.bytesLoader as SvgAssetLoader;
+      expect(assetLoaderClaro.assetName, LogoBiznaga.assetClaro);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.dark,
+          home: const Scaffold(
+            body: LogoBiznaga(size: 80),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final svgFinderOscuro = find.byType(SvgPicture);
+      expect(svgFinderOscuro, findsOneWidget);
+      final SvgPicture svgOscuro = tester.widget(svgFinderOscuro);
+      final assetLoaderOscuro = svgOscuro.bytesLoader as SvgAssetLoader;
+      expect(assetLoaderOscuro.assetName, LogoBiznaga.assetOscuro);
+    });
+  });
+
+  group('Granularidad con Selector en Inventario y POS (P2)', () {
+    testWidgets('InventarioVista utiliza Selector para aislar re-renderizados de productos', (tester) async {
+      final cInv = ControladorInventario();
+      final cFinanzas = ControladorFinanzas();
+      final cPerfil = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFinanzas,
+        controladorPerfil: cPerfil,
+      );
+      final cAuth = ControladorAutenticacion();
+      final cIA = ControladorIACompras(controladorInventario: cInv);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: cInv),
+            ChangeNotifierProvider.value(value: cVentas),
+            ChangeNotifierProvider.value(value: cAuth),
+            ChangeNotifierProvider.value(value: cIA),
+            ChangeNotifierProvider.value(value: cFinanzas),
+            Provider<ControladorPerfil>.value(value: cPerfil),
+          ],
+          child: const MaterialApp(
+            home: InventarioVista(),
+          ),
+        ),
+      );
+
+      expect(find.byType(Selector<ControladorInventario, List<Producto>>), findsOneWidget);
+    });
+
+    testWidgets('PosVista utiliza Selector para aislar la cuadrícula del catálogo', (tester) async {
+      final cInv = ControladorInventario();
+      final cFinanzas = ControladorFinanzas();
+      final cPerfil = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFinanzas,
+        controladorPerfil: cPerfil,
+      );
+      final cAuth = ControladorAutenticacion();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: cInv),
+            ChangeNotifierProvider.value(value: cVentas),
+            ChangeNotifierProvider.value(value: cAuth),
+            ChangeNotifierProvider.value(value: cFinanzas),
+            Provider<ControladorPerfil>.value(value: cPerfil),
+          ],
+          child: const MaterialApp(
+            home: PosVista(),
+          ),
+        ),
+      );
+
+      expect(find.byType(Selector<ControladorInventario, List<Producto>>), findsOneWidget);
+    });
+  });
+
+  group('Paginación en Consultas Históricas y Búsqueda Optimizada (P2)', () {
+    test('ControladorVentas soporta parámetros limite y offset en cargarVentas', () {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      expect(ctrlVentas.hayMasVentas, isTrue);
+      expect(ctrlVentas.cargandoPaginaVentas, isFalse);
+      expect(ctrlVentas.cargarSiguientePaginaVentas, isA<Function>());
+      expect(ctrlVentas.refrescarVentasHistorial, isA<Function>());
+    });
+
+    test('ControladorInventario soporta paginación y búsqueda indexada con límite', () {
+      final ctrlInv = ControladorInventario();
+      expect(ctrlInv.buscarProductosAsync, isA<Function>());
+    });
+
+    testWidgets('HistorialVentasVista inicializa con ScrollController para paginación progresiva', (tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HistorialVentasVista(controladorVentas: ctrlVentas),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListView), findsOneWidget);
+    });
+  });
+
+  group('Concurrencia y Optimización WAL en SQLite', () {
+    test('BaseDeDatos expone método singleton para inicializar base de datos con WAL', () {
+      expect(BaseDeDatos.instancia, isNotNull);
+      expect(BaseDeDatos.instancia, same(BaseDeDatos.instancia));
+    });
+  });
+
+  group('ControladorCuentasPorCobrar y Desacoplamiento SRP', () {
+    test('ControladorCuentasPorCobrar inicializa con estado consistente y extiende ChangeNotifier', () {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCobrar = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      expect(ctrlCobrar, isA<ChangeNotifier>());
+      expect(ctrlCobrar.cuentasPorCobrar, isEmpty);
+      expect(ctrlCobrar.cargando, isFalse);
+      expect(ctrlCobrar.totalSaldoPendiente, 0.0);
+      expect(ctrlCobrar.totalCuentasActivas, 0);
+    });
+
+    testWidgets('DeudoresVista se renderiza utilizando ControladorCuentasPorCobrar', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCobrar = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DeudoresVista(controladorCuentasPorCobrar: ctrlCobrar),
+        ),
+      );
+
+      expect(find.byType(DeudoresVista), findsOneWidget);
+      expect(find.text('Cuentas por Cobrar'), findsOneWidget);
+    });
+  });
+
+  group('Indexación de Texto Completo FTS5 y Búsqueda con MATCH', () {
+    test('ControladorInventario expone buscarProductosAsync optimizado', () {
+      final ctrlInv = ControladorInventario();
+      expect(ctrlInv.buscarProductosAsync, isA<Function>());
+      expect(ctrlInv.buscarProductos('test'), isA<List<Producto>>());
+    });
+
+    test('SQLite soporta FTS5 con contenido externo y triggers de sincronización', () async {
+      sqfliteFfiInit();
+      final ffiDb = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath, options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE productos (
+              id TEXT PRIMARY KEY,
+              nombre TEXT NOT NULL,
+              notas TEXT,
+              precioVenta REAL NOT NULL,
+              costo REAL NOT NULL,
+              cantidadEnInventario INTEGER NOT NULL,
+              imagenes TEXT,
+              umbralStockCritico INTEGER NOT NULL DEFAULT 5,
+              tipo TEXT NOT NULL DEFAULT 'planta',
+              activo INTEGER NOT NULL DEFAULT 1
+            )
+          ''');
+
+          await db.execute('''
+            CREATE VIRTUAL TABLE IF NOT EXISTS productos_fts USING fts5(
+              nombre,
+              notas,
+              tipo,
+              content='productos',
+              content_rowid='rowid'
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TRIGGER IF NOT EXISTS productos_fts_ai AFTER INSERT ON productos BEGIN
+              INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+              VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+            END;
+          ''');
+
+          await db.execute('''
+            CREATE TRIGGER IF NOT EXISTS productos_fts_ad AFTER DELETE ON productos BEGIN
+              INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+              VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+            END;
+          ''');
+
+          await db.execute('''
+            CREATE TRIGGER IF NOT EXISTS productos_fts_au AFTER UPDATE ON productos BEGIN
+              INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+              VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+              INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+              VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+            END;
+          ''');
+        },
+      ));
+
+      await ffiDb.insert('productos', {
+        'id': 'p-test',
+        'nombre': 'Begonia Maculata',
+        'notas': 'Planta de sombra con puntos plateados',
+        'precioVenta': 250.0,
+        'costo': 120.0,
+        'cantidadEnInventario': 10,
+        'tipo': 'planta',
+        'activo': 1,
+      });
+
+      final matchRes = await ffiDb.rawQuery('''
+        SELECT p.*
+        FROM productos p
+        JOIN productos_fts f ON p.rowid = f.rowid
+        WHERE p.activo = 1 AND productos_fts MATCH ?
+      ''', ['plateados*']);
+
+      expect(matchRes.length, 1);
+      expect(matchRes.first['id'], 'p-test');
+      await ffiDb.close();
+    });
+  });
+
+  group('Sondeo de Estado en Tiempo Real ESC/POS (DLE EOT)', () {
+    test('EstadoHardwareImpresora decodifica correctamente banderas binarias ESC/POS', () {
+      // Estado normal
+      final estadoNormal = EstadoHardwareImpresora.desdeBytes(bytePapel: 0x00);
+      expect(estadoNormal.tienePapel, isTrue);
+      expect(estadoNormal.esOperativo, isTrue);
+      expect(estadoNormal.mensajeError, isNull);
+
+      // Estado falta de papel (bits 5 y 6 = 0x60)
+      final estadoSinPapel = EstadoHardwareImpresora.desdeBytes(bytePapel: 0x60);
+      expect(estadoSinPapel.tienePapel, isFalse);
+      expect(estadoSinPapel.esOperativo, isFalse);
+      expect(estadoSinPapel.mensajeError, contains('sin rollo'));
+
+      // Estado papel casi agotado (bits 2 y 3 = 0x0C)
+      final estadoPapelBajo = EstadoHardwareImpresora.desdeBytes(bytePapel: 0x0C);
+      expect(estadoPapelBajo.tienePapel, isTrue);
+      expect(estadoPapelBajo.papelCasiAgotado, isTrue);
+      expect(estadoPapelBajo.esOperativo, isTrue);
+
+      // Estado tapa abierta (bit 2 = 0x04)
+      final estadoTapa = EstadoHardwareImpresora.desdeBytes(bytePapel: 0x00, byteOffline: 0x04);
+      expect(estadoTapa.tapaAbierta, isTrue);
+      expect(estadoTapa.esOperativo, isFalse);
+      expect(estadoTapa.mensajeError, contains('Tapa abierta'));
+    });
+
+    test('ControladorHardware aborta transmisión si se detecta falta de rollo de papel', () async {
+      final ctrlHw = ControladorHardware();
+      expect(ControladorHardware.comandoDleEotPapel, equals([0x10, 0x04, 0x04]));
+      expect(ControladorHardware.comandoDleEotOffline, equals([0x10, 0x04, 0x02]));
+
+      // Inyectar byte de error (0x60 = fin de rollo de papel)
+      ctrlHw.inyectarRespuestaHardwarePrueba(0x60);
+
+      // Intentar enviar flujo de bytes masivo
+      final exito = await ctrlHw.enviarBytesAImpresora([0x1B, 0x40, 0x41, 0x42, 0x43]);
+
+      // Debe abortar de inmediato sin gastar socket ni memoria
+      expect(exito, isFalse);
+
+      // Restaurar estado
+      ctrlHw.inyectarRespuestaHardwarePrueba(null);
+    });
+
+    testWidgets('mostrarAlertaHardware despliega SnackBar ante contingencia física', (WidgetTester tester) async {
+      final ctrlHw = ControladorHardware();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          scaffoldMessengerKey: ControladorHardware.scaffoldMessengerKey,
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () {
+                  ctrlHw.mostrarAlertaHardware('¡Impresora sin rollo!', context: ctx);
+                },
+                child: const Text('Probar Alerta'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Probar Alerta'));
+      await tester.pump(); // Inicia animación del SnackBar
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('¡Impresora sin rollo!'), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
   });
 }

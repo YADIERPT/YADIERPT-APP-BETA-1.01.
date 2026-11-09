@@ -367,16 +367,15 @@ class _HardwareVistaState extends State<HardwareVista> {
     setState(() => _imprimiendoPrueba = true);
 
     await _guardarConfiguracion(notificar: false);
-    final exito = await _hardwareCtrl.imprimirTicketPrueba();
+    final exito = await _hardwareCtrl.imprimirTicketPrueba(context: context);
 
     if (mounted) {
       setState(() => _imprimiendoPrueba = false);
-      _mostrarToast(
-        exito
-            ? 'Ticket de prueba enviado a la impresora térmico ($_anchoPapelImpresora).'
-            : 'No se pudo completar el trabajo de impresión térmica.',
-        esError: !exito,
-      );
+      if (exito) {
+        _mostrarToast(
+          'Ticket de prueba enviado a la impresora térmico ($_anchoPapelImpresora).',
+        );
+      }
     }
   }
 

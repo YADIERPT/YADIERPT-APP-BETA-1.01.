@@ -28,7 +28,10 @@ class InicioVista extends StatefulWidget {
 class _InicioVistaState extends State<InicioVista> {
   int _indiceActual = 0;
   final List<int> _historialTabs = [0];
-  late final List<Widget> _paginas;
+
+  /// Carga perezosa (Lazy Loading): Arreglo de 4 posiciones que inicializa las vistas bajo demanda.
+  /// Evita inflar y retener los 4 árboles de widgets en memoria en el arranque inicial de la app.
+  final List<Widget?> _paginas = List.filled(4, null);
 
   @override
   void initState() {
@@ -41,28 +44,48 @@ class _InicioVistaState extends State<InicioVista> {
       _historialTabs.clear();
       _historialTabs.add(1);
     }
-    _paginas = [
-      DashboardVista(
-        alNavegar: (indice) {
-          _navegarA(indice);
-        },
-      ),
-      const PosVista(),
-      const InventarioVista(),
-      PerfilVista(
-        onLogout: () async {
-          await SecureStorageService.instancia
-              .guardar('planteapp_recordar_sesion', 'false');
-          if (!mounted) return;
-          context.read<ControladorAutenticacion>().cerrarSesion();
-          Navigator.of(context, rootNavigator: true).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const LoginVista(),
-            ),
+  }
+
+  /// Retorna la vista correspondiente al índice especificado, instanciándola de forma perezosa
+  /// únicamente la primera vez que el usuario la visita y conservando su instancia única en memoria.
+  Widget _construirPagina(int indice) {
+    if (_paginas[indice] == null) {
+      switch (indice) {
+        case 0:
+          _paginas[0] = DashboardVista(
+            alNavegar: (idx) => _navegarA(idx),
           );
-        },
+          break;
+        case 1:
+          _paginas[1] = const PosVista();
+          break;
+        case 2:
+          _paginas[2] = const InventarioVista();
+          break;
+        case 3:
+          _paginas[3] = PerfilVista(
+            onLogout: _cerrarSesion,
+          );
+          break;
+        default:
+          return const SizedBox.shrink();
+      }
+    }
+    return _paginas[indice]!;
+  }
+
+  Future<void> _cerrarSesion() async {
+    await SecureStorageService.instancia
+        .guardar('planteapp_recordar_sesion', 'false');
+    await SecureStorageService.instancia
+        .eliminar('planteapp_token_sesion_recordada');
+    if (!mounted) return;
+    context.read<ControladorAutenticacion>().cerrarSesion();
+    Navigator.of(context, rootNavigator: true).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const LoginVista(),
       ),
-    ];
+    );
   }
 
   void _navegarA(int indice) {
@@ -140,6 +163,8 @@ class _InicioVistaState extends State<InicioVista> {
     if (salir == true && mounted) {
       await SecureStorageService.instancia
           .guardar('planteapp_recordar_sesion', 'false');
+      await SecureStorageService.instancia
+          .eliminar('planteapp_token_sesion_recordada');
       context.read<ControladorAutenticacion>().cerrarSesion();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushReplacement(
@@ -400,7 +425,10 @@ class _InicioVistaState extends State<InicioVista> {
                     ),
                   ),
                   Expanded(
-                    child: IndexedStack(index: _indiceActual, children: _paginas),
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_indiceActual),
+                      child: _construirPagina(_indiceActual),
+                    ),
                   ),
                 ],
               ),

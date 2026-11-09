@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
+import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
@@ -84,20 +86,12 @@ class _PosVistaState extends State<PosVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    // Inyección declarativa de dependencias mediante Provider
-    final cInventario = context.watch<ControladorInventario>();
+    // Inyección declarativa granular mediante Provider
     final cVentas = context.watch<ControladorVentas>();
 
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final productos =
-            cInventario.buscarProductos(_busqueda).where((p) {
-          if (_categoriaSeleccionada == 'planta') return p.esPlanta;
-          if (_categoriaSeleccionada == 'articulo') return p.esArticulo;
-          return true;
-        }).toList();
-
         final totalArticulos = cVentas.totalArticulosEnCarrito;
         final totalVenta = cVentas.totalVentaActual;
 
@@ -111,79 +105,100 @@ class _PosVistaState extends State<PosVista> {
                 _buildCategoryChips(isLandscape),
                 _buildContextStrip(isLandscape),
                 Expanded(
-                  child: productos.isEmpty
-                      ? Center(
+                  child: Selector<ControladorInventario, List<Producto>>(
+                    selector: (context, cInv) =>
+                        cInv.productos.map((p) => p.copyWith()).toList(),
+                    shouldRebuild: (previous, next) {
+                      if (previous.length != next.length) return true;
+                      return !listEquals(previous, next);
+                    },
+                    builder: (context, productosInventario, _) {
+                      final productos = productosInventario.where((p) {
+                        final coincide = _busqueda.isEmpty ||
+                            p.coincideConBusqueda(_busqueda);
+                        if (!coincide) return false;
+                        if (_categoriaSeleccionada == 'planta') return p.esPlanta;
+                        if (_categoriaSeleccionada == 'articulo') return p.esArticulo;
+                        return true;
+                      }).toList();
+
+                      if (productos.isEmpty) {
+                        return Center(
                           child: Text(
                             'No hay productos que coincidan con la búsqueda',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
-                        )
-                      : GridView.builder(
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            isLandscape ? 4 : 8,
-                            16,
-                            totalArticulos > 0 ? 80 : 20,
-                          ),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: isLandscape ? 4 : 2,
-                            childAspectRatio: isLandscape ? 0.78 : 0.70,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: productos.length,
-                          itemBuilder: (context, index) {
-                            final producto = productos[index];
-                            final int cantidadEnTicket =
-                                cVentas.obtenerCantidadEnCarrito(producto.id);
+                        );
+                      }
 
-                            return TarjetaPosProducto(
-                              producto: producto,
-                              cantidadEnTicket: cantidadEnTicket,
-                              onAgregar: () {
-                                try {
-                                  context
-                                      .read<ControladorVentas>()
-                                      .agregarArticulo(producto, 1);
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(e
-                                          .toString()
-                                          .replaceAll('Exception: ', '')),
-                                      backgroundColor: AppColors.error,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
-                              onIncrementar: () {
-                                try {
-                                  context
-                                      .read<ControladorVentas>()
-                                      .agregarArticulo(producto, 1);
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(e
-                                          .toString()
-                                          .replaceAll('Exception: ', '')),
-                                      backgroundColor: AppColors.error,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
-                              onDecrementar: () {
+                      return GridView.builder(
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          isLandscape ? 4 : 8,
+                          16,
+                          totalArticulos > 0 ? 80 : 20,
+                        ),
+                        gridDelegate:
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: isLandscape ? 4 : 2,
+                          childAspectRatio: isLandscape ? 0.78 : 0.70,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: productos.length,
+                        itemBuilder: (context, index) {
+                          final producto = productos[index];
+                          final int cantidadEnTicket =
+                              cVentas.obtenerCantidadEnCarrito(producto.id);
+
+                          return TarjetaPosProducto(
+                            producto: producto,
+                            cantidadEnTicket: cantidadEnTicket,
+                            onAgregar: () {
+                              try {
                                 context
                                     .read<ControladorVentas>()
-                                    .decrementarArticulo(producto.id);
-                              },
-                              onSinUnidades: _mostrarAvisoSinUnidades,
-                            );
-                          },
-                        ),
+                                    .agregarArticulo(producto, 1);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            onIncrementar: () {
+                              try {
+                                context
+                                    .read<ControladorVentas>()
+                                    .agregarArticulo(producto, 1);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            onDecrementar: () {
+                              context
+                                  .read<ControladorVentas>()
+                                  .decrementarArticulo(producto.id);
+                            },
+                            onSinUnidades: _mostrarAvisoSinUnidades,
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

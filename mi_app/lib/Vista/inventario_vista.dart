@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -237,49 +238,59 @@ class _InventarioVistaState extends State<InventarioVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    final cInventario = context.watch<ControladorInventario>();
     final cAuth = context.watch<ControladorAutenticacion>();
     final cIA = context.watch<ControladorIACompras>();
 
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        List<Producto> productos =
-            cInventario.buscarProductos(_busqueda);
+        return Selector<ControladorInventario, List<Producto>>(
+          selector: (context, cInv) =>
+              cInv.productos.map((p) => p.copyWith()).toList(),
+          shouldRebuild: (previous, next) {
+            if (previous.length != next.length) return true;
+            return !listEquals(previous, next);
+          },
+          builder: (context, productosInventario, _) {
+            List<Producto> productos = _busqueda.isEmpty
+                ? List.of(productosInventario)
+                : productosInventario
+                    .where((p) => p.coincideConBusqueda(_busqueda))
+                    .toList();
 
-        int totalPlantas = 0;
-        int stockCritico = 0;
-        int totalArticulos = 0;
-        for (final p in cInventario.productos) {
-          if (p.esPlanta) totalPlantas++;
-          if (p.esArticulo) totalArticulos++;
-          if (p.esStockCritico) stockCritico++;
-        }
+            int totalPlantas = 0;
+            int stockCritico = 0;
+            int totalArticulos = 0;
+            for (final p in productosInventario) {
+              if (p.esPlanta) totalPlantas++;
+              if (p.esArticulo) totalArticulos++;
+              if (p.esStockCritico) stockCritico++;
+            }
 
-        // Aplicar filtro de los 3 botones superiores
-        if (_filtroActivo == 'critico') {
-          productos = productos.where((p) => p.esStockCritico).toList();
-        } else if (_filtroActivo == 'plantas') {
-          productos = productos.where((p) => p.esPlanta).toList();
-        } else if (_filtroActivo == 'articulos') {
-          productos = productos.where((p) => p.esArticulo).toList();
-        }
+            // Aplicar filtro de los 3 botones superiores
+            if (_filtroActivo == 'critico') {
+              productos = productos.where((p) => p.esStockCritico).toList();
+            } else if (_filtroActivo == 'plantas') {
+              productos = productos.where((p) => p.esPlanta).toList();
+            } else if (_filtroActivo == 'articulos') {
+              productos = productos.where((p) => p.esArticulo).toList();
+            }
 
-        String tituloLista =
-            'Catálogo · Todos los Productos (${productos.length})';
-        if (_filtroActivo == 'critico') {
-          tituloLista = 'Catálogo · Stock Crítico ($stockCritico)';
-        } else if (_filtroActivo == 'plantas') {
-          tituloLista = 'Catálogo · Plantas ($totalPlantas)';
-        } else if (_filtroActivo == 'articulos') {
-          tituloLista = 'Catálogo · Artículos ($totalArticulos)';
-        }
+            String tituloLista =
+                'Catálogo · Todos los Productos (${productos.length})';
+            if (_filtroActivo == 'critico') {
+              tituloLista = 'Catálogo · Stock Crítico ($stockCritico)';
+            } else if (_filtroActivo == 'plantas') {
+              tituloLista = 'Catálogo · Plantas ($totalPlantas)';
+            } else if (_filtroActivo == 'articulos') {
+              tituloLista = 'Catálogo · Artículos ($totalArticulos)';
+            }
 
-        final rolActual = cAuth.usuarioActual?.rol;
-        final bool puedeModificar =
-            rolActual?.puedeModificarInventario ?? true;
+            final rolActual = cAuth.usuarioActual?.rol;
+            final bool puedeModificar =
+                rolActual?.puedeModificarInventario ?? true;
 
-        return Scaffold(
+            return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
           floatingActionButton: null,
@@ -452,7 +463,9 @@ class _InventarioVistaState extends State<InventarioVista> {
               ),
             ),
           );
-      },
-    );
+        },
+      );
+    },
+  );
   }
 }

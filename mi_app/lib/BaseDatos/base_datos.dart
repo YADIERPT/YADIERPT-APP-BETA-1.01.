@@ -38,11 +38,22 @@ class BaseDeDatos {
       await _migrarSiEsTextoPlano(path, password);
     }
 
+    final Database dbInstancia;
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      return await sqlcipher.openDatabase(
+      dbInstancia = await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 12,
+        version: 13,
+        onConfigure: (db) async {
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: _crearEsquema,
+        onUpgrade: _actualizarEsquema,
+      );
+    } else {
+      dbInstancia = await openDatabase(
+        path,
+        version: 13,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -51,15 +62,18 @@ class BaseDeDatos {
       );
     }
 
-    return await openDatabase(
-      path,
-      version: 12,
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
-      onCreate: _crearEsquema,
-      onUpgrade: _actualizarEsquema,
-    );
+    // Activación de concurrencia real mediante Write-Ahead Logging (WAL)
+    // y optimización de durabilidad transaccional sin sacrificar integridad ACID.
+    if (!kIsWeb) {
+      try {
+        await dbInstancia.execute('PRAGMA journal_mode = WAL');
+        await dbInstancia.execute('PRAGMA synchronous = NORMAL');
+      } catch (e) {
+        debugPrint('Aviso al configurar WAL en SQLite: $e');
+      }
+    }
+
+    return dbInstancia;
   }
 
   /// Migra una base de datos preexistente en texto plano hacia SQLCipher AES-256
@@ -268,6 +282,50 @@ class BaseDeDatos {
         'CREATE INDEX IF NOT EXISTS idx_productos_activo ON productos (activo)',
       );
     }
+    if (oldVersion < 13) {
+      // Migración a FTS5 (Full-Text Search) para búsqueda botánica de alto rendimiento
+      await db.execute('''
+        CREATE VIRTUAL TABLE IF NOT EXISTS productos_fts USING fts5(
+          nombre,
+          notas,
+          tipo,
+          content='productos',
+          content_rowid='rowid'
+        )
+      ''');
+
+      // Población e indexación inicial desde productos preexistentes
+      await db.execute('''
+        INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+        SELECT rowid, nombre, coalesce(notas, ''), tipo FROM productos
+      ''');
+
+      // Trigger de sincronización en inserción (INSERT)
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS productos_fts_ai AFTER INSERT ON productos BEGIN
+          INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+          VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+        END;
+      ''');
+
+      // Trigger de sincronización en eliminación física (DELETE)
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS productos_fts_ad AFTER DELETE ON productos BEGIN
+          INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+          VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+        END;
+      ''');
+
+      // Trigger de sincronización en actualización (UPDATE)
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS productos_fts_au AFTER UPDATE ON productos BEGIN
+          INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+          VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+          INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+          VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+        END;
+      ''');
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -413,6 +471,41 @@ class BaseDeDatos {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_articulos_venta_id ON articulos_venta (venta_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_abonos_venta_id ON abonos_venta (venta_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones (fecha DESC)');
+
+    // Motor de búsqueda indexada FTS5 (Full-Text Search)
+    await db.execute('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS productos_fts USING fts5(
+        nombre,
+        notas,
+        tipo,
+        content='productos',
+        content_rowid='rowid'
+      )
+    ''');
+
+    // Triggers de sincronización automática para FTS5
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS productos_fts_ai AFTER INSERT ON productos BEGIN
+        INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+        VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+      END;
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS productos_fts_ad AFTER DELETE ON productos BEGIN
+        INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+        VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+      END;
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS productos_fts_au AFTER UPDATE ON productos BEGIN
+        INSERT INTO productos_fts(productos_fts, rowid, nombre, notas, tipo)
+        VALUES ('delete', old.rowid, old.nombre, coalesce(old.notas, ''), old.tipo);
+        INSERT INTO productos_fts(rowid, nombre, notas, tipo)
+        VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
+      END;
+    ''');
   }
 
   Future cerrar() async {

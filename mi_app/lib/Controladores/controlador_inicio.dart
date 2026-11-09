@@ -100,15 +100,17 @@ class ControladorInicio extends ChangeNotifier {
             controladorBiometrico ?? ControladorBiometrico(),
         controladorIA = controladorIA ??
             ControladorIACompras(controladorInventario: controladorInventario) {
-    // Escucha reactiva: recalcula métricas solo cuando el inventario o las ventas cambian
+    // Escucha reactiva: recalcula métricas cuando el inventario, las ventas o las finanzas cambian
     controladorVentas.addListener(actualizarMetricasDashboard);
     controladorInventario.addListener(actualizarMetricasDashboard);
+    controladorFinanzas.addListener(actualizarMetricasDashboard);
   }
 
   @override
   void dispose() {
     controladorVentas.removeListener(actualizarMetricasDashboard);
     controladorInventario.removeListener(actualizarMetricasDashboard);
+    controladorFinanzas.removeListener(actualizarMetricasDashboard);
     super.dispose();
   }
 

@@ -59,7 +59,7 @@ class AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = AppColors.isDark;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (variant == AppLogoVariant.compact) {
       return _buildCompactHeader(context, isDark);

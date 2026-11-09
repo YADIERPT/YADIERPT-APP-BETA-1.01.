@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import '../Modelos/colaborador.dart';
 import '../BaseDatos/base_datos.dart';
 import '../Servicios/servicio_criptografia.dart';
+import '../Servicios/secure_storage_service.dart';
 
 /// Alias semántico para el controlador de personal / colaboradores
 typedef ControladorEmpleados = ControladorAutenticacion;
@@ -14,8 +15,23 @@ class ControladorAutenticacion extends ChangeNotifier {
   Colaborador? _usuarioActual;
   List<Colaborador> _colaboradores = [];
 
+  /// Token de desafío biométrico efímero de un solo uso
+  String? _tokenDesafioActivo;
+  DateTime? _expiracionTokenDesafio;
+  String? _usuarioDesafio;
+
   Colaborador? get usuarioActual => _usuarioActual;
   List<Colaborador> get colaboradores => _colaboradores;
+
+  /// Emite un token criptográfico efímero de un solo uso (válido por 45 segundos)
+  /// tras una validación exitosa de hardware biométrico.
+  String generarTokenDesafioBiometrico(String usuarioId) {
+    final token = ServicioCriptografia.generarClaveAleatoriaSegura(32);
+    _tokenDesafioActivo = token;
+    _usuarioDesafio = usuarioId;
+    _expiracionTokenDesafio = DateTime.now().add(const Duration(seconds: 45));
+    return token;
+  }
 
   /// Permite establecer el usuario actual en memoria (útil para pruebas unitarias y de widgets)
   void establecerUsuarioParaPruebas(Colaborador? colaborador) {
@@ -107,17 +123,63 @@ class ControladorAutenticacion extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> iniciarSesionPorId(String id) async {
-    final db = await BaseDeDatos.instancia.database;
-    final resultados = await db.query(
-      'colaboradores',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  /// Inicia sesión por ID verificando obligatoriamente un [tokenVerificacion] válido.
+  ///
+  /// El token debe corresponder a:
+  /// 1. Un desafío biométrico efímero no expirado generado por [generarTokenDesafioBiometrico].
+  /// 2. O un token de sesión recordada persistido de forma segura en el Keystore.
+  ///
+  /// Impide el acceso no autenticado o el escalamiento arbitrario de privilegios.
+  Future<bool> iniciarSesionPorId({
+    required String id,
+    required String tokenVerificacion,
+  }) async {
+    final ahora = DateTime.now();
 
-    if (resultados.isNotEmpty) {
-      _usuarioActual = Colaborador.fromMap(resultados.first);
-      return true;
+    // 1. Verificación de token de desafío biométrico efímero
+    final bool esTokenDesafioValido = _tokenDesafioActivo != null &&
+        _usuarioDesafio == id &&
+        _tokenDesafioActivo == tokenVerificacion &&
+        _expiracionTokenDesafio != null &&
+        ahora.isBefore(_expiracionTokenDesafio!);
+
+    // 2. Verificación de sesión recordada legítima en SecureStorage
+    final secureStorage = SecureStorageService.instancia;
+    final tokenAlmacenado =
+        await secureStorage.leer('planteapp_token_sesion_recordada');
+    final ultimoIdRecordado =
+        await secureStorage.leer('planteapp_ultimo_usuario_id');
+    final bool esSesionRecordadaValida = tokenAlmacenado != null &&
+        tokenAlmacenado == tokenVerificacion &&
+        ultimoIdRecordado == id;
+
+    if (!esTokenDesafioValido && !esSesionRecordadaValida) {
+      debugPrint(
+        'Alerta de seguridad: Intento de inicio de sesión no autorizado para el ID $id (token no válido o expirado)',
+      );
+      return false;
+    }
+
+    // Invalida inmediatamente el token efímero de un solo uso para prevenir ataques de replay
+    _tokenDesafioActivo = null;
+    _expiracionTokenDesafio = null;
+    _usuarioDesafio = null;
+
+    try {
+      final db = await BaseDeDatos.instancia.database;
+      final resultados = await db.query(
+        'colaboradores',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (resultados.isNotEmpty) {
+        _usuarioActual = Colaborador.fromMap(resultados.first);
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Aviso en iniciarSesionPorId: $e');
     }
 
     return false;
@@ -219,5 +281,9 @@ class ControladorAutenticacion extends ChangeNotifier {
 
   void cerrarSesion() {
     _usuarioActual = null;
+    _tokenDesafioActivo = null;
+    _expiracionTokenDesafio = null;
+    _usuarioDesafio = null;
+    notifyListeners();
   }
 }

@@ -12,6 +12,7 @@ import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
 import '../Servicios/secure_storage_service.dart';
+import '../Servicios/servicio_criptografia.dart';
 
 class LoginVista extends StatefulWidget {
   const LoginVista({super.key});
@@ -27,6 +28,10 @@ class _LoginVistaState extends State<LoginVista> {
   bool _recordarTerminal = false;
   bool _isLoading = false;
   bool _isSuccess = false;
+
+  /// Acceso reactivo a la paleta botánica inyectada en el árbol de contexto
+  BotanicalThemeColors get _colors => context.botanicalColors;
+  bool get _isDark => context.isDarkMode;
 
   @override
   void initState() {
@@ -76,8 +81,11 @@ class _LoginVistaState extends State<LoginVista> {
       if (_recordarTerminal) {
         await secureStorage.guardar('planteapp_recordar_sesion', 'true');
         await secureStorage.guardar('planteapp_ultimo_usuario_id', id);
+        final tokenSesion = ServicioCriptografia.generarClaveAleatoriaSegura(32);
+        await secureStorage.guardar('planteapp_token_sesion_recordada', tokenSesion);
       } else {
         await secureStorage.guardar('planteapp_recordar_sesion', 'false');
+        await secureStorage.eliminar('planteapp_token_sesion_recordada');
       }
 
       setState(() {
@@ -101,20 +109,20 @@ class _LoginVistaState extends State<LoginVista> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.card,
+          backgroundColor: _colors.card,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           title: Row(
-            children: const [
-              Icon(Icons.error_outline, color: AppColors.error),
-              SizedBox(width: 8),
-              Text('Error de Acceso', style: TextStyle(color: AppColors.error)),
+            children: [
+              Icon(Icons.error_outline, color: _colors.error),
+              const SizedBox(width: 8),
+              Text('Error de Acceso', style: TextStyle(color: _colors.error)),
             ],
           ),
           content: Text(
             'Usuario o PIN incorrectos. Por favor, intenta de nuevo.',
-            style: TextStyle(color: AppColors.textPrimary),
+            style: TextStyle(color: _colors.textPrimary),
           ),
           actions: [
             TextButton(
@@ -122,7 +130,7 @@ class _LoginVistaState extends State<LoginVista> {
               child: Text(
                 'Entendido',
                 style: TextStyle(
-                  color: AppColors.primary,
+                  color: _colors.primary,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -141,7 +149,7 @@ class _LoginVistaState extends State<LoginVista> {
           content: const Text(
             'No hay ninguna huella configurada. Inicia sesión con tus credenciales y configúrala en Cuenta > Lector de Huellas.',
           ),
-          backgroundColor: AppColors.amber,
+          backgroundColor: _colors.amber,
         ),
       );
       return;
@@ -151,8 +159,12 @@ class _LoginVistaState extends State<LoginVista> {
     final String? usuarioId = await bioCtrl.autenticarAcceso();
 
     if (usuarioId != null) {
-      final bool exito =
-          await context.read<ControladorAutenticacion>().iniciarSesionPorId(usuarioId);
+      final authCtrl = context.read<ControladorAutenticacion>();
+      final tokenDesafio = authCtrl.generarTokenDesafioBiometrico(usuarioId);
+      final bool exito = await authCtrl.iniciarSesionPorId(
+        id: usuarioId,
+        tokenVerificacion: tokenDesafio,
+      );
 
       if (!mounted) return;
 
@@ -177,9 +189,9 @@ class _LoginVistaState extends State<LoginVista> {
     if (mounted) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Huella no reconocida o autenticación cancelada.'),
-          backgroundColor: AppColors.error,
+        SnackBar(
+          content: const Text('Huella no reconocida o autenticación cancelada.'),
+          backgroundColor: _colors.error,
         ),
       );
     }
@@ -191,12 +203,12 @@ class _LoginVistaState extends State<LoginVista> {
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness:
-            AppColors.isDark ? Brightness.light : Brightness.dark,
+            _isDark ? Brightness.light : Brightness.dark,
         statusBarBrightness:
-            AppColors.isDark ? Brightness.dark : Brightness.light,
+            _isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.surface,
+        backgroundColor: _colors.surface,
         body: SafeArea(
           child: CustomScrollView(
             slivers: [
@@ -243,7 +255,7 @@ class _LoginVistaState extends State<LoginVista> {
           'Terminal de Punto de Venta • Iniciar Sesión',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: _colors.textSecondary,
             fontSize: 13,
             fontWeight: FontWeight.w400,
             letterSpacing: 0.2,
@@ -257,9 +269,9 @@ class _LoginVistaState extends State<LoginVista> {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: _colors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: _colors.border, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +279,7 @@ class _LoginVistaState extends State<LoginVista> {
           Text(
             'Usuario o correo',
             style: TextStyle(
-              color: AppColors.textSecondary,
+              color: _colors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -276,7 +288,7 @@ class _LoginVistaState extends State<LoginVista> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.secondarySurface,
+              color: _colors.secondarySurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
@@ -284,25 +296,25 @@ class _LoginVistaState extends State<LoginVista> {
               decoration: InputDecoration(
                 prefixIcon: Icon(
                   Icons.badge_outlined,
-                  color: AppColors.textSecondary,
+                  color: _colors.textSecondary,
                   size: 20,
                 ),
                 hintText: 'Ej. VO-8421 o ana@vivero.pe',
-                hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                hintStyle: TextStyle(color: _colors.textSecondary, fontSize: 13),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
                 ),
               ),
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              style: TextStyle(color: _colors.textPrimary, fontSize: 14),
             ),
           ),
           const SizedBox(height: 18),
           Text(
             'PIN de acceso o clave',
             style: TextStyle(
-              color: AppColors.textSecondary,
+              color: _colors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -311,7 +323,7 @@ class _LoginVistaState extends State<LoginVista> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.secondarySurface,
+              color: _colors.secondarySurface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
@@ -321,19 +333,19 @@ class _LoginVistaState extends State<LoginVista> {
               decoration: InputDecoration(
                 prefixIcon: Icon(
                   Icons.lock_outline,
-                  color: AppColors.textSecondary,
+                  color: _colors.textSecondary,
                   size: 20,
                 ),
                 hintText: 'PIN o contraseña',
                 hintStyle: TextStyle(
-                  color: AppColors.textSecondary,
+                  color: _colors.textSecondary,
                   fontSize: 13,
                   letterSpacing: 0,
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _ocultarClave ? Icons.visibility : Icons.visibility_off,
-                    color: AppColors.textSecondary,
+                    color: _colors.textSecondary,
                     size: 20,
                   ),
                   onPressed: () =>
@@ -346,7 +358,7 @@ class _LoginVistaState extends State<LoginVista> {
                 ),
               ),
               style: TextStyle(
-                color: AppColors.textPrimary,
+                color: _colors.textPrimary,
                 fontSize: 14,
                 letterSpacing: 2,
               ),
@@ -362,13 +374,13 @@ class _LoginVistaState extends State<LoginVista> {
                   height: 20,
                   decoration: BoxDecoration(
                     color: _recordarTerminal
-                        ? AppColors.primary
-                        : AppColors.secondarySurface,
+                        ? _colors.primary
+                        : _colors.secondarySurface,
                     borderRadius: BorderRadius.circular(5),
                     border: Border.all(
                       color: _recordarTerminal
-                          ? AppColors.primary
-                          : AppColors.border,
+                          ? _colors.primary
+                          : _colors.border,
                       width: 1,
                     ),
                   ),
@@ -384,7 +396,7 @@ class _LoginVistaState extends State<LoginVista> {
                 Expanded(
                   child: Text(
                     'Recordar datos en este dispositivo',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    style: TextStyle(color: _colors.textPrimary, fontSize: 13),
                   ),
                 ),
               ],
@@ -397,9 +409,9 @@ class _LoginVistaState extends State<LoginVista> {
             child: ElevatedButton(
               onPressed: _isLoading || _isSuccess ? null : _iniciarSesion,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: _colors.primary,
                 disabledBackgroundColor:
-                    AppColors.primary.withValues(alpha: 0.7),
+                    _colors.primary.withValues(alpha: 0.7),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -411,18 +423,18 @@ class _LoginVistaState extends State<LoginVista> {
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: Divider(color: AppColors.border)),
+              Expanded(child: Divider(color: _colors.border)),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Text(
                   'o ingresa biométricamente',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: _colors.textSecondary,
                     fontSize: 11,
                   ),
                 ),
               ),
-              Expanded(child: Divider(color: AppColors.border)),
+              Expanded(child: Divider(color: _colors.border)),
             ],
           ),
           const SizedBox(height: 14),
@@ -432,11 +444,11 @@ class _LoginVistaState extends State<LoginVista> {
             child: OutlinedButton.icon(
               onPressed:
                   _isLoading || _isSuccess ? null : _iniciarSesionConHuella,
-              icon: Icon(Icons.fingerprint, color: AppColors.primary, size: 22),
+              icon: Icon(Icons.fingerprint, color: _colors.primary, size: 22),
               label: Text(
                 'Acceder con Huella Digital',
                 style: TextStyle(
-                  color: AppColors.primary,
+                  color: _colors.primary,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -445,8 +457,8 @@ class _LoginVistaState extends State<LoginVista> {
                 side: BorderSide(
                   color: context.read<ControladorBiometrico>()
                           .tieneHuellaRegistrada
-                      ? AppColors.primary
-                      : AppColors.border,
+                      ? _colors.primary
+                      : _colors.border,
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(
@@ -523,20 +535,20 @@ class _LoginVistaState extends State<LoginVista> {
     return Row(
       children: [
         Expanded(
-          child: Divider(color: AppColors.border, thickness: 1),
+          child: Divider(color: _colors.border, thickness: 1),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             'punto de venta',
             style: TextStyle(
-              color: AppColors.textSecondary,
+              color: _colors.textSecondary,
               fontSize: 11,
             ),
           ),
         ),
         Expanded(
-          child: Divider(color: AppColors.border, thickness: 1),
+          child: Divider(color: _colors.border, thickness: 1),
         ),
       ],
     );
@@ -548,7 +560,7 @@ class _LoginVistaState extends State<LoginVista> {
         Text(
           'VIVERO • PLANTEAPP',
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: _colors.textSecondary,
             fontSize: 11,
             letterSpacing: 1.2,
             fontWeight: FontWeight.w600,

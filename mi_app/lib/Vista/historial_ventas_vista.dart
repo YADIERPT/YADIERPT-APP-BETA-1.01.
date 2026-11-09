@@ -17,17 +17,35 @@ class HistorialVentasVista extends StatefulWidget {
 class _HistorialVentasVistaState extends State<HistorialVentasVista> {
   String _periodoSeleccionado = 'Hoy';
   bool _cargando = true;
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
     _cargarHistorial();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      if (maxScroll - currentScroll <= 200) {
+        widget.controladorVentas.cargarSiguientePaginaVentas();
+      }
+    }
   }
 
   Future<void> _cargarHistorial() async {
     setState(() => _cargando = true);
     try {
-      await widget.controladorVentas.cargarVentasHistorial();
+      await widget.controladorVentas.refrescarVentasHistorial();
     } catch (e) {
       debugPrint('Error al cargar ventas en HistorialVentasVista: $e');
     } finally {
@@ -132,12 +150,13 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
             color: AppColors.primary,
             backgroundColor: AppColors.card,
             onRefresh: () async {
-              await widget.controladorVentas.cargarVentasHistorial();
+              await widget.controladorVentas.refrescarVentasHistorial();
               if (mounted) {
                 setState(() {});
               }
             },
             child: ListView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               children: [
@@ -428,6 +447,20 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
                 )
               else
                 ...ventasFiltradas.map((v) => TarjetaHistorialVenta(venta: v)),
+              if (widget.controladorVentas.cargandoPaginaVentas)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
             ],
           ),

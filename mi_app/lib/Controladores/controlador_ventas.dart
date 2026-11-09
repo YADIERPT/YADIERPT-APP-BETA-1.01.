@@ -30,6 +30,13 @@ class ControladorVentas extends ChangeNotifier {
   List<Venta> get ventas => _ventas;
   Venta? get ventaActual => _ventaActual;
 
+  int _offsetVentas = 0;
+  bool _hayMasVentas = true;
+  bool _cargandoPaginaVentas = false;
+
+  bool get hayMasVentas => _hayMasVentas;
+  bool get cargandoPaginaVentas => _cargandoPaginaVentas;
+
   /// Cantidad total de unidades añadidas al carrito actual
   int get totalArticulosEnCarrito =>
       _ventaActual?.articulos.fold<int>(0, (sum, a) => sum + a.cantidad) ?? 0;
@@ -37,59 +44,161 @@ class ControladorVentas extends ChangeNotifier {
   /// Monto monetario total calculado del carrito actual
   double get totalVentaActual => _ventaActual?.total ?? 0.0;
 
-  /// Carga y restaura el historial completo de ventas desde la base de datos SQLite
-  /// ordenado descendentemente (la venta más reciente primero).
-  /// Se ejecuta automáticamente al arrancar la app y al entrar a la vista de historial.
-  Future<List<Venta>> cargarVentasHistorial() async {
-    await cargarVentas();
-    return _ventas;
+  /// Carga y restaura el historial de ventas desde la base de datos SQLite con paginación.
+  Future<List<Venta>> cargarVentasHistorial({
+    int limite = 50,
+    int offset = 0,
+  }) async {
+    _offsetVentas = offset;
+    return await cargarVentas(
+      limite: limite,
+      offset: offset,
+      anexar: offset > 0,
+    );
   }
 
-  /// Carga la totalidad de las ventas registradas ordenadas descendentemente por fecha.
-  /// Ejecuta una única consulta optimizada con LEFT JOIN (eliminando por completo el problema N+1).
-  Future<void> cargarVentas() async {
+  /// Carga ventas registradas con soporte de paginación por lotes (LIMIT y OFFSET).
+  ///
+  /// Si [limite] y [offset] son provistos, se ejecuta una consulta optimizada que
+  /// delimita la subconsulta de ventas en SQLite antes de resolver el LEFT JOIN,
+  /// evitando cargar miles de registros en memoria y protegiendo el heap de RAM.
+  ///
+  /// Si [anexar] es true, los resultados se agregan a [_ventas]; de lo contrario,
+  /// se reinicia la lista desde el inicio (página 0).
+  Future<List<Venta>> cargarVentas({
+    int? limite,
+    int? offset,
+    bool anexar = false,
+  }) async {
     try {
       final db = await BaseDeDatos.instancia.database;
-      const sql = '''
-        SELECT 
-          v.id AS v_id,
-          v.fecha AS v_fecha,
-          v.estado AS v_estado,
-          v.porcentajeIva AS v_porcentajeIva,
-          v.aplicarIva AS v_aplicarIva,
-          v.cliente AS v_cliente,
-          v.montoPagado AS v_montoPagado,
-          v.notas AS v_notas,
-          a.id AS a_id,
-          a.cantidad AS a_cantidad,
-          a.precioUnitario AS a_precioUnitario,
-          a.producto_id AS a_producto_id,
-          p.id AS p_id,
-          p.nombre AS p_nombre,
-          p.notas AS p_notas,
-          p.precioVenta AS p_precioVenta,
-          p.costo AS p_costo,
-          p.cantidadEnInventario AS p_cantidadEnInventario,
-          p.imagenes AS p_imagenes,
-          p.umbralStockCritico AS p_umbralStockCritico,
-          p.tipo AS p_tipo,
-          p.activo AS p_activo
-        FROM ventas v
-        LEFT JOIN articulos_venta a ON v.id = a.venta_id
-        LEFT JOIN productos p ON a.producto_id = p.id
-        ORDER BY v.fecha DESC, a.id ASC
-      ''';
 
-      final filas = await db.rawQuery(sql);
+      final bool tienePaginacion = limite != null;
+      final int off = offset ?? 0;
+      final int lim = limite ?? 50;
+
+      final String sql = tienePaginacion
+          ? '''
+            SELECT 
+              v.id AS v_id,
+              v.fecha AS v_fecha,
+              v.estado AS v_estado,
+              v.porcentajeIva AS v_porcentajeIva,
+              v.aplicarIva AS v_aplicarIva,
+              v.cliente AS v_cliente,
+              v.montoPagado AS v_montoPagado,
+              v.notas AS v_notas,
+              a.id AS a_id,
+              a.cantidad AS a_cantidad,
+              a.precioUnitario AS a_precioUnitario,
+              a.producto_id AS a_producto_id,
+              p.id AS p_id,
+              p.nombre AS p_nombre,
+              p.notas AS p_notas,
+              p.precioVenta AS p_precioVenta,
+              p.costo AS p_costo,
+              p.cantidadEnInventario AS p_cantidadEnInventario,
+              p.imagenes AS p_imagenes,
+              p.umbralStockCritico AS p_umbralStockCritico,
+              p.tipo AS p_tipo,
+              p.activo AS p_activo
+            FROM (
+              SELECT * FROM ventas ORDER BY fecha DESC LIMIT ? OFFSET ?
+            ) v
+            LEFT JOIN articulos_venta a ON v.id = a.venta_id
+            LEFT JOIN productos p ON a.producto_id = p.id
+            ORDER BY v.fecha DESC, a.id ASC
+          '''
+          : '''
+            SELECT 
+              v.id AS v_id,
+              v.fecha AS v_fecha,
+              v.estado AS v_estado,
+              v.porcentajeIva AS v_porcentajeIva,
+              v.aplicarIva AS v_aplicarIva,
+              v.cliente AS v_cliente,
+              v.montoPagado AS v_montoPagado,
+              v.notas AS v_notas,
+              a.id AS a_id,
+              a.cantidad AS a_cantidad,
+              a.precioUnitario AS a_precioUnitario,
+              a.producto_id AS a_producto_id,
+              p.id AS p_id,
+              p.nombre AS p_nombre,
+              p.notas AS p_notas,
+              p.precioVenta AS p_precioVenta,
+              p.costo AS p_costo,
+              p.cantidadEnInventario AS p_cantidadEnInventario,
+              p.imagenes AS p_imagenes,
+              p.umbralStockCritico AS p_umbralStockCritico,
+              p.tipo AS p_tipo,
+              p.activo AS p_activo
+            FROM ventas v
+            LEFT JOIN articulos_venta a ON v.id = a.venta_id
+            LEFT JOIN productos p ON a.producto_id = p.id
+            ORDER BY v.fecha DESC, a.id ASC
+          ''';
+
+      final filas = tienePaginacion
+          ? await db.rawQuery(sql, [lim, off])
+          : await db.rawQuery(sql);
+
       final ventasCargadas = _agruparVentasDesdeFilasJoin(filas);
 
-      _ventas.clear();
-      _ventas.addAll(ventasCargadas);
+      if (tienePaginacion) {
+        _hayMasVentas = ventasCargadas.length >= lim;
+        _offsetVentas = off + ventasCargadas.length;
+      }
+
+      if (anexar) {
+        final idsExistentes = _ventas.map((v) => v.id).toSet();
+        for (final nuevaVenta in ventasCargadas) {
+          if (!idsExistentes.contains(nuevaVenta.id)) {
+            _ventas.add(nuevaVenta);
+          }
+        }
+      } else {
+        _ventas.clear();
+        _ventas.addAll(ventasCargadas);
+      }
+
       notifyListeners();
+      return ventasCargadas;
     } catch (e, stackTrace) {
       debugPrint('CRÍTICO: Error al cargar ventas desde SQLite con LEFT JOIN: $e\n$stackTrace');
       rethrow;
     }
+  }
+
+  /// Carga la siguiente página de ventas históricas (bloques de 50 en 50) para scroll infinito
+  Future<bool> cargarSiguientePaginaVentas({int tamanoPagina = 50}) async {
+    if (_cargandoPaginaVentas || !_hayMasVentas) return false;
+
+    _cargandoPaginaVentas = true;
+    notifyListeners();
+
+    try {
+      final nuevas = await cargarVentas(
+        limite: tamanoPagina,
+        offset: _offsetVentas,
+        anexar: true,
+      );
+      return nuevas.isNotEmpty;
+    } finally {
+      _cargandoPaginaVentas = false;
+      notifyListeners();
+    }
+  }
+
+  /// Reinicia y recarga la primera página del historial de ventas
+  Future<void> refrescarVentasHistorial({int tamanoPagina = 50}) async {
+    _offsetVentas = 0;
+    _hayMasVentas = true;
+    await cargarVentas(
+      limite: tamanoPagina,
+      offset: 0,
+      anexar: false,
+    );
   }
 
   /// Consulta en SQLite las últimas ventas registradas con orden descendente (más reciente arriba)

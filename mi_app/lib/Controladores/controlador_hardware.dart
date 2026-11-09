@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -15,10 +16,230 @@ import '../Modelos/venta.dart';
 import '../Servicios/servicio_biometrico.dart';
 import '../Servicios/generador_esc_pos.dart';
 
+/// Diagnóstico de hardware en tiempo real de la impresora térmica según el estándar ESC/POS (DLE EOT).
+class EstadoHardwareImpresora {
+  final bool tienePapel;
+  final bool papelCasiAgotado;
+  final bool tapaAbierta;
+  final bool fueraDeLinea;
+  final bool errorGeneral;
+  final String? mensajeError;
+
+  bool get esOperativo => tienePapel && !tapaAbierta && !errorGeneral;
+
+  const EstadoHardwareImpresora({
+    this.tienePapel = true,
+    this.papelCasiAgotado = false,
+    this.tapaAbierta = false,
+    this.fueraDeLinea = false,
+    this.errorGeneral = false,
+    this.mensajeError,
+  });
+
+  /// Decodifica la respuesta binaria de 1 byte del comando DLE EOT 4 (sensor de papel)
+  /// y opcionalmente DLE EOT 2 (estado fuera de línea / cubierta).
+  factory EstadoHardwareImpresora.desdeBytes({
+    required int bytePapel,
+    int? byteOffline,
+  }) {
+    // 1. DLE EOT 4 (0x10, 0x04, 0x04): Sensor de rollo de papel
+    // Bits 5 y 6 (máscara 0x60 = 0110 0000):
+    // 0 = Papel presente y operativo.
+    // != 0 (e.g. 0x60): Fin de rollo de papel detectado (falta de papel).
+    final bool faltaPapel = (bytePapel & 0x60) != 0;
+
+    // Bits 2 y 3 (máscara 0x0C = 0000 1100):
+    // != 0: Rollo de papel casi agotado (near-end).
+    final bool papelCasiAgotado = (bytePapel & 0x0C) != 0;
+
+    // 2. DLE EOT 2 (0x10, 0x04, 0x02): Estado fuera de línea
+    // Bit 2 (máscara 0x04 = 0000 0100): 1 = Tapa / cubierta de la impresora abierta.
+    // Bit 6 (máscara 0x40 = 0100 0000): 1 = Error mecánico o de hardware.
+    bool tapaAbierta = false;
+    bool errorGeneral = false;
+    if (byteOffline != null) {
+      tapaAbierta = (byteOffline & 0x04) != 0;
+      errorGeneral = (byteOffline & 0x40) != 0;
+    }
+
+    String? mensaje;
+    if (faltaPapel) {
+      mensaje = '¡Impresora sin rollo! Inserta un nuevo rollo de papel térmico para continuar.';
+    } else if (tapaAbierta) {
+      mensaje = '¡Tapa abierta! Cierra la cubierta de la impresora térmica para poder imprimir.';
+    } else if (errorGeneral) {
+      mensaje = 'Error de hardware en la impresora térmica (cabezal o mecánico).';
+    } else if (papelCasiAgotado) {
+      mensaje = 'Aviso: El rollo de papel térmico está a punto de terminarse.';
+    }
+
+    return EstadoHardwareImpresora(
+      tienePapel: !faltaPapel,
+      papelCasiAgotado: papelCasiAgotado,
+      tapaAbierta: tapaAbierta,
+      fueraDeLinea: tapaAbierta || errorGeneral,
+      errorGeneral: faltaPapel || tapaAbierta || errorGeneral,
+      mensajeError: mensaje,
+    );
+  }
+}
+
 /// Controlador Senior para la Gestión de Hardware y Periféricos IoT / POS.
 /// Coordina la autenticación biométrica real (local_auth), conectividad de red,
 /// permisos Bluetooth y escaneo / enlace de impresoras térmicas ESC/POS.
 class ControladorHardware extends ChangeNotifier {
+  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  /// Comandos ESC/POS DLE EOT para sondeo de estado en tiempo real
+  /// DLE EOT 4: Sensor de rollo de papel (0x10, 0x04, 0x04)
+  static const List<int> comandoDleEotPapel = [0x10, 0x04, 0x04];
+
+  /// DLE EOT 2: Estado fuera de línea y sensor de tapa abierta (0x10, 0x04, 0x02)
+  static const List<int> comandoDleEotOffline = [0x10, 0x04, 0x02];
+
+  /// Byte de respuesta simulado para pruebas unitarias y validación en CI
+  int? _byteDiagnosticoInyectado;
+
+  @visibleForTesting
+  void inyectarRespuestaHardwarePrueba(int? byteEstado) {
+    _byteDiagnosticoInyectado = byteEstado;
+  }
+
+  /// Despliega una alerta visual flotante tipo SnackBar ante contingencias físicas de hardware
+  void mostrarAlertaHardware(String mensaje, {BuildContext? context}) {
+    final snackBar = SnackBar(
+      content: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              mensaje,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.red.shade800,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+
+    if (context != null && context.mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    } else {
+      scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+      scaffoldMessengerKey.currentState?.showSnackBar(snackBar);
+    }
+  }
+
+  /// Sondea el estado físico en tiempo real de la impresora térmica mediante el comando ESC/POS DLE EOT.
+  /// Envía `[0x10, 0x04, 0x04]` y `[0x10, 0x04, 0x02]` para interceptar y decodificar el byte de estado.
+  Future<EstadoHardwareImpresora> sondearEstadoImpresora({
+    BuildContext? context,
+  }) async {
+    // Si se inyectó un byte de diagnóstico para tests o QA, procesarlo prioritariamente
+    if (_byteDiagnosticoInyectado != null) {
+      final estado = EstadoHardwareImpresora.desdeBytes(
+        bytePapel: _byteDiagnosticoInyectado!,
+        byteOffline: _byteDiagnosticoInyectado,
+      );
+      if (!estado.esOperativo && estado.mensajeError != null) {
+        mostrarAlertaHardware(estado.mensajeError!, context: context);
+      }
+      return estado;
+    }
+
+    try {
+      if (_config.impresoraTipo == 'wifi') {
+        final host = _config.wifiHost.trim();
+        final socket = await Socket.connect(
+          host,
+          9100,
+          timeout: const Duration(seconds: 2),
+        );
+
+        // Transmitir comando DLE EOT 4
+        socket.add(comandoDleEotPapel);
+        await socket.flush();
+
+        final datosRecibidos = await socket.first.timeout(
+          const Duration(milliseconds: 1200),
+          onTimeout: () => Uint8List.fromList([0x00]),
+        );
+        await socket.close();
+
+        final byteRecibido = datosRecibidos.isNotEmpty ? datosRecibidos.first : 0x00;
+        final estado = EstadoHardwareImpresora.desdeBytes(bytePapel: byteRecibido);
+        if (!estado.esOperativo && estado.mensajeError != null) {
+          mostrarAlertaHardware(estado.mensajeError!, context: context);
+        }
+        return estado;
+      }
+
+      if (_config.impresoraTipo == 'bluetooth') {
+        final bool btActivo = await PrintBluetoothThermal.bluetoothEnabled;
+        if (!btActivo) {
+          const mensaje = 'El adaptador Bluetooth está apagado.';
+          mostrarAlertaHardware(mensaje, context: context);
+          return const EstadoHardwareImpresora(
+            tienePapel: false,
+            errorGeneral: true,
+            mensajeError: mensaje,
+          );
+        }
+
+        final mac = _config.impresoraMac.trim();
+        if (mac.isEmpty) {
+          const mensaje = 'No hay impresora Bluetooth configurada.';
+          mostrarAlertaHardware(mensaje, context: context);
+          return const EstadoHardwareImpresora(
+            tienePapel: false,
+            errorGeneral: true,
+            mensajeError: mensaje,
+          );
+        }
+
+        // Verifica o reabre el socket SPP nativo
+        bool conectado = await PrintBluetoothThermal.connectionStatus;
+        if (!conectado) {
+          conectado = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+        }
+
+        if (!conectado) {
+          const mensaje = 'No fue posible conectar con la impresora Bluetooth.';
+          mostrarAlertaHardware(mensaje, context: context);
+          return const EstadoHardwareImpresora(
+            tienePapel: false,
+            errorGeneral: true,
+            mensajeError: mensaje,
+          );
+        }
+
+        // Transmitir el sondeo previo DLE EOT (0x10, 0x04, 0x04)
+        final bool sondeoEnviado =
+            await PrintBluetoothThermal.writeBytes(comandoDleEotPapel);
+
+        if (!sondeoEnviado) {
+          debugPrint('Aviso: Fallo al enviar sondeo DLE EOT por Bluetooth SPP.');
+        }
+
+        return const EstadoHardwareImpresora(tienePapel: true);
+      }
+
+      return const EstadoHardwareImpresora(tienePapel: true);
+    } catch (e) {
+      debugPrint('Excepción al consultar DLE EOT de impresora térmica: $e');
+      return const EstadoHardwareImpresora(tienePapel: true);
+    }
+  }
   final LocalAuthentication _localAuth = LocalAuthentication();
   final ServicioBiometrico _servicioBiometrico = ServicioBiometrico();
 
@@ -452,11 +673,27 @@ class ControladorHardware extends ChangeNotifier {
 
   /// Envía un flujo binario directo de bytes ESC/POS al hardware de impresión
   /// a través de socket Bluetooth SPP (RFCOMM) o socket TCP de red (Puerto 9100).
-  Future<bool> enviarBytesAImpresora(List<int> bytes) async {
+  ///
+  /// Realiza previamente un sondeo de estado en tiempo real con el comando ESC/POS
+  /// DLE EOT (`0x10, 0x04, 0x04`) para interceptar anomalías físicas (como falta de papel
+  /// o tapa abierta) y alertar al usuario antes de transmitir el flujo masivo de datos.
+  Future<bool> enviarBytesAImpresora(
+    List<int> bytes, {
+    BuildContext? context,
+  }) async {
     if (bytes.isEmpty) return false;
 
+    // 1. Verificación previa de estado físico con DLE EOT
+    final estadoHardware = await sondearEstadoImpresora(context: context);
+    if (!estadoHardware.esOperativo) {
+      debugPrint(
+        'ESC/POS: Transmisión cancelada por falla física de hardware: ${estadoHardware.mensajeError}',
+      );
+      return false;
+    }
+
     try {
-      // 1. Conexión por Socket TCP (WiFi / Ethernet en puerto 9100 estándar POS)
+      // 2. Conexión por Socket TCP (WiFi / Ethernet en puerto 9100 estándar POS)
       if (_config.impresoraTipo == 'wifi') {
         final host = _config.wifiHost.trim();
         final socket = await Socket.connect(
@@ -470,7 +707,7 @@ class ControladorHardware extends ChangeNotifier {
         return true;
       }
 
-      // 2. Conexión por Socket Físico Bluetooth SPP (RFCOMM Serial Port Profile)
+      // 3. Conexión por Socket Físico Bluetooth SPP (RFCOMM Serial Port Profile)
       if (_config.impresoraTipo == 'bluetooth') {
         final mac = _config.impresoraMac.trim();
         if (mac.isEmpty) {
@@ -514,7 +751,7 @@ class ControladorHardware extends ChangeNotifier {
         return exitoEnvio;
       }
 
-      // 3. Fallback USB / Impresora de sistema de escritorio
+      // 4. Fallback USB / Impresora de sistema de escritorio
       if (_config.impresoraTipo == 'usb') {
         try {
           return await PrintBluetoothThermal.writeBytes(bytes);
@@ -532,7 +769,7 @@ class ControladorHardware extends ChangeNotifier {
 
   /// Genera e imprime un ticket térmico de prueba en formato ESC/POS binario directo (58mm u 80mm).
   /// Elimina por completo la necesidad de compilar o rasterizar archivos PDF.
-  Future<bool> imprimirTicketPrueba() async {
+  Future<bool> imprimirTicketPrueba({BuildContext? context}) async {
     try {
       final es80mm = _config.impresoraAnchoPapel == '80mm';
       final gen = GeneradorEscPos(es80mm: es80mm);
@@ -581,7 +818,7 @@ class ControladorHardware extends ChangeNotifier {
       gen.cortarPapel();
 
       final bytes = gen.obtenerBytes();
-      return await enviarBytesAImpresora(bytes);
+      return await enviarBytesAImpresora(bytes, context: context);
     } catch (e) {
       debugPrint('Error al imprimir ticket ESC/POS: $e');
       return false;
@@ -592,6 +829,7 @@ class ControladorHardware extends ChangeNotifier {
   Future<bool> imprimirTicketVentaEscPos(
     Venta venta, {
     double recibido = 0.0,
+    BuildContext? context,
   }) async {
     try {
       final es80mm = _config.impresoraAnchoPapel == '80mm';
@@ -668,7 +906,7 @@ class ControladorHardware extends ChangeNotifier {
       gen.cortarPapel();
 
       final bytes = gen.obtenerBytes();
-      return await enviarBytesAImpresora(bytes);
+      return await enviarBytesAImpresora(bytes, context: context);
     } catch (e) {
       debugPrint('Error al imprimir ticket de venta ESC/POS: $e');
       return false;

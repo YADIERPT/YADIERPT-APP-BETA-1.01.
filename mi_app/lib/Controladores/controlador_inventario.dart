@@ -12,9 +12,9 @@ class ControladorInventario extends ChangeNotifier {
 
   List<Producto> get productos => _productos;
 
-  /// Recarga el inventario completo de productos activos desde SQLite y notifica a los escuchas reactivos.
-  /// Aplica borrado lógico (`activo = 1`) y auto-recuperación de esquema para bases de datos previas.
-  Future<void> cargarProductos() async {
+  /// Recarga el inventario de productos activos desde SQLite con soporte de paginación/límite.
+  /// Aplica borrado lógico (`activo = 1`), ordenamiento alfabético y auto-recuperación de esquema.
+  Future<void> cargarProductos({int? limite, int offset = 0}) async {
     final db = await BaseDeDatos.instancia.database;
     try {
       await db.execute(
@@ -26,6 +26,9 @@ class ControladorInventario extends ChangeNotifier {
     final mapas = await db.query(
       'productos',
       where: 'activo = 1',
+      orderBy: 'nombre ASC',
+      limit: limite,
+      offset: offset > 0 ? offset : null,
     );
     _productos = mapas.map((mapa) => Producto.fromMap(mapa)).toList();
     notifyListeners();
@@ -181,6 +184,60 @@ class ControladorInventario extends ChangeNotifier {
   List<Producto> buscarProductos(String consulta) {
     if (consulta.isEmpty) return _productos;
     return _productos.where((p) => p.coincideConBusqueda(consulta)).toList();
+  }
+
+  /// Búsqueda ultrarrápida mediante el motor de indexación FTS5 (Full-Text Search) de SQLite.
+  /// Sustituye el escaneo secuencial O(N) con operador LIKE por una consulta indexada O(1)
+  /// mediante sintaxis MATCH con prefijos 'token*' y ordenamiento alfabético.
+  Future<List<Producto>> buscarProductosAsync(
+    String consulta, {
+    int limite = 100,
+  }) async {
+    final termino = consulta.trim();
+    if (termino.isEmpty) {
+      return _productos;
+    }
+
+    final db = await BaseDeDatos.instancia.database;
+
+    // Sanitizar y extraer palabras/tokens para sintaxis FTS5 segura
+    final tokens = termino
+        .replaceAll(RegExp(r'[^\w\s\u00C0-\u017F]', unicode: true), ' ')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    if (tokens.isEmpty) {
+      return _productos;
+    }
+
+    // Sintaxis FTS5: 'token1* token2*' (conjunción AND con coincidencia por prefijo)
+    final ftsQuery = tokens.map((t) => '$t*').join(' ');
+
+    try {
+      final res = await db.rawQuery('''
+        SELECT p.*
+        FROM productos p
+        JOIN productos_fts f ON p.rowid = f.rowid
+        WHERE p.activo = 1 AND productos_fts MATCH ?
+        ORDER BY p.nombre ASC
+        LIMIT ?
+      ''', [ftsQuery, limite]);
+
+      return res.map((mapa) => Producto.fromMap(mapa)).toList();
+    } catch (e) {
+      // Fallback defensivo: Si FTS5 no está disponible temporalmente o la migración está pendiente
+      final filtro = '%$termino%';
+      final mapas = await db.query(
+        'productos',
+        where: 'activo = 1 AND (nombre LIKE ? OR notas LIKE ? OR tipo LIKE ?)',
+        whereArgs: [filtro, filtro, filtro],
+        orderBy: 'nombre ASC',
+        limit: limite,
+      );
+      return mapas.map((mapa) => Producto.fromMap(mapa)).toList();
+    }
   }
 
   Producto? obtenerProducto(String id) {

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class Producto {
   String id;
   String nombre;
@@ -112,4 +114,34 @@ class Producto {
         notas.toLowerCase().contains(consultaMinuscula) ||
         tipo.toLowerCase().contains(consultaMinuscula);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Producto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          nombre == other.nombre &&
+          notas == other.notas &&
+          precioVenta == other.precioVenta &&
+          costo == other.costo &&
+          cantidadEnInventario == other.cantidadEnInventario &&
+          umbralStockCritico == other.umbralStockCritico &&
+          tipo == other.tipo &&
+          activo == other.activo &&
+          listEquals(imagenes, other.imagenes);
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        nombre,
+        notas,
+        precioVenta,
+        costo,
+        cantidadEnInventario,
+        umbralStockCritico,
+        tipo,
+        activo,
+        Object.hashAll(imagenes),
+      );
 }
