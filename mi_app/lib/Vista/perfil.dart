@@ -14,6 +14,7 @@ import 'configuracion_biometrica_vista.dart';
 import 'Widgets/verificacion_seguridad_sheet.dart';
 import 'Widgets/role_guard.dart';
 import 'Widgets/app_logo.dart';
+import 'Widgets/logo_biznaga.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
@@ -549,7 +550,7 @@ void mostrarDialogoSoporte(BuildContext context) {
                           width: 1.5,
                         ),
                       ),
-                      child: const AppLogo.compact(size: 46),
+                      child: const LogoBiznaga(size: 48),
                     ),
                     const SizedBox(height: 14),
 

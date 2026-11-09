@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../Tema/app_theme.dart';
+import 'logo_biznaga.dart';
 
 /// Variantes de visualización del logotipo de la aplicación.
 enum AppLogoVariant {
@@ -230,21 +231,7 @@ class AppLogo extends StatelessWidget {
   }
 
   Widget _buildImage(bool useFullLogo, double badgeSize) {
-    return Image.asset(
-      useFullLogo ? assetLogoFull : assetEmblem,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.medium,
-      errorBuilder: (context, error, stackTrace) {
-        // Fallback seguro en caso de que el recurso aún no esté empaquetado
-        return Center(
-          child: Icon(
-            Icons.local_florist_rounded,
-            color: AppColors.primary,
-            size: badgeSize * 0.5,
-          ),
-        );
-      },
-    );
+    return LogoBiznaga(size: badgeSize);
   }
 }
 

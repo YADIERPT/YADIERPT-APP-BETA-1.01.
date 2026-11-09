@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../Tema/app_theme.dart';
 import 'Widgets/app_logo.dart';
+import 'Widgets/logo_biznaga.dart';
 import 'login.dart';
 import 'inicio.dart';
 import '../Servicios/secure_storage_service.dart';
@@ -131,12 +132,29 @@ class _SplashVistaState extends State<SplashVista>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Spacer(flex: 3),
-                  // Emblema botánico y logotipo centrado
-                  const AppLogo.splash(
-                    size: 110.0,
-                    showAppName: true,
-                    appName: 'Planteapp',
-                    subtitle: 'Terminal de Punto de Venta Botánico',
+                  // Logotipo oficial SVG adaptativo de Biznaga Kíix
+                  const LogoBiznaga(size: 140.0),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Planteapp',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Terminal de Punto de Venta Botánico',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.2,
+                    ),
                   ),
                   const Spacer(flex: 2),
                   // Indicador de carga discreto adaptado a la paleta no sobresaturada

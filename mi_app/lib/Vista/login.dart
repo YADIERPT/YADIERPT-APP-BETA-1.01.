@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../Tema/app_theme.dart';
 import 'inicio.dart';
 import 'Widgets/app_logo.dart';
+import 'Widgets/logo_biznaga.dart';
 import '../Controladores/controlador_inicio.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
@@ -232,10 +233,23 @@ class _LoginVistaState extends State<LoginVista> {
   }
 
   Widget _buildEmblemAndTitle() {
-    return const AppLogo.splash(
-      size: 104.0,
-      appName: 'Planteapp',
-      subtitle: 'Terminal de Punto de Venta • Iniciar Sesión',
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const LogoBiznaga(size: 140.0),
+        const SizedBox(height: 10),
+        Text(
+          'Terminal de Punto de Venta • Iniciar Sesión',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
     );
   }
 

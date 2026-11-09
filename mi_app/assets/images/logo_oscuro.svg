@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 560" width="100%" height="100%">
+  <g id="Flor_Corona" fill="#D99B4B">
+    <!-- Centro de la flor -->
+    <circle cx="250" cy="52" r="8"/>
+    <!-- Pétalos ornamentales superiores -->
+    <path d="M250,22 C242,22 236,28 238,36 C242,34 246,33 250,33 C254,33 258,34 262,36 C264,28 258,22 250,22 Z"/>
+    <path d="M228,34 C220,38 217,46 222,53 C225,49 229,47 234,46 C233,42 231,38 228,34 Z"/>
+    <path d="M272,34 C269,38 267,42 266,46 C271,47 275,49 278,53 C283,46 280,38 272,34 Z"/>
+    <path d="M220,60 C214,66 216,75 224,78 C226,73 229,70 234,68 C230,65 225,63 220,60 Z"/>
+    <path d="M280,60 C275,63 270,65 266,68 C271,70 274,73 276,78 C284,75 286,66 280,60 Z"/>
+    <path d="M236,76 C240,82 245,84 250,84 C255,84 260,82 264,76 C259,78 255,79 250,79 C245,79 241,78 236,76 Z"/>
+    <!-- Lóbulos de acento de la corona -->
+    <circle cx="233" cy="52" r="3.5"/>
+    <circle cx="267" cy="52" r="3.5"/>
+    <circle cx="242" cy="40" r="3.5"/>
+    <circle cx="258" cy="40" r="3.5"/>
+    <circle cx="242" cy="65" r="3.5"/>
+    <circle cx="258" cy="65" r="3.5"/>
+  </g>
+
+  <g id="Biznaga_Cuerpo" fill="#85C68D" stroke="#85C68D" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Círculo exterior y costillas perimetrales con espinas radiales -->
+    <!-- Costilla Central y Espinas Verticales -->
+    <path d="M250,78 L250,332" stroke-width="4.5" fill="none"/>
+    <path d="M250,95 L242,102 M250,95 L258,102 M250,115 L240,123 M250,115 L260,123 M250,135 L239,144 M250,135 L261,144 M250,155 L238,165 M250,155 L262,165 M250,175 L238,186 M250,175 L262,186 M250,195 L238,207 M250,195 L262,207 M250,215 L238,228 M250,215 L262,228 M250,235 L239,248 M250,235 L261,248 M250,255 L240,268 M250,255 L260,268 M250,275 L242,286 M250,275 L258,286 M250,295 L244,304 M250,295 L256,304" stroke-width="3" fill="none"/>
+
+    <!-- Costilla Izquierda 1 -->
+    <path d="M238,80 C215,120 215,285 238,330" stroke-width="4" fill="none"/>
+    <path d="M233,105 L225,114 M228,130 L219,140 M225,155 L215,166 M224,180 L214,192 M224,205 L214,218 M225,230 L215,243 M228,255 L219,267 M233,280 L225,291 M236,305 L230,314" stroke-width="2.8" fill="none"/>
+
+    <!-- Costilla Derecha 1 -->
+    <path d="M262,80 C285,120 285,285 262,330" stroke-width="4" fill="none"/>
+    <path d="M267,105 L275,114 M272,130 L281,140 M275,155 L285,166 M276,180 L286,192 M276,205 L286,218 M275,230 L285,243 M272,255 L281,267 M267,280 L275,291 M264,305 L270,314" stroke-width="2.8" fill="none"/>
+
+    <!-- Costilla Izquierda 2 -->
+    <path d="M224,84 C185,130 185,275 224,326" stroke-width="4" fill="none"/>
+    <path d="M213,115 L203,126 M205,142 L194,154 M199,170 L188,183 M197,198 L185,212 M199,226 L188,240 M205,254 L194,267 M213,280 L203,292" stroke-width="2.6" fill="none"/>
+
+    <!-- Costilla Derecha 2 -->
+    <path d="M276,84 C315,130 315,275 276,326" stroke-width="4" fill="none"/>
+    <path d="M287,115 L297,126 M295,142 L306,154 M301,170 L312,183 M303,198 L315,212 M301,226 L312,240 M295,254 L306,267 M287,280 L297,292" stroke-width="2.6" fill="none"/>
+
+    <!-- Costilla Izquierda 3 -->
+    <path d="M208,90 C155,145 155,260 208,318" stroke-width="4" fill="none"/>
+    <path d="M190,126 L178,139 M179,155 L166,169 M172,185 L159,200 M172,215 L159,230 M179,245 L166,259 M190,274 L178,287" stroke-width="2.6" fill="none"/>
+
+    <!-- Costilla Derecha 3 -->
+    <path d="M292,90 C345,145 345,260 292,318" stroke-width="4" fill="none"/>
+    <path d="M310,126 L322,139 M321,155 L334,169 M328,185 L341,200 M328,215 L341,230 M321,245 L334,259 M310,274 L322,287" stroke-width="2.6" fill="none"/>
+
+    <!-- Costilla Izquierda 4 (Borde exterior interno) -->
+    <path d="M190,99 C128,160 128,245 190,307" stroke-width="4" fill="none"/>
+    <path d="M164,142 L150,157 M150,175 L135,191 M146,210 L131,227 M150,245 L135,261 M164,276 L150,291" stroke-width="2.6" fill="none"/>
+
+    <!-- Costilla Derecha 4 (Borde exterior interno) -->
+    <path d="M310,99 C372,160 372,245 310,307" stroke-width="4" fill="none"/>
+    <path d="M336,142 L350,157 M350,175 L365,191 M354,210 L369,227 M350,245 L365,261 M336,276 L350,291" stroke-width="2.6" fill="none"/>
+
+    <!-- Arco Base y Silueta Exterior de la Biznaga -->
+    <path d="M170,112 C100,185 100,225 170,295 C210,335 290,335 330,295 C400,225 400,185 330,112" stroke-width="4.5" fill="none"/>
+
+    <!-- Espinas Radiales Exteriores (Corona y Contorno Completo) -->
+    <!-- Arriba Izquierda -->
+    <polygon points="172,110 148,90 168,114"/>
+    <polygon points="186,98 168,76 182,103"/>
+    <polygon points="204,88 190,64 200,94"/>
+    <polygon points="222,81 214,56 220,86"/>
+    <!-- Arriba Derecha -->
+    <polygon points="328,110 352,90 332,114"/>
+    <polygon points="314,98 332,76 318,103"/>
+    <polygon points="296,88 310,64 300,94"/>
+    <polygon points="278,81 286,56 280,86"/>
+    <!-- Lateral Izquierdo -->
+    <polygon points="155,126 126,112 153,132"/>
+    <polygon points="142,146 110,136 140,152"/>
+    <polygon points="132,168 98,162 131,174"/>
+    <polygon points="126,190 90,188 126,196"/>
+    <polygon points="125,212 90,214 126,218"/>
+    <polygon points="128,234 94,240 129,239"/>
+    <polygon points="136,256 104,266 138,259"/>
+    <polygon points="148,276 118,290 149,278"/>
+    <polygon points="164,294 136,312 165,295"/>
+    <!-- Lateral Derecho -->
+    <polygon points="345,126 374,112 347,132"/>
+    <polygon points="358,146 390,136 360,152"/>
+    <polygon points="368,168 402,162 369,174"/>
+    <polygon points="374,190 410,188 374,196"/>
+    <polygon points="375,212 410,214 374,218"/>
+    <polygon points="372,234 406,240 371,239"/>
+    <polygon points="364,256 396,266 362,259"/>
+    <polygon points="352,276 382,290 351,278"/>
+    <polygon points="336,294 364,312 335,295"/>
+    <!-- Base Inferior -->
+    <polygon points="185,310 162,330 188,312"/>
+    <polygon points="208,322 190,344 211,323"/>
+    <polygon points="232,329 220,352 234,329"/>
+    <polygon points="250,332 250,356 252,332"/>
+    <polygon points="268,329 280,352 266,329"/>
+    <polygon points="292,322 310,344 289,323"/>
+    <polygon points="315,310 338,330 312,312"/>
+  </g>
+
+  <!-- Tipografía Oficial Biznaga Kíix -->
+  <g id="Tipografia" fill="#85C68D">
+    <!-- Texto: BIZNAGA -->
+    <text x="250" y="440" 
+          font-family="'Cinzel', 'Playfair Display', 'Times New Roman', 'Baskerville', serif" 
+          font-size="64" 
+          font-weight="900" 
+          letter-spacing="5" 
+          text-anchor="middle">BIZNAGA</text>
+
+    <!-- Texto: KÍIX -->
+    <text x="250" y="525" 
+          font-family="'Cinzel', 'Playfair Display', 'Times New Roman', 'Baskerville', serif" 
+          font-size="70" 
+          font-weight="900" 
+          letter-spacing="8" 
+          text-anchor="middle">K&#205;&#205;X</text>
+  </g>
+</svg>

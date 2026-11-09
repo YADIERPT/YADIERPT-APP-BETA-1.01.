@@ -36,6 +36,8 @@ import 'package:mi_app/Utilidades/formateador.dart';
 import 'package:mi_app/Controladores/controlador_hardware.dart';
 import 'package:mi_app/Servicios/generador_esc_pos.dart';
 import 'package:mi_app/Modelos/configuracion_hardware.dart';
+import 'package:mi_app/Vista/Widgets/logo_biznaga.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
@@ -1060,6 +1062,46 @@ void main() {
       expect(ctrlHw.config.impresoraTipo, 'bluetooth');
       expect(ctrlHw.config.impresoraAnchoPapel, '80mm');
       expect(ctrlHw.config.impresoraConectada, isFalse);
+    });
+  });
+
+  group('Logotipo Oficial Adaptativo SVG (LogoBiznaga)', () {
+    testWidgets('LogoBiznaga selecciona logo_claro.svg en modo claro', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.light(),
+          home: const Scaffold(
+            body: LogoBiznaga(size: 100),
+          ),
+        ),
+      );
+
+      final svgFinder = find.byType(SvgPicture);
+      expect(svgFinder, findsOneWidget);
+      final SvgPicture svg = tester.widget(svgFinder);
+      final BytesLoader loader = svg.bytesLoader;
+      expect(loader, isA<SvgAssetLoader>());
+      final assetLoader = loader as SvgAssetLoader;
+      expect(assetLoader.assetName, LogoBiznaga.assetClaro);
+    });
+
+    testWidgets('LogoBiznaga selecciona logo_oscuro.svg en modo oscuro', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: const Scaffold(
+            body: LogoBiznaga(size: 120),
+          ),
+        ),
+      );
+
+      final svgFinder = find.byType(SvgPicture);
+      expect(svgFinder, findsOneWidget);
+      final SvgPicture svg = tester.widget(svgFinder);
+      final BytesLoader loader = svg.bytesLoader;
+      expect(loader, isA<SvgAssetLoader>());
+      final assetLoader = loader as SvgAssetLoader;
+      expect(assetLoader.assetName, LogoBiznaga.assetOscuro);
     });
   });
 }
