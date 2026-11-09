@@ -114,7 +114,11 @@ class Venta {
     return articulos.fold(0, (suma, articulo) => suma + articulo.subtotal);
   }
 
+  double get subtotal => subtotalVenta;
+
   double get totalIva => aplicarIva ? (subtotalVenta * porcentajeIva) : 0.0;
+
+  double get montoIva => totalIva;
 
   double get total => subtotalVenta + totalIva;
 

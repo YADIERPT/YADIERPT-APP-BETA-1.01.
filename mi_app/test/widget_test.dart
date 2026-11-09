@@ -33,6 +33,9 @@ import 'package:mi_app/Vista/historial_ventas_vista.dart';
 import 'package:mi_app/Vista/Widgets/dialogo_seguridad_admin.dart';
 import 'package:mi_app/Vista/Widgets/formulario_empleado_sheet.dart';
 import 'package:mi_app/Utilidades/formateador.dart';
+import 'package:mi_app/Controladores/controlador_hardware.dart';
+import 'package:mi_app/Servicios/generador_esc_pos.dart';
+import 'package:mi_app/Modelos/configuracion_hardware.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
@@ -1029,6 +1032,34 @@ void main() {
       expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 0);
       expect(ctrlVentas.totalArticulosEnCarrito, 0);
       expect(ctrlVentas.totalVentaActual, 0.0);
+    });
+  });
+
+  group('Impresión Térmica ESC/POS y Hardware Bluetooth (P0)', () {
+    test('GeneradorEscPos produce secuencias de bytes binarios válidos para 58mm y 80mm', () {
+      final gen58 = GeneradorEscPos(es80mm: false);
+      expect(gen58.maxColumnas, 32);
+
+      gen58.texto('TEST 58MM', alineacion: AlineacionEscPos.centro, esNegrita: true);
+      gen58.lineaDivisoria('=');
+      gen58.filaDosColumnas('Monstera', '\$28.00');
+      gen58.cortarPapel();
+
+      final bytes58 = gen58.obtenerBytes();
+      expect(bytes58.isNotEmpty, isTrue);
+      // Validar comando de inicialización ESC @ (0x1B, 0x40)
+      expect(bytes58[0], 0x1B);
+      expect(bytes58[1], 0x40);
+
+      final gen80 = GeneradorEscPos(es80mm: true);
+      expect(gen80.maxColumnas, 48);
+    });
+
+    test('ControladorHardware inicializa con defaults y gestiona ciclo de vida', () {
+      final ctrlHw = ControladorHardware();
+      expect(ctrlHw.config.impresoraTipo, 'bluetooth');
+      expect(ctrlHw.config.impresoraAnchoPapel, '80mm');
+      expect(ctrlHw.config.impresoraConectada, isFalse);
     });
   });
 }

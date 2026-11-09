@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:pdf/pdf.dart';
@@ -10,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../BaseDatos/base_datos.dart';
 import '../Modelos/configuracion_hardware.dart';
+import '../Modelos/venta.dart';
 import '../Servicios/servicio_biometrico.dart';
 import '../Servicios/generador_esc_pos.dart';
 
@@ -227,8 +229,40 @@ class ControladorHardware extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 3. IMPRESORA TÉRMICA POS (ESC/POS DIRECTO POR BLUETOOTH SPP / RED)
+  // 3. IMPRESORA TÉRMICA POS (SOCKET NATIVO BLUETOOTH SPP / TCP RAW 9100)
   // =========================================================================
+
+  /// Comprueba permisos de Bluetooth y si el adaptador físico está encendido.
+  /// Proporciona un diagnóstico exhaustivo para guiar al usuario en la UI.
+  Future<Map<String, dynamic>> verificarPermisosYEstadoBluetooth() async {
+    bool permisosConcedidos = true;
+
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final scanStatus = await Permission.bluetoothScan.status;
+      final connectStatus = await Permission.bluetoothConnect.status;
+
+      if (!scanStatus.isGranted || !connectStatus.isGranted) {
+        final scanReq = await Permission.bluetoothScan.request();
+        final connectReq = await Permission.bluetoothConnect.request();
+        permisosConcedidos = scanReq.isGranted && connectReq.isGranted;
+      }
+    }
+
+    final bool isGrantedPlugin =
+        await PrintBluetoothThermal.isPermissionBluetoothGranted;
+    final bool btEncendido = await PrintBluetoothThermal.bluetoothEnabled;
+
+    return {
+      'permisos': permisosConcedidos && isGrantedPlugin,
+      'encendido': btEncendido,
+      'listo': permisosConcedidos && isGrantedPlugin && btEncendido,
+      'mensaje': !btEncendido
+          ? 'El Bluetooth está apagado en este dispositivo.'
+          : (!permisosConcedidos || !isGrantedPlugin)
+              ? 'Permisos de dispositivos cercanos denegados.'
+              : 'Bluetooth operativo y listo para conectar.',
+    };
+  }
 
   /// Realiza el escaneo de dispositivos Bluetooth emparejados (SPP) e impresoras de red
   Future<List<DispositivoImpresora>> escanearImpresoras() async {
@@ -245,7 +279,8 @@ class ControladorHardware extends ChangeNotifier {
       }
 
       // 2. Consulta de dispositivos Bluetooth emparejados con perfil SPP (RFCOMM)
-      final dispositivosEmparejados = await _obtenerDispositivosBluetoothEmparejados();
+      final dispositivosEmparejados =
+          await _obtenerDispositivosBluetoothEmparejados();
       lista.addAll(dispositivosEmparejados);
 
       // 3. Consulta de impresoras del sistema como fallback secundario
@@ -276,16 +311,47 @@ class ControladorHardware extends ChangeNotifier {
     return lista;
   }
 
-  /// Consulta los dispositivos Bluetooth emparejados en el sistema operativo
+  /// Consulta los dispositivos Bluetooth emparejados en el sistema operativo mediante el socket nativo
   Future<List<DispositivoImpresora>> _obtenerDispositivosBluetoothEmparejados() async {
     final List<DispositivoImpresora> lista = [];
 
-    if (_config.impresoraMac.isNotEmpty) {
+    try {
+      final bool btActivo = await PrintBluetoothThermal.bluetoothEnabled;
+      if (btActivo) {
+        final List<BluetoothInfo> dispositivosNativos =
+            await PrintBluetoothThermal.pairedBluetooths;
+
+        for (final d in dispositivosNativos) {
+          final mac = d.macAdress.trim();
+          final nombre = d.name.trim();
+          if (mac.isNotEmpty) {
+            final bool esVinculada = _config.impresoraMac == mac;
+            lista.add(
+              DispositivoImpresora(
+                nombre: nombre.isNotEmpty ? nombre : 'Impresora Térmica ($mac)',
+                macOUrl: mac,
+                tipo: 'bluetooth',
+                esPredeterminada: esVinculada,
+              ),
+            );
+          }
+        }
+      } else {
+        debugPrint('Bluetooth apagado durante la lectura de emparejados.');
+      }
+    } catch (e) {
+      debugPrint(
+        'Error al consultar dispositivos con PrintBluetoothThermal: $e',
+      );
+    }
+
+    // Fallback: Si no se detectaron emparejados pero hay una MAC guardada previamente
+    if (lista.isEmpty && _config.impresoraMac.isNotEmpty) {
       lista.add(
         DispositivoImpresora(
           nombre: _config.impresoraNombre.isNotEmpty
               ? _config.impresoraNombre
-              : 'Impresora Bluetooth Vinculada',
+              : 'Impresora Bluetooth Guardada',
           macOUrl: _config.impresoraMac,
           tipo: 'bluetooth',
           esPredeterminada: true,
@@ -296,13 +362,92 @@ class ControladorHardware extends ChangeNotifier {
     return lista;
   }
 
-  /// Vincula la impresora seleccionada en la configuración persistente
-  Future<void> vincularImpresora(DispositivoImpresora impresora) async {
+  /// Comprueba el estado de la conexión física del socket Bluetooth
+  Future<bool> verificarEstadoConexionImpresora() async {
+    if (_config.impresoraTipo != 'bluetooth') {
+      return _config.impresoraConectada;
+    }
+    try {
+      final bool conectado = await PrintBluetoothThermal.connectionStatus;
+      if (_config.impresoraConectada != conectado) {
+        _config.impresoraConectada = conectado;
+        notifyListeners();
+      }
+      return conectado;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Abre la conexión directa por socket RFCOMM / SPP hacia la impresora especificada o guardada
+  Future<bool> conectarImpresora({String? macAddress}) async {
+    final mac = (macAddress ?? _config.impresoraMac).trim();
+    if (mac.isEmpty) {
+      debugPrint('No se especificó dirección MAC para conectar la impresora.');
+      return false;
+    }
+
+    try {
+      final bool btActivo = await PrintBluetoothThermal.bluetoothEnabled;
+      if (!btActivo) {
+        debugPrint('El adaptador Bluetooth está apagado.');
+        return false;
+      }
+
+      final bool yaConectado = await PrintBluetoothThermal.connectionStatus;
+      if (yaConectado && _config.impresoraMac == mac) {
+        _config.impresoraConectada = true;
+        notifyListeners();
+        return true;
+      }
+
+      debugPrint('Abriendo socket SPP nativo a $mac...');
+      final bool conectado =
+          await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+
+      _config.impresoraConectada = conectado;
+      if (conectado) {
+        _config.impresoraMac = mac;
+      }
+      await guardarConfiguracion(_config);
+      notifyListeners();
+      return conectado;
+    } catch (e) {
+      debugPrint('Excepción al conectar socket de impresora: $e');
+      _config.impresoraConectada = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Cierra el socket Bluetooth activo con la impresora
+  Future<bool> desconectarImpresora() async {
+    try {
+      final bool desconectado = await PrintBluetoothThermal.disconnect;
+      _config.impresoraConectada = false;
+      await guardarConfiguracion(_config);
+      notifyListeners();
+      return desconectado;
+    } catch (e) {
+      debugPrint('Error al desconectar socket de impresora: $e');
+      return false;
+    }
+  }
+
+  /// Vincula la impresora seleccionada en la configuración persistente e intenta el enlace por socket
+  Future<bool> vincularImpresora(DispositivoImpresora impresora) async {
     _config.impresoraNombre = impresora.nombre;
     _config.impresoraMac = impresora.macOUrl;
     _config.impresoraTipo = impresora.tipo;
-    _config.impresoraConectada = true;
     await guardarConfiguracion(_config);
+
+    if (impresora.tipo == 'bluetooth') {
+      return await conectarImpresora(macAddress: impresora.macOUrl);
+    } else {
+      _config.impresoraConectada = true;
+      await guardarConfiguracion(_config);
+      return true;
+    }
   }
 
   /// Envía un flujo binario directo de bytes ESC/POS al hardware de impresión
@@ -314,28 +459,71 @@ class ControladorHardware extends ChangeNotifier {
       // 1. Conexión por Socket TCP (WiFi / Ethernet en puerto 9100 estándar POS)
       if (_config.impresoraTipo == 'wifi') {
         final host = _config.wifiHost.trim();
-        final socket = await Socket.connect(host, 9100, timeout: const Duration(seconds: 4));
+        final socket = await Socket.connect(
+          host,
+          9100,
+          timeout: const Duration(seconds: 4),
+        );
         socket.add(bytes);
         await socket.flush();
         await socket.close();
         return true;
       }
 
-      // 2. Conexión por Socket Bluetooth SPP (RFCOMM Serial Port Profile)
+      // 2. Conexión por Socket Físico Bluetooth SPP (RFCOMM Serial Port Profile)
       if (_config.impresoraTipo == 'bluetooth') {
         final mac = _config.impresoraMac.trim();
         if (mac.isEmpty) {
-          debugPrint('Aviso: Dirección MAC no configurada para impresora Bluetooth.');
+          debugPrint(
+            'Aviso: Dirección MAC no configurada para impresora Bluetooth.',
+          );
           return false;
         }
 
-        debugPrint('ESC/POS: Transmitiendo ${bytes.length} bytes a la MAC $mac por socket SPP...');
-        await Future.delayed(const Duration(milliseconds: 250));
-        return true;
+        final bool btActivo = await PrintBluetoothThermal.bluetoothEnabled;
+        if (!btActivo) {
+          debugPrint(
+            'Error: El adaptador Bluetooth está desactivado en el dispositivo.',
+          );
+          return false;
+        }
+
+        // Verifica si el socket ya está abierto; si no, lo establece
+        bool conectado = await PrintBluetoothThermal.connectionStatus;
+        if (!conectado) {
+          debugPrint('Socket no activo. Conectando a MAC $mac...');
+          conectado =
+              await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+        }
+
+        if (!conectado) {
+          debugPrint('No fue posible abrir el socket Bluetooth RFCOMM con $mac.');
+          _config.impresoraConectada = false;
+          notifyListeners();
+          return false;
+        }
+
+        _config.impresoraConectada = true;
+        notifyListeners();
+
+        debugPrint(
+          'ESC/POS: Transmitiendo ${bytes.length} bytes a la MAC $mac por socket SPP nativo...',
+        );
+        final bool exitoEnvio = await PrintBluetoothThermal.writeBytes(bytes);
+        debugPrint('ESC/POS: Resultado de transmisión por socket: $exitoEnvio');
+        return exitoEnvio;
       }
 
-      // 3. Fallback USB / Spooler de sistema operativo
-      return true;
+      // 3. Fallback USB / Impresora de sistema de escritorio
+      if (_config.impresoraTipo == 'usb') {
+        try {
+          return await PrintBluetoothThermal.writeBytes(bytes);
+        } catch (_) {
+          return false;
+        }
+      }
+
+      return false;
     } catch (e) {
       debugPrint('Error al transmitir bytes a impresora térmica: $e');
       return false;
@@ -396,6 +584,93 @@ class ControladorHardware extends ChangeNotifier {
       return await enviarBytesAImpresora(bytes);
     } catch (e) {
       debugPrint('Error al imprimir ticket ESC/POS: $e');
+      return false;
+    }
+  }
+
+  /// Imprime un ticket de venta real en formato ESC/POS binario directo sobre el socket térmico
+  Future<bool> imprimirTicketVentaEscPos(
+    Venta venta, {
+    double recibido = 0.0,
+  }) async {
+    try {
+      final es80mm = _config.impresoraAnchoPapel == '80mm';
+      final gen = GeneradorEscPos(es80mm: es80mm);
+
+      // Cabecera de marca
+      gen.texto('PLANTEAPP POS',
+          alineacion: AlineacionEscPos.centro,
+          tamanoFuente: TamanoFuenteEscPos.grande,
+          esNegrita: true);
+      gen.texto('Biznaga Kíix • Vivero Botánico',
+          alineacion: AlineacionEscPos.centro);
+      gen.lineaDivisoria('=');
+
+      gen.filaDosColumnas(
+        'Ticket #:',
+        venta.id.length >= 8 ? venta.id.substring(0, 8) : venta.id,
+      );
+      final ahora = venta.fecha;
+      final fechaStr =
+          '${ahora.day.toString().padLeft(2, '0')}/${ahora.month.toString().padLeft(2, '0')}/${ahora.year} ${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}';
+      gen.filaDosColumnas('Fecha:', fechaStr);
+
+      if (venta.cliente != null && venta.cliente!.trim().isNotEmpty) {
+        gen.filaDosColumnas('Cliente:', venta.cliente!);
+      }
+      gen.lineaDivisoria('-');
+
+      // Artículos
+      gen.filaDosColumnas('CANT x ARTÍCULO', 'TOTAL', esNegrita: true);
+      for (final art in venta.articulos) {
+        gen.filaDosColumnas(
+          '${art.cantidad}x ${art.producto.nombre}',
+          '\$${art.subtotal.toStringAsFixed(2)}',
+        );
+      }
+      gen.lineaDivisoria('-');
+
+      gen.filaDosColumnas(
+        'SUBTOTAL:',
+        '\$${venta.subtotal.toStringAsFixed(2)}',
+      );
+      if (venta.aplicarIva) {
+        final ivaPct = (venta.porcentajeIva > 1
+                ? venta.porcentajeIva
+                : venta.porcentajeIva * 100)
+            .toInt();
+        gen.filaDosColumnas(
+          'IVA ($ivaPct%):',
+          '\$${venta.montoIva.toStringAsFixed(2)}',
+        );
+      }
+      gen.filaDosColumnas(
+        'TOTAL:',
+        '\$${venta.total.toStringAsFixed(2)}',
+        esNegrita: true,
+        tamanoFuente: TamanoFuenteEscPos.dobleAlto,
+      );
+
+      if (recibido > 0) {
+        gen.filaDosColumnas('Recibido:', '\$${recibido.toStringAsFixed(2)}');
+        final cambio = recibido - venta.total;
+        if (cambio > 0) {
+          gen.filaDosColumnas('Cambio:', '\$${cambio.toStringAsFixed(2)}');
+        }
+      }
+
+      gen.lineaDivisoria('=');
+      gen.texto('¡Gracias por su compra!',
+          alineacion: AlineacionEscPos.centro);
+      gen.texto('Vivero Botánico y Accesorios',
+          alineacion: AlineacionEscPos.centro);
+      gen.alimentarLineas(2);
+      gen.cortarPapel();
+
+      final bytes = gen.obtenerBytes();
+      return await enviarBytesAImpresora(bytes);
+    } catch (e) {
+      debugPrint('Error al imprimir ticket de venta ESC/POS: $e');
       return false;
     }
   }
