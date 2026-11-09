@@ -311,9 +311,7 @@ class _VentaVistaState extends State<VentaVista> {
     final ArticuloVenta artEliminado = art;
     final int indiceEliminado = index;
 
-    setState(() {
-      venta.articulos.removeAt(index);
-    });
+    widget.controladorVentas.eliminarArticulo(index);
 
     HapticFeedback.mediumImpact();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -340,13 +338,7 @@ class _VentaVistaState extends State<VentaVista> {
           label: 'DESHACER',
           textColor: Colors.white,
           onPressed: () {
-            setState(() {
-              if (indiceEliminado <= venta.articulos.length) {
-                venta.articulos.insert(indiceEliminado, artEliminado);
-              } else {
-                venta.articulos.add(artEliminado);
-              }
-            });
+            widget.controladorVentas.insertarArticulo(indiceEliminado, artEliminado);
           },
         ),
       ),
@@ -359,6 +351,7 @@ class _VentaVistaState extends State<VentaVista> {
       listenable: Listenable.merge([
         ThemeManager.instance,
         widget.controladorInventario,
+        widget.controladorVentas,
       ]),
       builder: (context, _) {
         if (widget.controladorVentas.ventaActual == null) {
@@ -642,25 +635,19 @@ class _VentaVistaState extends State<VentaVista> {
             art: art,
             isLandscape: isLandscape,
             onIncrementar: () {
-              if (art.producto.cantidadEnInventario > art.cantidad) {
-                setState(() {
-                  art.cantidad++;
-                });
-              } else {
+              try {
+                widget.controladorVentas
+                    .actualizarCantidadArticulo(index, art.cantidad + 1);
+              } catch (e) {
                 _mostrarAviso(
                   context,
-                  'Solo hay ${art.producto.cantidadEnInventario} unidades disponibles.',
+                  e.toString().replaceAll('Exception: ', ''),
                 );
               }
             },
             onDecrementar: () {
-              setState(() {
-                if (art.cantidad > 1) {
-                  art.cantidad--;
-                } else {
-                  venta.articulos.remove(art);
-                }
-              });
+              widget.controladorVentas
+                  .actualizarCantidadArticulo(index, art.cantidad - 1);
             },
           ),
         );

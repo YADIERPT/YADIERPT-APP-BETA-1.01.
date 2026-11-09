@@ -35,6 +35,7 @@ class MetricasDashboard {
   final String horaTooltip;
   final double montoTooltip;
   final int ventasTooltip;
+  final int idxDestacado;
   final List<Producto> productosBajoStock;
 
   const MetricasDashboard({
@@ -51,6 +52,7 @@ class MetricasDashboard {
     required this.horaTooltip,
     required this.montoTooltip,
     required this.ventasTooltip,
+    this.idxDestacado = 3,
     required this.productosBajoStock,
   });
 
@@ -68,6 +70,7 @@ class MetricasDashboard {
     horaTooltip: '12:00',
     montoTooltip: 0.0,
     ventasTooltip: 0,
+    idxDestacado: 3,
     productosBajoStock: [],
   );
 }
@@ -232,6 +235,7 @@ class ControladorInicio extends ChangeNotifier {
       horaTooltip: pDestacado['hora'],
       montoTooltip: pDestacado['monto'],
       ventasTooltip: pDestacado['conteo'],
+      idxDestacado: idxDestacado,
       productosBajoStock: productosBajoStock,
     );
 

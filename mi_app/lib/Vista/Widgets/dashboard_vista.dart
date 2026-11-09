@@ -57,6 +57,7 @@ class _DashboardVistaState extends State<DashboardVista> {
         final horaTooltip = metricas.horaTooltip;
         final montoTooltip = metricas.montoTooltip;
         final ventasTooltip = metricas.ventasTooltip;
+        final idxDestacado = metricas.idxDestacado;
         final periodoSeleccionado = cInicio.periodoSeleccionado;
 
         final usuarioActual = cAuth.usuarioActual;
@@ -493,7 +494,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => widget.alNavegar(1),
+                            onPressed: () => widget.alNavegar?.call(1),
                             icon: const Icon(Icons.point_of_sale_rounded, size: 18),
                             label: const Text('Ir al POS'),
                             style: ElevatedButton.styleFrom(
@@ -510,7 +511,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => widget.alNavegar(2),
+                            onPressed: () => widget.alNavegar?.call(2),
                             icon: const Icon(Icons.spa_outlined, size: 18),
                             label: const Text('Inventario'),
                             style: OutlinedButton.styleFrom(
@@ -641,7 +642,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                 ),
                               ),
                               ElevatedButton(
-                                onPressed: () => widget.alNavegar(2),
+                                onPressed: () => widget.alNavegar?.call(2),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.warning,
                                   foregroundColor: AppColors.onWarning,

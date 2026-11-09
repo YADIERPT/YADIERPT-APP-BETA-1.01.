@@ -35,7 +35,7 @@ class _PosVistaState extends State<PosVista> {
     final cVentas = context.read<ControladorVentas>();
     final cInventario = context.read<ControladorInventario>();
     final venta = cVentas.ventaActual;
-    if (venta == null || venta.articulos.isEmpty) {
+    if (cVentas.totalArticulosEnCarrito == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Agrega al menos un producto al ticket para cobrar.'),
@@ -98,11 +98,8 @@ class _PosVistaState extends State<PosVista> {
           return true;
         }).toList();
 
-        final ventaActual = cVentas.ventaActual;
-        final totalArticulos = ventaActual != null
-            ? ventaActual.articulos.fold<int>(0, (sum, a) => sum + a.cantidad)
-            : 0;
-        final totalVenta = ventaActual?.total ?? 0.0;
+        final totalArticulos = cVentas.totalArticulosEnCarrito;
+        final totalVenta = cVentas.totalVentaActual;
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -138,45 +135,50 @@ class _PosVistaState extends State<PosVista> {
                           itemCount: productos.length,
                           itemBuilder: (context, index) {
                             final producto = productos[index];
-                            int cantidadEnTicket = 0;
-                            if (ventaActual != null) {
-                              try {
-                                final art = ventaActual.articulos.firstWhere(
-                                  (a) => a.producto.id == producto.id,
-                                );
-                                cantidadEnTicket = art.cantidad;
-                              } catch (_) {}
-                            }
+                            final int cantidadEnTicket =
+                                cVentas.obtenerCantidadEnCarrito(producto.id);
 
                             return TarjetaPosProducto(
                               producto: producto,
                               cantidadEnTicket: cantidadEnTicket,
                               onAgregar: () {
-                                context.read<ControladorVentas>().agregarProductoAVentaActual(
-                                  producto.id,
-                                  1,
-                                );
+                                try {
+                                  context
+                                      .read<ControladorVentas>()
+                                      .agregarArticulo(producto, 1);
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(e
+                                          .toString()
+                                          .replaceAll('Exception: ', '')),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
                               },
                               onIncrementar: () {
-                                context.read<ControladorVentas>().agregarProductoAVentaActual(
-                                  producto.id,
-                                  1,
-                                );
+                                try {
+                                  context
+                                      .read<ControladorVentas>()
+                                      .agregarArticulo(producto, 1);
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(e
+                                          .toString()
+                                          .replaceAll('Exception: ', '')),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
                               },
                               onDecrementar: () {
-                                setState(() {
-                                  if (ventaActual != null) {
-                                    final art =
-                                        ventaActual.articulos.firstWhere(
-                                      (a) => a.producto.id == producto.id,
-                                    );
-                                    if (art.cantidad > 1) {
-                                      art.cantidad--;
-                                    } else {
-                                      ventaActual.articulos.remove(art);
-                                    }
-                                  }
-                                });
+                                context
+                                    .read<ControladorVentas>()
+                                    .decrementarArticulo(producto.id);
                               },
                               onSinUnidades: _mostrarAvisoSinUnidades,
                             );

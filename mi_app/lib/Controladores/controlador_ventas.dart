@@ -30,6 +30,13 @@ class ControladorVentas extends ChangeNotifier {
   List<Venta> get ventas => _ventas;
   Venta? get ventaActual => _ventaActual;
 
+  /// Cantidad total de unidades añadidas al carrito actual
+  int get totalArticulosEnCarrito =>
+      _ventaActual?.articulos.fold<int>(0, (sum, a) => sum + a.cantidad) ?? 0;
+
+  /// Monto monetario total calculado del carrito actual
+  double get totalVentaActual => _ventaActual?.total ?? 0.0;
+
   /// Carga y restaura el historial completo de ventas desde la base de datos SQLite
   /// ordenado descendentemente (la venta más reciente primero).
   /// Se ejecuta automáticamente al arrancar la app y al entrar a la vista de historial.
@@ -239,32 +246,113 @@ class ControladorVentas extends ChangeNotifier {
     );
   }
 
+  /// Obtiene la cantidad de unidades de un producto actualmente añadidas al ticket
+  int obtenerCantidadEnCarrito(String productoId) {
+    if (_ventaActual == null) return 0;
+    for (final art in _ventaActual!.articulos) {
+      if (art.producto.id == productoId) return art.cantidad;
+    }
+    return 0;
+  }
+
+  /// Agrega un producto al ticket validando stock disponible y notificando listeners
+  void agregarArticulo(Producto producto, [int cantidad = 1]) {
+    if (_ventaActual == null) {
+      iniciarVenta();
+    }
+
+    final int cantidadActual = obtenerCantidadEnCarrito(producto.id);
+    final int nuevaCantidadTotal = cantidadActual + cantidad;
+
+    // Validación rigurosa de inventario disponible
+    final prodInventario =
+        controladorInventario.obtenerProducto(producto.id) ?? producto;
+    if (prodInventario.cantidadEnInventario < nuevaCantidadTotal) {
+      throw Exception(
+        'Stock insuficiente para "${producto.nombre}". '
+        'Disponible: ${prodInventario.cantidadEnInventario}, En carrito: $cantidadActual.',
+      );
+    }
+
+    _ventaActual!.agregarArticulo(producto, cantidad);
+    notifyListeners();
+  }
+
+  /// Agrega un producto al ticket resolviéndolo por su ID (retrocompatible)
   void agregarProductoAVentaActual(String productoId, int cantidad) {
+    final producto = controladorInventario.obtenerProducto(productoId);
+    if (producto == null) {
+      throw Exception('Producto no encontrado en el inventario.');
+    }
+    agregarArticulo(producto, cantidad);
+  }
+
+  /// Actualiza la cantidad de un artículo existente en el carrito validando existencias
+  void actualizarCantidadArticulo(int index, int nuevaCantidad) {
     if (_ventaActual == null) {
       throw Exception('No hay una venta en proceso.');
     }
-
-    final producto = controladorInventario.obtenerProducto(productoId);
-    if (producto != null) {
-      int cantidadActualEnCarrito = 0;
-      final idx = _ventaActual!.articulos.indexWhere(
-        (art) => art.producto.id == productoId,
-      );
-      if (idx != -1) {
-        cantidadActualEnCarrito = _ventaActual!.articulos[idx].cantidad;
-      }
-
-      if (producto.cantidadEnInventario >=
-          (cantidadActualEnCarrito + cantidad)) {
-        _ventaActual!.agregarArticulo(producto, cantidad);
-      } else {
-        throw Exception(
-          'Stock insuficiente para el producto: ${producto.nombre}',
-        );
-      }
-    } else {
-      throw Exception('Producto no encontrado en el inventario.');
+    if (index < 0 || index >= _ventaActual!.articulos.length) {
+      throw RangeError('Índice de artículo fuera de rango: $index');
     }
+
+    if (nuevaCantidad <= 0) {
+      eliminarArticulo(index);
+      return;
+    }
+
+    final art = _ventaActual!.articulos[index];
+    final prodInventario =
+        controladorInventario.obtenerProducto(art.producto.id) ?? art.producto;
+
+    if (nuevaCantidad > prodInventario.cantidadEnInventario) {
+      throw Exception(
+        'Stock insuficiente para "${art.producto.nombre}". '
+        'Disponible: ${prodInventario.cantidadEnInventario}, Solicitado: $nuevaCantidad.',
+      );
+    }
+
+    art.cantidad = nuevaCantidad;
+    notifyListeners();
+  }
+
+  /// Reduce en 1 la cantidad de un producto en el carrito o lo remueve si llega a 0
+  void decrementarArticulo(String productoId) {
+    if (_ventaActual == null) return;
+    final int idx = _ventaActual!.articulos.indexWhere(
+      (art) => art.producto.id == productoId,
+    );
+    if (idx != -1) {
+      final actual = _ventaActual!.articulos[idx].cantidad;
+      if (actual > 1) {
+        _ventaActual!.articulos[idx].cantidad = actual - 1;
+        notifyListeners();
+      } else {
+        eliminarArticulo(idx);
+      }
+    }
+  }
+
+  /// Remueve un artículo del carrito según su índice en el ticket
+  void eliminarArticulo(int index) {
+    if (_ventaActual == null) return;
+    if (index >= 0 && index < _ventaActual!.articulos.length) {
+      _ventaActual!.articulos.removeAt(index);
+      notifyListeners();
+    }
+  }
+
+  /// Inserta un artículo en una posición específica del ticket (soporte Deshacer)
+  void insertarArticulo(int index, ArticuloVenta articulo) {
+    if (_ventaActual == null) {
+      iniciarVenta();
+    }
+    if (index <= _ventaActual!.articulos.length) {
+      _ventaActual!.articulos.insert(index, articulo);
+    } else {
+      _ventaActual!.articulos.add(articulo);
+    }
+    notifyListeners();
   }
 
   Future<void> cancelarVentaActual() async {

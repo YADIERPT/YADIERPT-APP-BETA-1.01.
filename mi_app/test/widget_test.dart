@@ -662,6 +662,7 @@ void main() {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
       final ctrlVentas = ControladorVentas(
         controladorInventario: ctrlInv,
         controladorFinanzas: ctrlFin,
@@ -715,6 +716,7 @@ void main() {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
       final ctrlVentas = ControladorVentas(
         controladorInventario: ctrlInv,
         controladorFinanzas: ctrlFin,
@@ -918,6 +920,7 @@ void main() {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
       final ctrlVentas = ControladorVentas(
         controladorInventario: ctrlInv,
         controladorFinanzas: ctrlFin,
@@ -931,6 +934,7 @@ void main() {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
       final ctrlVentas = ControladorVentas(
         controladorInventario: ctrlInv,
         controladorFinanzas: ctrlFin,
@@ -967,6 +971,64 @@ void main() {
 
       num? valorNulo;
       expect(valorNulo.aMoneda(), r'$0.00');
+    });
+  });
+
+  group('Encapsulamiento del Carrito en ControladorVentas (P0)', () {
+    test('agregarArticulo, decrementarArticulo, actualizarCantidadArticulo y eliminarArticulo', () {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      final producto = Producto(
+        id: 'P-TEST-1',
+        nombre: 'Monstera Deliciosa',
+        precioVenta: 150.0,
+        costo: 80.0,
+        cantidadEnInventario: 5,
+        tipo: 'planta',
+      );
+
+      // 1. Agregar artículo
+      ctrlVentas.agregarArticulo(producto, 2);
+      expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 2);
+      expect(ctrlVentas.totalArticulosEnCarrito, 2);
+      expect(ctrlVentas.totalVentaActual, 300.0);
+
+      // 2. Incrementar agregando 1 más
+      ctrlVentas.agregarArticulo(producto, 1);
+      expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 3);
+      expect(ctrlVentas.totalArticulosEnCarrito, 3);
+      expect(ctrlVentas.totalVentaActual, 450.0);
+
+      // 3. Decrementar
+      ctrlVentas.decrementarArticulo('P-TEST-1');
+      expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 2);
+      expect(ctrlVentas.totalArticulosEnCarrito, 2);
+      expect(ctrlVentas.totalVentaActual, 300.0);
+
+      // 4. Actualizar cantidad directamente dentro del rango
+      ctrlVentas.actualizarCantidadArticulo(0, 4);
+      expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 4);
+      expect(ctrlVentas.totalArticulosEnCarrito, 4);
+
+      // 5. Exceder inventario debe lanzar excepción
+      expect(
+        () => ctrlVentas.actualizarCantidadArticulo(0, 10),
+        throwsA(isA<Exception>()),
+      );
+
+      // 6. Eliminar artículo
+      ctrlVentas.eliminarArticulo(0);
+      expect(ctrlVentas.obtenerCantidadEnCarrito('P-TEST-1'), 0);
+      expect(ctrlVentas.totalArticulosEnCarrito, 0);
+      expect(ctrlVentas.totalVentaActual, 0.0);
     });
   });
 }
