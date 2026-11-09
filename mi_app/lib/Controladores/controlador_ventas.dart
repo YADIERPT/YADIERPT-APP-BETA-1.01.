@@ -382,17 +382,14 @@ class ControladorVentas extends ChangeNotifier {
 
       try {
         ventaTerminada.completarVenta();
+
+        // Guarda la venta, descuenta inventario y asienta el ingreso en un único escudo atómico ACID
         await _guardarVentaYDescontarStockEnBD(ventaTerminada);
 
         // Optimización O(1): Insertar la venta completada directamente al inicio del historial local
         // sin recargar innecesariamente toda la base de datos desde SQLite.
         _ventas.removeWhere((v) => v.id == ventaTerminada.id);
         _ventas.insert(0, ventaTerminada);
-
-        await controladorFinanzas.registrarIngreso(
-          'Venta completada: ${ventaTerminada.id}',
-          ventaTerminada.total,
-        );
 
         _ventaActual = null;
 
@@ -673,6 +670,17 @@ class ControladorVentas extends ChangeNotifier {
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
           debugPrint('Artículo de venta insertado: ${articulo.producto.nombre} x${articulo.cantidad} (Row ID: $rowIdArticulo)');
+        }
+
+        // 4. Registro atómico del ingreso financiero dentro de la misma transacción (ACID)
+        // Garantiza que la venta, el inventario y el balance financiero se comprometan o reviertan juntos.
+        if (venta.total > 0) {
+          await controladorFinanzas.registrarIngreso(
+            'Venta completada: ${venta.id}',
+            venta.total,
+            executor: txn,
+          );
+          debugPrint('Ingreso financiero registrado en SQLite (ACID): \$${venta.total.toStringAsFixed(2)}');
         }
       });
 
