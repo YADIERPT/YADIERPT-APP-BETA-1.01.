@@ -2911,5 +2911,78 @@ void main() {
       expect(ctrlInicio.metricasDashboard.totalPorCobrar, porCobrarInicialDashboard);
     });
   });
+
+  group('Unificación Criptográfica y Registro de Empleados (DevSecOps)', () {
+    test('Creación de empleado y login unificado con PBKDF2 y sanitización trim', () async {
+      final authCtrl = ControladorAutenticacion();
+      const String idEmpleado = 'EMP-9081';
+      const String nombreEmpleado = 'Valeria Torres';
+      const String passwordPlana = 'PlantaSegura2026';
+
+      // 1. Registro mediante agregarEmpleado con espacios accidentales
+      final exitoRegistro = await authCtrl.agregarEmpleado(
+        id: '  $idEmpleado  ',
+        nombre: '  $nombreEmpleado  ',
+        clave: '  $passwordPlana  ',
+        rol: RolUsuario.empleado,
+      );
+      expect(exitoRegistro, isTrue);
+
+      // Verificar que se guardó en SQLite con hash PBKDF2
+      final db = await BaseDeDatos.instancia.database;
+      final query = await db.query(
+        'colaboradores',
+        where: 'id = ?',
+        whereArgs: [idEmpleado],
+      );
+      expect(query.isNotEmpty, isTrue);
+      final usuarioEnDb = query.first;
+      expect(usuarioEnDb['id'], idEmpleado);
+      expect(usuarioEnDb['nombre'], nombreEmpleado);
+      expect(usuarioEnDb['rol'], 'empleado');
+      final hashAlmacenado = usuarioEnDb['clave'] as String;
+      expect(hashAlmacenado.startsWith('\$pbkdf2\$100000\$'), isTrue);
+
+      // 2. Iniciar sesión con ID exacto
+      final loginPorId = await authCtrl.iniciarSesion(idEmpleado, passwordPlana);
+      expect(loginPorId, isTrue);
+      expect(authCtrl.usuarioActual?.id, idEmpleado);
+      expect(authCtrl.usuarioActual?.nombre, nombreEmpleado);
+      expect(authCtrl.usuarioActual?.rol, RolUsuario.empleado);
+
+      // 3. Iniciar sesión con espacios accidentales y minúsculas (Tolerancia y Trim)
+      authCtrl.cerrarSesion();
+      final loginConEspacios = await authCtrl.iniciarSesion(
+        '  ${idEmpleado.toLowerCase()}  ',
+        '  $passwordPlana  ',
+      );
+      expect(loginConEspacios, isTrue);
+      expect(authCtrl.usuarioActual?.id, idEmpleado);
+
+      // 4. Iniciar sesión utilizando el Nombre del colaborador en lugar del ID
+      authCtrl.cerrarSesion();
+      final loginPorNombre = await authCtrl.iniciarSesion(
+        '  $nombreEmpleado  ',
+        passwordPlana,
+      );
+      expect(loginPorNombre, isTrue);
+      expect(authCtrl.usuarioActual?.id, idEmpleado);
+
+      // 5. Rechazo ante contraseña incorrecta o usuario inexistente
+      authCtrl.cerrarSesion();
+      final loginClaveErronea = await authCtrl.iniciarSesion(
+        idEmpleado,
+        'ClaveIncorrecta999',
+      );
+      expect(loginClaveErronea, isFalse);
+      expect(authCtrl.usuarioActual, isNull);
+
+      final loginUsuarioInexistente = await authCtrl.iniciarSesion(
+        'NO_EXISTE_999',
+        passwordPlana,
+      );
+      expect(loginUsuarioInexistente, isFalse);
+    });
+  });
 }
 

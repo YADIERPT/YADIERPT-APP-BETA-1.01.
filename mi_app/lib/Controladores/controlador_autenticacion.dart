@@ -78,57 +78,137 @@ class ControladorAutenticacion extends ChangeNotifier {
     }
   }
 
-  Future<void> registrarColaborador(
+  Future<bool> registrarColaborador(
     Colaborador nuevo, {
     bool yaHasheada = false,
   }) async {
-    final db = await BaseDeDatos.instancia.database;
-    final claveFinal = yaHasheada
-        ? nuevo.clave
-        : await hashearClaveKdf(nuevo.clave, nuevo.id);
-    final map = nuevo.toMap();
-    map['clave'] = claveFinal;
-    await db.insert('colaboradores', map);
-    await obtenerColaboradores();
-  }
+    try {
+      final idSanitizado = nuevo.id.trim();
+      final nombreSanitizado = nuevo.nombre.trim();
+      final claveLimpia = nuevo.clave.trim();
 
-  Future<bool> iniciarSesion(String id, String clave) async {
-    final db = await BaseDeDatos.instancia.database;
-    final resultados = await db.query(
-      'colaboradores',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+      if (idSanitizado.isEmpty || nombreSanitizado.isEmpty || claveLimpia.isEmpty) {
+        throw ArgumentError('El ID, nombre y contraseña no pueden estar vacíos.');
+      }
 
-    if (resultados.isNotEmpty) {
-      final map = resultados.first;
-      final claveAlmacenada = map['clave'] as String;
+      // Motor criptográfico unificado: PBKDF2-HMAC-SHA256 (100k iteraciones)
+      final String claveFinal;
+      if (yaHasheada) {
+        claveFinal = claveLimpia;
+      } else {
+        claveFinal = await hashearClaveKdf(claveLimpia, idSanitizado);
+      }
 
-      final esValida = await ServicioCriptografia.verificarClave(
-        claveIngresada: clave,
-        hashAlmacenado: claveAlmacenada,
-        salt: id,
+      final colaboradorSanitizado = Colaborador(
+        id: idSanitizado,
+        nombre: nombreSanitizado,
+        clave: claveFinal,
+        rol: nuevo.rol,
       );
 
-      if (esValida) {
-        // Si la clave no está en formato PBKDF2 moderno, migrar automáticamente
-        if (!claveAlmacenada.startsWith('\$pbkdf2\$')) {
-          final nuevoHash = await hashearClaveKdf(clave, id);
-          await db.update(
-            'colaboradores',
-            {'clave': nuevoHash},
-            where: 'id = ?',
-            whereArgs: [id],
-          );
-          _usuarioActual = Colaborador.fromMap({
-            ...map,
-            'clave': nuevoHash,
-          });
-        } else {
-          _usuarioActual = Colaborador.fromMap(map);
-        }
-        return true;
+      final db = await BaseDeDatos.instancia.database;
+      final map = colaboradorSanitizado.toMap();
+
+      await db.insert(
+        'colaboradores',
+        map,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      if (_colaboradoresPrueba != null) {
+        _colaboradoresPrueba!.removeWhere((c) => c.id == idSanitizado);
+        _colaboradoresPrueba!.add(colaboradorSanitizado);
       }
+
+      await obtenerColaboradores();
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error crítico en registrarColaborador: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Alias semántico para la creación de empleados/usuarios solicitado por la administración
+  Future<bool> agregarEmpleado({
+    required String id,
+    required String nombre,
+    required String clave,
+    RolUsuario rol = RolUsuario.empleado,
+  }) async {
+    final nuevo = Colaborador(
+      id: id.trim(),
+      nombre: nombre.trim(),
+      clave: clave.trim(),
+      rol: rol,
+    );
+    return await registrarColaborador(nuevo);
+  }
+
+  Future<bool> iniciarSesion(String idONombre, String clave) async {
+    final idSanitizado = idONombre.trim();
+    final claveSanitizada = clave.trim();
+
+    if (idSanitizado.isEmpty || claveSanitizada.isEmpty) {
+      return false;
+    }
+
+    try {
+      final List<Map<String, dynamic>> resultados;
+
+      if (_colaboradoresPrueba != null) {
+        resultados = _colaboradoresPrueba!
+            .where((c) =>
+                c.id.trim().toLowerCase() == idSanitizado.toLowerCase() ||
+                c.nombre.trim().toLowerCase() == idSanitizado.toLowerCase())
+            .map((c) => c.toMap())
+            .toList();
+      } else {
+        final db = await BaseDeDatos.instancia.database;
+        resultados = await db.query(
+          'colaboradores',
+          where: 'LOWER(TRIM(id)) = LOWER(?) OR LOWER(TRIM(nombre)) = LOWER(?)',
+          whereArgs: [idSanitizado, idSanitizado],
+        );
+      }
+
+      if (resultados.isNotEmpty) {
+        final map = resultados.first;
+        final claveAlmacenada = map['clave'] as String;
+        final saltReal = (map['id'] as String).trim();
+
+        // Motor criptográfico unificado: verificación PBKDF2 con el salt exacto del colaborador
+        final esValida = await ServicioCriptografia.verificarClave(
+          claveIngresada: claveSanitizada,
+          hashAlmacenado: claveAlmacenada,
+          salt: saltReal,
+        );
+
+        if (esValida) {
+          // Si la clave no está en formato PBKDF2 moderno, migrar automáticamente
+          if (!claveAlmacenada.startsWith('\$pbkdf2\$')) {
+            final nuevoHash = await hashearClaveKdf(claveSanitizada, saltReal);
+            if (_colaboradoresPrueba == null) {
+              final db = await BaseDeDatos.instancia.database;
+              await db.update(
+                'colaboradores',
+                {'clave': nuevoHash},
+                where: 'id = ?',
+                whereArgs: [saltReal],
+              );
+            }
+            _usuarioActual = Colaborador.fromMap({
+              ...map,
+              'clave': nuevoHash,
+            });
+          } else {
+            _usuarioActual = Colaborador.fromMap(map);
+          }
+          notifyListeners();
+          return true;
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error en iniciarSesion: $e\n$stackTrace');
     }
 
     return false;
