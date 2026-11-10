@@ -44,3 +44,7 @@
 
 # 10. Proveedor de Rutas de Almacenamiento (path_provider)
 -keep class io.flutter.plugins.pathprovider.** { *; }
+
+# 11. Impresora Térmica Bluetooth ESC/POS
+-keep class com.miller.print_bluetooth_thermal.** { *; }
+-dontwarn com.miller.print_bluetooth_thermal.**
