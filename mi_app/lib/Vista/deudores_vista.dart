@@ -367,7 +367,9 @@ class _DeudoresVistaState extends State<DeudoresVista> {
           ),
         ),
         content: Text(
-          'Abono de $montoStr registrado con éxito. ¿Desea imprimir el comprobante de pago?',
+          esLiquidacion
+              ? 'La cuenta se liquidó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?'
+              : 'El abono se guardó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.textSecondary,

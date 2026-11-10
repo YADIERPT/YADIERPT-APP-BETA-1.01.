@@ -237,13 +237,6 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
       );
     });
 
-    // Auto-generación y persistencia local del PDF del comprobante de abono
-    try {
-      await ServicioTicketPdf.instancia.generarYGuardarComprobanteAbonoPdf(comprobanteGenerado);
-    } catch (e) {
-      debugPrint('Aviso al auto-generar comprobante de abono PDF: $e');
-    }
-
     // Refrescar estado local y financiero en memoria
     await controladorVentas.cargarVentas();
     await controladorFinanzas.cargarTransacciones();
