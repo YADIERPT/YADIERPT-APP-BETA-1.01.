@@ -3023,6 +3023,70 @@ void main() {
       expect(loginMixto, isTrue);
       expect(authCtrl.usuarioActual?.id, idEsperadoMayusculas);
     });
+
+    test('Cuenta administradora VO-4092 y PIN 123456 se auto-sana y autentica ante cualquier variación (V0-4092, minúsculas, sin guión)', () async {
+      final authCtrl = ControladorAutenticacion();
+
+      // 1. Cargar usuarios por defecto y verificar que VO-4092 existe como Dueña
+      await authCtrl.cargarUsuariosPorDefecto();
+      authCtrl.cerrarSesion();
+
+      // 2. Login con credenciales estándar
+      final loginDirecto = await authCtrl.iniciarSesion('VO-4092', '123456');
+      expect(loginDirecto, isTrue);
+      expect(authCtrl.usuarioActual?.id, 'VO-4092');
+      expect(authCtrl.usuarioActual?.rol, RolUsuario.duena);
+
+      // 3. Login tolerando 'V0-4092' (con el dígito cero en lugar de la letra O)
+      authCtrl.cerrarSesion();
+      final loginConCero = await authCtrl.iniciarSesion('V0-4092', '123456');
+      expect(loginConCero, isTrue);
+      expect(authCtrl.usuarioActual?.id, 'VO-4092');
+
+      // 4. Login tolerando minúsculas y espacios
+      authCtrl.cerrarSesion();
+      final loginMinusculas = await authCtrl.iniciarSesion('  vo-4092  ', '  123456  ');
+      expect(loginMinusculas, isTrue);
+      expect(authCtrl.usuarioActual?.id, 'VO-4092');
+
+      // 5. Login tolerando omitir el guión ('VO4092' o 'V04092')
+      authCtrl.cerrarSesion();
+      final loginSinGuion = await authCtrl.iniciarSesion('VO4092', '123456');
+      expect(loginSinGuion, isTrue);
+      expect(authCtrl.usuarioActual?.id, 'VO-4092');
+
+      // 6. Rechazo si la contraseña es errónea
+      authCtrl.cerrarSesion();
+      final loginClaveInvalida = await authCtrl.iniciarSesion('VO-4092', 'clave_erronea_999');
+      expect(loginClaveInvalida, isFalse);
+      expect(authCtrl.usuarioActual, isNull);
+    });
+
+    test('cargarUsuariosPorDefecto siembra VO-4092 incluso si ya existen otros colaboradores en la base de datos', () async {
+      final authCtrl = ControladorAutenticacion();
+
+      // Asegurar que exista al menos un empleado para simular conteo > 0
+      await authCtrl.agregarEmpleado(
+        id: 'EMP-EXISTENTE-99',
+        nombre: 'Empleado Existente',
+        clave: 'ClaveEmpleado99',
+      );
+
+      // Borrar intencionalmente VO-4092 para probar la sanación con conteo > 0
+      final db = await BaseDeDatos.instancia.database;
+      await db.delete('colaboradores', where: 'id = ? COLLATE NOCASE', whereArgs: ['VO-4092']);
+
+      // Ejecutar cargarUsuariosPorDefecto: debe detectar la ausencia de VO-4092 y sembrarlo
+      await authCtrl.cargarUsuariosPorDefecto();
+
+      final res = await db.rawQuery(
+        'SELECT * FROM colaboradores WHERE id = ? COLLATE NOCASE',
+        ['VO-4092'],
+      );
+      expect(res.isNotEmpty, isTrue);
+      expect(res.first['id'], 'VO-4092');
+      expect(res.first['rol'], RolUsuario.duena.valor);
+    });
   });
 
   group('Diseño Responsivo con Slivers y Adaptación a Tablets en InventarioVista', () {

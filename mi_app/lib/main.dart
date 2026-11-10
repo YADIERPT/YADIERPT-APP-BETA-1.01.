@@ -69,9 +69,15 @@ void main() async {
     controladorIA: controladorIA,
     controladorBiometrico: controladorBiometrico,
   );
+  // Cargar siempre la cuenta administradora por defecto en un bloque aislado
+  try {
+    await controladorAutenticacion.cargarUsuariosPorDefecto();
+  } catch (e, stack) {
+    debugPrint('Aviso al cargar usuarios por defecto: $e\n$stack');
+  }
+
   try {
     await controladorInicio.inicializarDatosOffline();
-    await controladorAutenticacion.cargarUsuariosPorDefecto();
     await ThemeManager.instance.inicializar();
     if (controladorInventario.productos.isEmpty) {
       final monstera = Producto(

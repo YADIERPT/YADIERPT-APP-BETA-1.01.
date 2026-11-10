@@ -72,6 +72,10 @@ class _SplashVistaState extends State<SplashVista>
     final cAuth = context.read<ControladorAutenticacion>();
 
     try {
+      await cAuth.cargarUsuariosPorDefecto();
+    } catch (_) {}
+
+    try {
       final secureStorage = SecureStorageService.instancia;
       final recordar = await secureStorage.leer('planteapp_recordar_sesion');
       final ultimoId = await secureStorage.leer('planteapp_ultimo_usuario_id');
