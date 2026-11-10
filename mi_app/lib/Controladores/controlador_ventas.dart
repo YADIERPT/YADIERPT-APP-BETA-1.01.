@@ -553,7 +553,7 @@ class ControladorVentas extends ChangeNotifier {
             'tipo': TipoTransaccion.ingreso.name,
             'monto': montoAbonoInicial,
             'fecha': DateTime.now().toIso8601String(),
-            'descripcion': 'Anticipo/Abono inicial venta apartada: ${venta.id} ($cliente)',
+            'descripcion': 'Abono Folio #${venta.id} (Enganche: $cliente)',
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
@@ -790,8 +790,8 @@ class ControladorVentas extends ChangeNotifier {
 
       // 7. Registrar el ingreso financiero correspondiente
       final String descripcionTransaccion = liquidada
-          ? 'Liquidación final cuenta por cobrar Folio #$idStr ($cliente)'
-          : 'Abono de deuda Folio #$idStr ($cliente)';
+          ? 'Abono Folio #$idStr (Liquidación: $cliente)'
+          : 'Abono Folio #$idStr ($cliente)';
 
       await txn.insert('transacciones', {
         'id': '${abono.id}_ingreso',

@@ -211,8 +211,8 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
       // 1. Registro Contable de Abonos (Ingresos Reales):
       // Inserta un registro en finanzas/caja ('transacciones') por el monto exacto del abono
       final String descripcionTransaccion = liquidada
-          ? 'Liquidación final cuenta por cobrar Folio #$idStr ($cliente)'
-          : 'Abono de deuda Folio #$idStr ($cliente)';
+          ? 'Abono Folio #$idStr (Liquidación: $cliente)'
+          : 'Abono Folio #$idStr ($cliente)';
 
       await txn.insert('transacciones', {
         'id': '${abono.id}_ingreso',

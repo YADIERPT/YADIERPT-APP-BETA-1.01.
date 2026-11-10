@@ -2815,5 +2815,101 @@ void main() {
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
     });
   });
+
+  group('Integridad Financiera de Créditos, Abonos y Reactividad en Dashboard (ACID)', () {
+    test('Venta a crédito solo registra enganche en transacciones y abonos se reflejan en tiempo real', () async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCuentas = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      await ctrlFin.cargarTransacciones();
+      await ctrlVentas.cargarVentas();
+      ctrlInicio.actualizarMetricasDashboard();
+      final ingresosIniciales = ctrlFin.totalIngresos;
+      final ventasInicialesDashboard = ctrlInicio.metricasDashboard.totalVentas;
+      final porCobrarInicialDashboard = ctrlInicio.metricasDashboard.totalPorCobrar;
+
+      // 1. Agregar un producto
+      final prod = Producto(
+        id: 'P_CRED_01',
+        nombre: 'Orquídea Phalaenopsis',
+        precioVenta: 500.0,
+        costo: 200.0,
+        cantidadEnInventario: 10,
+      );
+      ctrlInv.agregarProducto(prod);
+
+      // 2. Crear venta apartada (Total $500, Enganche $150, Deuda restante $350)
+      ctrlVentas.iniciarVenta();
+      ctrlVentas.agregarArticulo(prod);
+      final ventaApartada = await ctrlVentas.apartarVentaActual(
+        cliente: 'Carlos Mora',
+        montoAbonoInicial: 150.0,
+      );
+
+      expect(ventaApartada, isNotNull);
+      expect(ventaApartada!.total, 500.0);
+      expect(ventaApartada.montoPagado, 150.0);
+      expect(ventaApartada.saldoPendiente, 350.0);
+
+      // Verificar tabla de finanzas: SOLO debe registrarse el enganche ($150)
+      expect(ctrlFin.totalIngresos, ingresosIniciales + 150.0);
+      expect(ctrlFin.transacciones.first.monto, 150.0);
+      expect(ctrlFin.transacciones.first.descripcion, contains('Abono Folio'));
+
+      // Verificar reactividad en el Dashboard:
+      // "Ingresos Totales" debe ser $150 (dinero real en caja), NO $500 (deuda total)
+      // "Por Cobrar" debe ser $350
+      expect(ctrlInicio.metricasDashboard.totalVentas, ventasInicialesDashboard + 150.0);
+      expect(ctrlInicio.metricasDashboard.totalPorCobrar, porCobrarInicialDashboard + 350.0);
+
+      // 3. Cliente realiza un abono de $200
+      final comprobante = await ctrlCuentas.registrarAbono(
+        ventaId: ventaApartada.id,
+        monto: 200.0,
+        metodoPago: 'Efectivo',
+      );
+
+      expect(comprobante.abonoHoy, 200.0);
+      expect(comprobante.saldoRestante, 150.0);
+
+      // Verificar que se insertó la transacción de abono
+      expect(ctrlFin.totalIngresos, ingresosIniciales + 350.0); // $150 enganche + $200 abono
+      final transaccionAbono = ctrlFin.transacciones.first;
+      expect(transaccionAbono.monto, 200.0);
+      expect(transaccionAbono.descripcion, startsWith('Abono Folio'));
+
+      // Reactividad: el Dashboard debe sumar el dinero en tiempo real ($350)
+      expect(ctrlInicio.metricasDashboard.totalVentas, ventasInicialesDashboard + 350.0);
+      expect(ctrlInicio.metricasDashboard.totalPorCobrar, porCobrarInicialDashboard + 150.0);
+
+      // 4. Liquidar deuda total con abono final de $150
+      final liquidacion = await ctrlCuentas.liquidarDeuda(
+        ventaId: ventaApartada.id,
+      );
+
+      expect(liquidacion, isNotNull);
+      expect(liquidacion!.saldoRestante, 0.0);
+      expect(ctrlFin.totalIngresos, ingresosIniciales + 500.0); // $150 + $200 + $150 = $500 total
+      expect(ctrlInicio.metricasDashboard.totalVentas, ventasInicialesDashboard + 500.0);
+      expect(ctrlInicio.metricasDashboard.totalPorCobrar, porCobrarInicialDashboard);
+    });
+  });
 }
 

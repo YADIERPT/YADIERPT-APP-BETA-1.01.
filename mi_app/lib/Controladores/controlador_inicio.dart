@@ -155,8 +155,30 @@ class ControladorInicio extends ChangeNotifier {
           .toList();
     }
 
-    final double totalVentas =
-        ventasPeriodo.fold(0.0, (sum, v) => sum + v.total);
+    // Transacciones de ingreso del periodo (Ventas al contado + Enganches de apartados + Abonos)
+    final transaccionesPeriodo = controladorFinanzas.transacciones.where((t) {
+      if (!t.esIngreso) return false;
+      if (_periodoSeleccionado == 'Semana') {
+        final hace7Dias = hoy.subtract(const Duration(days: 7));
+        return t.fecha.isAfter(hace7Dias);
+      } else if (_periodoSeleccionado == 'Mes') {
+        final hace30Dias = hoy.subtract(const Duration(days: 30));
+        return t.fecha.isAfter(hace30Dias);
+      } else {
+        return t.fecha.year == hoy.year &&
+            t.fecha.month == hoy.month &&
+            t.fecha.day == hoy.day;
+      }
+    }).toList();
+
+    // Integridad Financiera: "Ingresos Totales" refleja el flujo de caja real ingresado
+    // (ventas de contado, enganches y abonos registrados en la tabla 'transacciones').
+    final bool usarTransacciones = transaccionesPeriodo.isNotEmpty ||
+        controladorFinanzas.transacciones.isNotEmpty;
+    final double totalVentas = usarTransacciones
+        ? transaccionesPeriodo.fold(0.0, (sum, t) => sum + t.monto)
+        : ventasPeriodo.fold(0.0, (sum, v) => sum + v.total);
+
     final int cantidadVentas = ventasPeriodo.length;
     final double ticketPromedio =
         cantidadVentas > 0 ? totalVentas / cantidadVentas : 0.0;
@@ -189,26 +211,51 @@ class ControladorInicio extends ChangeNotifier {
       {'hora': '18:00', 'monto': 0.0, 'conteo': 0},
     ];
 
-    for (var v in ventasPeriodo) {
-      int hr = v.fecha.hour;
-      int idx = -1;
-      if (hr < 9) {
-        idx = 0;
-      } else if (hr < 11) {
-        idx = 1;
-      } else if (hr < 13) {
-        idx = 2;
-      } else if (hr < 15) {
-        idx = 3;
-      } else if (hr < 17) {
-        idx = 4;
-      } else {
-        idx = 5;
-      }
+    if (usarTransacciones) {
+      for (var t in transaccionesPeriodo) {
+        int hr = t.fecha.hour;
+        int idx = -1;
+        if (hr < 9) {
+          idx = 0;
+        } else if (hr < 11) {
+          idx = 1;
+        } else if (hr < 13) {
+          idx = 2;
+        } else if (hr < 15) {
+          idx = 3;
+        } else if (hr < 17) {
+          idx = 4;
+        } else {
+          idx = 5;
+        }
 
-      if (idx != -1) {
-        puntosGrafico[idx]['monto'] += v.total;
-        puntosGrafico[idx]['conteo'] += 1;
+        if (idx != -1) {
+          puntosGrafico[idx]['monto'] += t.monto;
+          puntosGrafico[idx]['conteo'] += 1;
+        }
+      }
+    } else {
+      for (var v in ventasPeriodo) {
+        int hr = v.fecha.hour;
+        int idx = -1;
+        if (hr < 9) {
+          idx = 0;
+        } else if (hr < 11) {
+          idx = 1;
+        } else if (hr < 13) {
+          idx = 2;
+        } else if (hr < 15) {
+          idx = 3;
+        } else if (hr < 17) {
+          idx = 4;
+        } else {
+          idx = 5;
+        }
+
+        if (idx != -1) {
+          puntosGrafico[idx]['monto'] += v.total;
+          puntosGrafico[idx]['conteo'] += 1;
+        }
       }
     }
 
