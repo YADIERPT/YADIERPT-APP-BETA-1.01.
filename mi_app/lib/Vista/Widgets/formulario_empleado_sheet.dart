@@ -76,10 +76,29 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
       final nombre = _nombreCtrl.text.trim();
       final clave = _claveCtrl.text.trim();
 
+      // 1. Detección de sesión activa para Protección Anti-Degradación
+      final usuarioActual = () {
+        try {
+          return context.read<ControladorAutenticacion>().usuarioActual;
+        } catch (_) {
+          return widget.controladorAutenticacion.usuarioActual;
+        }
+      }();
+
+      final bool esMismoUsuarioActivo = esEdicion &&
+          usuarioActual != null &&
+          widget.empleadoExistente!.id == usuarioActual.id;
+
       if (esEdicion) {
+        // Protección Anti-Degradación: Si el usuario en sesión activa se edita a sí mismo,
+        // su rol se mantiene inalterable (RolUsuario.duena), evitando pérdida permanente de privilegios.
+        final rolFinal = esMismoUsuarioActivo
+            ? widget.empleadoExistente!.rol
+            : _rolSeleccionado;
+
         final empActualizado = widget.empleadoExistente!.copyWith(
           nombre: nombre,
-          rol: _rolSeleccionado,
+          rol: rolFinal,
         );
 
         await widget.controladorAutenticacion.actualizarColaborador(
@@ -103,12 +122,7 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
 
       // Reactividad: refrescar la lista de empleados inmediatamente via Provider
       if (mounted) {
-        try {
-          await context.read<ControladorEmpleados>().obtenerColaboradores();
-        } catch (_) {
-          // Fallback si se usa fuera del árbol de Provider directo
-          await widget.controladorAutenticacion.obtenerColaboradores();
-        }
+        await widget.controladorAutenticacion.obtenerColaboradores();
       }
 
       if (!mounted) return;
@@ -127,6 +141,19 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Validación de sesión activa: ¿Es el usuario actual editándose a sí mismo?
+    final usuarioActual = () {
+      try {
+        return context.read<ControladorAutenticacion>().usuarioActual;
+      } catch (_) {
+        return widget.controladorAutenticacion.usuarioActual;
+      }
+    }();
+
+    final bool esMismoUsuarioActivo = esEdicion &&
+        usuarioActual != null &&
+        widget.empleadoExistente!.id == usuarioActual.id;
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -238,42 +265,96 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
               ),
               const SizedBox(height: 14),
 
-              // Campo: Rol (DropdownButtonFormField)
-              DropdownButtonFormField<RolUsuario>(
-                value: _rolSeleccionado,
-                dropdownColor: AppColors.card,
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: 'Rol en Planteapp *',
-                  labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
-                  filled: true,
-                  fillColor: AppColors.secondarySurface,
-                  border: OutlineInputBorder(
+              // Campo: Rol con Protección Anti-Degradación
+              if (esMismoUsuarioActivo)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondarySurface,
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.border),
+                    border: Border.all(color: AppColors.border),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+                  child: Row(
+                    children: [
+                      Icon(Icons.shield_rounded, color: AppColors.amber, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Rol: Dueño (No modificable)',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Protección Anti-Degradación: No puedes revocar tu propio acceso administrativo.',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.subtleAmber,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'TÚ',
+                          style: TextStyle(
+                            color: AppColors.amber,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                )
+              else
+                DropdownButtonFormField<RolUsuario>(
+                  value: _rolSeleccionado,
+                  dropdownColor: AppColors.card,
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Rol en Planteapp *',
+                    labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
+                    filled: true,
+                    fillColor: AppColors.secondarySurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: RolUsuario.duena,
+                      child: Text('Dueño (Acceso Total y Seguridad)'),
+                    ),
+                    DropdownMenuItem(
+                      value: RolUsuario.empleado,
+                      child: Text('Empleado (Punto de Venta / POS)'),
+                    ),
+                  ],
+                  onChanged: (RolUsuario? nuevoRol) {
+                    if (nuevoRol != null) {
+                      setState(() => _rolSeleccionado = nuevoRol);
+                    }
+                  },
                 ),
-                items: const [
-                  DropdownMenuItem(
-                    value: RolUsuario.duena,
-                    child: Text('Dueño (Acceso Total y Seguridad)'),
-                  ),
-                  DropdownMenuItem(
-                    value: RolUsuario.empleado,
-                    child: Text('Empleado (Punto de Venta / POS)'),
-                  ),
-                ],
-                onChanged: (RolUsuario? nuevoRol) {
-                  if (nuevoRol != null) {
-                    setState(() => _rolSeleccionado = nuevoRol);
-                  }
-                },
-              ),
               const SizedBox(height: 14),
 
               // Campo: Contraseña

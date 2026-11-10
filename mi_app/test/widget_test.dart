@@ -1073,6 +1073,87 @@ void main() {
       expect(find.text('Contraseña de acceso *'), findsOneWidget);
       expect(find.text('Registrar Empleado'), findsOneWidget);
     });
+
+    testWidgets('FormularioEmpleadoSheet aplica Protección Anti-Degradación cuando el Dueño edita su propio usuario', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      final dueno = Colaborador(
+        id: 'DUENO-99',
+        nombre: 'Ana Dueña',
+        clave: '1234',
+        rol: RolUsuario.duena,
+      );
+      ctrlAuth.establecerUsuarioParaPruebas(dueno);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormularioEmpleadoSheet(
+              empleadoExistente: dueno,
+              controladorAutenticacion: ctrlAuth,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Editar Empleado'), findsOneWidget);
+      expect(find.text('Rol: Dueño (No modificable)'), findsOneWidget);
+      expect(find.text('TÚ'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<RolUsuario>), findsNothing);
+    });
+
+    testWidgets('FormularioEmpleadoSheet permite editar rol si el Dueño edita a otro colaborador', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      final dueno = Colaborador(
+        id: 'DUENO-99',
+        nombre: 'Ana Dueña',
+        clave: '1234',
+        rol: RolUsuario.duena,
+      );
+      final empleado = Colaborador(
+        id: 'EMP-01',
+        nombre: 'Juan Empleado',
+        clave: '1234',
+        rol: RolUsuario.empleado,
+      );
+      ctrlAuth.establecerUsuarioParaPruebas(dueno);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormularioEmpleadoSheet(
+              empleadoExistente: empleado,
+              controladorAutenticacion: ctrlAuth,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Editar Empleado'), findsOneWidget);
+      expect(find.text('Rol en Planteapp *'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<RolUsuario>), findsOneWidget);
+      expect(find.text('Rol: Dueño (No modificable)'), findsNothing);
+    });
+
+    test('ControladorAutenticacion.actualizarColaborador bloquea auto-degradación de rol a nivel de dominio', () async {
+      final ctrlAuth = ControladorAutenticacion();
+      final dueno = Colaborador(
+        id: 'DUENO-99',
+        nombre: 'Ana Dueña',
+        clave: '1234',
+        rol: RolUsuario.duena,
+      );
+      ctrlAuth.establecerUsuarioParaPruebas(dueno);
+      ctrlAuth.establecerColaboradoresParaPruebas([dueno]);
+
+      // Intento de auto-degradación a empleado
+      final duenoDegradado = dueno.copyWith(rol: RolUsuario.empleado, nombre: 'Ana Modificada');
+      await ctrlAuth.actualizarColaborador(duenoDegradado);
+
+      // El rol debe permanecer como RolUsuario.duena
+      expect(ctrlAuth.usuarioActual?.rol, RolUsuario.duena);
+      expect(ctrlAuth.usuarioActual?.nombre, 'Ana Modificada');
+      expect(ctrlAuth.colaboradores.first.rol, RolUsuario.duena);
+    });
   });
 
   group('Persistencia de Ventas y Carga Inicial en SQLite', () {

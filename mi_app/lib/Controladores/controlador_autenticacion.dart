@@ -222,15 +222,29 @@ class ControladorAutenticacion extends ChangeNotifier {
     return _colaboradores;
   }
 
-  /// Actualiza los datos de un empleado (nombre, rol y opcionalmente su clave hasheada)
+  /// Actualiza los datos de un empleado (nombre, rol y opcionalmente su clave hasheada).
+  /// Aplica "Protección Anti-Degradación": Si el usuario con sesión activa es el Dueño,
+  /// se impide que su rol sea degradado a empleado en SQLite y en memoria.
   Future<void> actualizarColaborador(
     Colaborador colaborador, {
     String? nuevaClave,
   }) async {
+    // 1. Protección Anti-Degradación en Capa de Dominio / Negocio
+    RolUsuario rolAGuardar = colaborador.rol;
+    if (_usuarioActual != null &&
+        _usuarioActual!.id == colaborador.id &&
+        _usuarioActual!.rol.esDuena &&
+        !colaborador.rol.esDuena) {
+      debugPrint(
+        'Seguridad RBAC: Intento de auto-degradación de rol bloqueado para ID ${colaborador.id}',
+      );
+      rolAGuardar = RolUsuario.duena;
+    }
+
     final db = await BaseDeDatos.instancia.database;
     final map = <String, dynamic>{
       'nombre': colaborador.nombre,
-      'rol': colaborador.rol.valor,
+      'rol': rolAGuardar.valor,
     };
 
     if (nuevaClave != null && nuevaClave.trim().isNotEmpty) {
@@ -247,9 +261,21 @@ class ControladorAutenticacion extends ChangeNotifier {
     if (_usuarioActual != null && _usuarioActual!.id == colaborador.id) {
       _usuarioActual = _usuarioActual!.copyWith(
         nombre: colaborador.nombre,
-        rol: colaborador.rol,
+        rol: rolAGuardar,
         clave: map['clave'] as String? ?? _usuarioActual!.clave,
       );
+    }
+
+    if (_colaboradoresPrueba != null) {
+      final index =
+          _colaboradoresPrueba!.indexWhere((c) => c.id == colaborador.id);
+      if (index != -1) {
+        _colaboradoresPrueba![index] = colaborador.copyWith(
+          nombre: colaborador.nombre,
+          rol: rolAGuardar,
+          clave: map['clave'] as String? ?? _colaboradoresPrueba![index].clave,
+        );
+      }
     }
 
     await obtenerColaboradores();
