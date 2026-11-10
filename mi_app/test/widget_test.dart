@@ -2703,5 +2703,117 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
     });
   });
+
+  group('Escudo del Catálogo en Inventario (RBAC y Soft Delete)', () {
+    testWidgets('TarjetaProductoInventario para rol empleado SOLO muestra opción "Deshabilitar"', (WidgetTester tester) async {
+      final prodActivo = Producto(
+        id: 'P_ACT_01',
+        nombre: 'Ficus Lyrata',
+        precioVenta: 250.0,
+        costo: 120.0,
+        cantidadEnInventario: 5,
+        activo: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaProductoInventario(
+              prod: prodActivo,
+              rolActual: RolUsuario.empleado,
+              onEditar: () {},
+              onAjustar: () {},
+              onBorrar: () {},
+              onDeshabilitar: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Empleado SOLO ve el botón "Deshabilitar"
+      expect(find.text('Deshabilitar'), findsOneWidget);
+      expect(find.text('Añadir'), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.text('Restaurar'), findsNothing);
+      expect(find.text('Eliminar Definitivamente'), findsNothing);
+      expect(find.text('COSTO'), findsNothing);
+    });
+
+    testWidgets('TarjetaProductoInventario para rol dueño con producto activo muestra "Añadir", "Editar" y "Deshabilitar"', (WidgetTester tester) async {
+      final prodActivo = Producto(
+        id: 'P_ACT_02',
+        nombre: 'Cactus Órgano',
+        precioVenta: 180.0,
+        costo: 90.0,
+        cantidadEnInventario: 8,
+        activo: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaProductoInventario(
+              prod: prodActivo,
+              rolActual: RolUsuario.duena,
+              onEditar: () {},
+              onAjustar: () {},
+              onBorrar: () {},
+              onDeshabilitar: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Añadir'), findsOneWidget);
+      expect(find.text('Deshabilitar'), findsOneWidget);
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(find.text('COSTO'), findsOneWidget);
+      expect(find.text('Restaurar'), findsNothing);
+      expect(find.text('Eliminar Definitivamente'), findsNothing);
+    });
+
+    testWidgets('TarjetaProductoInventario para rol dueño con producto deshabilitado muestra badge y dos botones exclusivos: "Restaurar" y "Eliminar Definitivamente"', (WidgetTester tester) async {
+      final prodDeshabilitado = Producto(
+        id: 'P_DES_01',
+        nombre: 'Suculenta Echeveria',
+        precioVenta: 75.0,
+        costo: 35.0,
+        cantidadEnInventario: 0,
+        activo: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaProductoInventario(
+              prod: prodDeshabilitado,
+              rolActual: RolUsuario.duena,
+              onEditar: () {},
+              onAjustar: () {},
+              onBorrar: () {},
+              onRestaurar: () {},
+              onEliminarDefinitivamente: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Badge de deshabilitado
+      expect(find.text('DESHABILITADO'), findsOneWidget);
+      // Dos botones exclusivos
+      expect(find.text('Restaurar'), findsOneWidget);
+      expect(find.text('Eliminar Definitivamente'), findsOneWidget);
+      // NO debe mostrar Añadir ni Deshabilitar
+      expect(find.text('Añadir'), findsNothing);
+      expect(find.text('Deshabilitar'), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    });
+  });
 }
 

@@ -28,6 +28,7 @@ class InventarioVista extends StatefulWidget {
 class _InventarioVistaState extends State<InventarioVista> {
   String _busqueda = '';
   String _filtroActivo = 'todos'; // 'todos', 'plantas', 'articulos', 'critico'
+  bool _verDeshabilitados = false;
   final TextEditingController _busquedaController = TextEditingController();
   final Debouncer _busquedaDebouncer =
       Debouncer(delay: const Duration(milliseconds: 300));
@@ -66,14 +67,20 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   Future<void> _cargarInventario() async {
-    await context.read<ControladorInventario>().cargarProductos();
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
+    final bool esDueno = rolActual?.esDuena ?? false;
+    final soloActivos = !(esDueno && _verDeshabilitados);
+    await context.read<ControladorInventario>().cargarProductos(soloActivos: soloActivos);
     if (mounted) {
       setState(() {});
     }
   }
 
   Future<void> _handleRefresh() async {
-    await context.read<ControladorInventario>().cargarProductos();
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
+    final bool esDueno = rolActual?.esDuena ?? false;
+    final soloActivos = !(esDueno && _verDeshabilitados);
+    await context.read<ControladorInventario>().cargarProductos(soloActivos: soloActivos);
     final cIA = context.read<ControladorIACompras>();
     final cVentas = context.read<ControladorVentas>();
     await cIA.inicializar(cVentas.ventas);
@@ -173,64 +180,135 @@ class _InventarioVistaState extends State<InventarioVista> {
     });
   }
 
-  void _abrirBorrarProducto(Producto producto) {
+  void _abrirDeshabilitarProducto(Producto producto) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Deshabilitar Producto',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          '¿Deseas deshabilitar "${producto.nombre}"? El producto se ocultará del Punto de Venta y no podrá venderse.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await context.read<ControladorInventario>().deshabilitarProducto(producto.id);
+                await _cargarInventario();
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                if (mounted) _mostrarToast('Producto deshabilitado correctamente');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.amber,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Deshabilitar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restaurarProducto(Producto producto) async {
     final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
-    if (rolActual != null && !rolActual.puedeModificarInventario) {
-      _mostrarToast('Acceso restringido: no tienes permisos para dar de baja productos');
+    if (rolActual != null && !rolActual.esDuena) {
+      _mostrarToast('Acceso denegado: Solo el dueño puede restaurar productos');
+      return;
+    }
+    try {
+      await context.read<ControladorInventario>().restaurarProducto(producto.id);
+      await _cargarInventario();
+      if (mounted) _mostrarToast('Producto "${producto.nombre}" restaurado al catálogo activo');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al restaurar: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  void _abrirEliminarDefinitivamente(Producto producto) {
+    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
+    if (rolActual != null && !rolActual.esDuena) {
+      _mostrarToast('Acceso denegado: Solo el dueño puede eliminar definitivamente');
       return;
     }
     showDialog(
       context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            'Borrar Producto',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Text(
-            '¿Estás seguro de que deseas eliminar completamente el producto ${producto.nombre} de tu inventario? Esta acción no se puede deshacer.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(
-                'Cancelar',
-                style: TextStyle(color: AppColors.textSecondary),
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              'Eliminar Definitivamente',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
               ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await context.read<ControladorInventario>().eliminarProducto(
-                    producto.id,
-                  );
-                  await _cargarInventario();
-                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                  if (mounted) _mostrarToast('Producto eliminado exitosamente');
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Borrar'),
             ),
           ],
-        );
-      },
+        ),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar permanentemente "${producto.nombre}" de la base de datos SQLite? Esta acción es irreversible.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await context.read<ControladorInventario>().eliminarProductoDefinitivamente(producto.id);
+                await _cargarInventario();
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                if (mounted) _mostrarToast('Producto eliminado definitivamente');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Eliminar Definitivamente'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -364,6 +442,65 @@ class _InventarioVistaState extends State<InventarioVista> {
                         ),
                         SizedBox(height: isLandscape ? 10 : 16),
 
+                        // 2.5. Escudo del Catálogo: Switch para ver productos deshabilitados (Solo Dueño)
+                        if (rolActual != null && (rolActual.esDuena || rolActual.esDueno)) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _verDeshabilitados
+                                  ? AppColors.subtleAmber
+                                  : AppColors.secondarySurface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _verDeshabilitados
+                                    ? AppColors.amber
+                                    : AppColors.border,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _verDeshabilitados
+                                          ? Icons.visibility_off
+                                          : Icons.visibility_outlined,
+                                      size: 18,
+                                      color: _verDeshabilitados
+                                          ? AppColors.amber
+                                          : AppColors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Ver productos deshabilitados',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: _verDeshabilitados
+                                            ? AppColors.amber
+                                            : AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Switch(
+                                  value: _verDeshabilitados,
+                                  activeColor: AppColors.amber,
+                                  onChanged: (val) async {
+                                    setState(() => _verDeshabilitados = val);
+                                    await context.read<ControladorInventario>().cargarProductos(
+                                      soloActivos: !val,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
                         // 3. Encabezado de la lista con indicador de filtro
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -441,7 +578,10 @@ class _InventarioVistaState extends State<InventarioVista> {
                             puedeModificar: puedeModificar,
                             onEditar: () => _abrirEditarProducto(prod),
                             onAjustar: () => _abrirAjuste(prod),
-                            onBorrar: () => _abrirBorrarProducto(prod),
+                            onBorrar: () => _abrirDeshabilitarProducto(prod),
+                            onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
+                            onRestaurar: () => _restaurarProducto(prod),
+                            onEliminarDefinitivamente: () => _abrirEliminarDefinitivamente(prod),
                           ),
                         );
                       },
@@ -461,7 +601,10 @@ class _InventarioVistaState extends State<InventarioVista> {
                             puedeModificar: puedeModificar,
                             onEditar: () => _abrirEditarProducto(prod),
                             onAjustar: () => _abrirAjuste(prod),
-                            onBorrar: () => _abrirBorrarProducto(prod),
+                            onBorrar: () => _abrirDeshabilitarProducto(prod),
+                            onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
+                            onRestaurar: () => _restaurarProducto(prod),
+                            onEliminarDefinitivamente: () => _abrirEliminarDefinitivamente(prod),
                           ),
                         );
                       },
