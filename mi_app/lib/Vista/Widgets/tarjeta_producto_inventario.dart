@@ -52,7 +52,7 @@ class TarjetaProductoInventario extends StatelessWidget {
 
     return RepaintBoundary(
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: EdgeInsets.zero,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.card,
@@ -166,7 +166,9 @@ class TarjetaProductoInventario extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -190,7 +192,6 @@ class TarjetaProductoInventario extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,

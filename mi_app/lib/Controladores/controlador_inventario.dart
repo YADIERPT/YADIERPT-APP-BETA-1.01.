@@ -11,8 +11,18 @@ import '../BaseDatos/base_datos.dart';
 class ControladorInventario extends ChangeNotifier {
   List<Producto> _productos = [];
   bool _filtroSoloActivos = true;
+  bool _modoPruebas = false;
 
   List<Producto> get productos => _productos;
+
+  /// Inyecta productos en memoria exclusivamente para pruebas unitarias y de widgets,
+  /// evitando operaciones asíncronas sobre SQLite y bloqueos de temporizadores.
+  @visibleForTesting
+  void establecerProductosParaPruebas(List<Producto> nuevos) {
+    _modoPruebas = true;
+    _productos = List.of(nuevos);
+    notifyListeners();
+  }
 
   /// Indica si el catálogo actualmente cargado corresponde a productos activos (`true`)
   /// o a productos ocultos / deshabilitados (`false`).
@@ -32,6 +42,7 @@ class ControladorInventario extends ChangeNotifier {
     int offset = 0,
   }) async {
     _filtroSoloActivos = soloActivos;
+    if (_modoPruebas) return;
     final db = await BaseDeDatos.instancia.database;
     try {
       await db.execute(

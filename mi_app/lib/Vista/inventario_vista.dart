@@ -533,7 +533,7 @@ class _InventarioVistaState extends State<InventarioVista> {
                   ),
                 ),
 
-                // 4. Lista virtualizada con carga diferida (cero lag con teclado)
+                // 4. Catálogo de productos responsivo con SliverGrid y adaptación dinámica a Tablets
                 if (productos.isEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -557,57 +557,38 @@ class _InventarioVistaState extends State<InventarioVista> {
                       ),
                     ),
                   )
-                else if (isLandscape)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
-                    sliver: SliverGrid.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 1.8,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 10,
-                      ),
-                      itemCount: productos.length,
-                      itemBuilder: (context, index) {
-                        final prod = productos[index];
-                        return RepaintBoundary(
-                          child: TarjetaProductoInventario(
-                            prod: prod,
-                            rolActual: rolActual,
-                            puedeModificar: puedeModificar,
-                            onEditar: () => _abrirEditarProducto(prod),
-                            onAjustar: () => _abrirAjuste(prod),
-                            onBorrar: () => _abrirDeshabilitarProducto(prod),
-                            onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
-                            onRestaurar: () => _restaurarProducto(prod),
-                            onEliminarDefinitivamente: () => _abrirEliminarDefinitivamente(prod),
-                          ),
-                        );
-                      },
-                    ),
-                  )
                 else
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
-                    sliver: SliverList.builder(
-                      itemCount: productos.length,
-                      itemBuilder: (context, index) {
-                        final prod = productos[index];
-                        return RepaintBoundary(
-                          child: TarjetaProductoInventario(
-                            prod: prod,
-                            rolActual: rolActual,
-                            puedeModificar: puedeModificar,
-                            onEditar: () => _abrirEditarProducto(prod),
-                            onAjustar: () => _abrirAjuste(prod),
-                            onBorrar: () => _abrirDeshabilitarProducto(prod),
-                            onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
-                            onRestaurar: () => _restaurarProducto(prod),
-                            onEliminarDefinitivamente: () => _abrirEliminarDefinitivamente(prod),
-                          ),
-                        );
-                      },
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 350,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 1.4,
+                        mainAxisExtent: 215,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final prod = productos[index];
+                          return RepaintBoundary(
+                            child: TarjetaProductoInventario(
+                              prod: prod,
+                              rolActual: rolActual,
+                              puedeModificar: puedeModificar,
+                              onEditar: () => _abrirEditarProducto(prod),
+                              onAjustar: () => _abrirAjuste(prod),
+                              onBorrar: () => _abrirDeshabilitarProducto(prod),
+                              onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
+                              onRestaurar: () => _restaurarProducto(prod),
+                              onEliminarDefinitivamente: () =>
+                                  _abrirEliminarDefinitivamente(prod),
+                            ),
+                          );
+                        },
+                        childCount: productos.length,
+                      ),
                     ),
                   ),
               ],

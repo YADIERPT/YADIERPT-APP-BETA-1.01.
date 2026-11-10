@@ -32,6 +32,7 @@ import 'package:mi_app/Vista/inventario_vista.dart';
 import 'package:mi_app/Vista/login.dart';
 import 'package:mi_app/Vista/splash_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_producto_inventario.dart';
+import 'package:mi_app/Vista/Widgets/resumen_inventario_header.dart';
 import 'package:mi_app/Vista/Widgets/dashboard_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_historial_venta.dart';
 import 'package:mi_app/Vista/Widgets/venta_footer.dart';
@@ -2982,6 +2983,86 @@ void main() {
         passwordPlana,
       );
       expect(loginUsuarioInexistente, isFalse);
+    });
+  });
+
+  group('Diseño Responsivo con Slivers y Adaptación a Tablets en InventarioVista', () {
+    testWidgets('InventarioVista utiliza CustomScrollView, SliverToBoxAdapter y SliverGrid con maxCrossAxisExtent: 350', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+      final cIA = ControladorIACompras(controladorInventario: cInv);
+
+      // Agregar productos de prueba en memoria sin llamadas a BD
+      cInv.establecerProductosParaPruebas([
+        Producto(
+          id: 'P_TAB_01',
+          nombre: 'Ficus Lyrata Gigante',
+          precioVenta: 850.0,
+          costo: 400.0,
+          cantidadEnInventario: 12,
+        ),
+        Producto(
+          id: 'P_TAB_02',
+          nombre: 'Monstera Deliciosa',
+          precioVenta: 350.0,
+          costo: 150.0,
+          cantidadEnInventario: 4, // Stock crítico
+        ),
+      ]);
+
+      // Simular pantalla de Tablet en modo Horizontal (Landscape: 1280x800)
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+            ChangeNotifierProvider<ControladorIACompras>.value(value: cIA),
+          ],
+          child: const MaterialApp(
+            home: InventarioVista(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 1. Debe existir un CustomScrollView principal
+      expect(find.byType(CustomScrollView), findsOneWidget);
+
+      // 2. Contadores superiores y buscador en SliverToBoxAdapter
+      expect(find.byType(SliverToBoxAdapter), findsWidgets);
+      expect(find.byType(ResumenInventarioHeader), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+
+      // 3. El catálogo de productos debe usar SliverGrid
+      expect(find.byType(SliverGrid), findsOneWidget);
+
+      final sliverGridFinder = find.byType(SliverGrid);
+      final sliverGrid = tester.widget<SliverGrid>(sliverGridFinder);
+      expect(sliverGrid.gridDelegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
+
+      final delegate = sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+      expect(delegate.maxCrossAxisExtent, 350.0);
+
+      // Las tarjetas de producto deben renderizarse adecuadamente
+      expect(find.text('Ficus Lyrata Gigante'), findsOneWidget);
+      expect(find.text('Monstera Deliciosa'), findsOneWidget);
     });
   });
 }
