@@ -83,7 +83,7 @@ class ControladorAutenticacion extends ChangeNotifier {
     bool yaHasheada = false,
   }) async {
     try {
-      final idSanitizado = nuevo.id.trim();
+      final idSanitizado = nuevo.id.trim().toUpperCase();
       final nombreSanitizado = nuevo.nombre.trim();
       final claveLimpia = nuevo.clave.trim();
 
@@ -92,6 +92,7 @@ class ControladorAutenticacion extends ChangeNotifier {
       }
 
       // Motor criptográfico unificado: PBKDF2-HMAC-SHA256 (100k iteraciones)
+      // Salt normalizado obligatoriamente en mayúsculas y sin espacios
       final String claveFinal;
       if (yaHasheada) {
         claveFinal = claveLimpia;
@@ -116,7 +117,7 @@ class ControladorAutenticacion extends ChangeNotifier {
       );
 
       if (_colaboradoresPrueba != null) {
-        _colaboradoresPrueba!.removeWhere((c) => c.id == idSanitizado);
+        _colaboradoresPrueba!.removeWhere((c) => c.id.trim().toUpperCase() == idSanitizado);
         _colaboradoresPrueba!.add(colaboradorSanitizado);
       }
 
@@ -128,24 +129,32 @@ class ControladorAutenticacion extends ChangeNotifier {
     }
   }
 
-  /// Alias semántico para la creación de empleados/usuarios solicitado por la administración
+  /// Alias semántico para la creación de empleados/usuarios solicitado por la administración.
+  /// Aplica sanitización estricta: Trim y UpperCase en el ID antes de la inserción en SQLite.
   Future<bool> agregarEmpleado({
     required String id,
     required String nombre,
     required String clave,
     RolUsuario rol = RolUsuario.empleado,
   }) async {
+    final idSanitizado = id.trim().toUpperCase();
+    final nombreSanitizado = nombre.trim();
+    final claveSanitizada = clave.trim();
+
     final nuevo = Colaborador(
-      id: id.trim(),
-      nombre: nombre.trim(),
-      clave: clave.trim(),
+      id: idSanitizado,
+      nombre: nombreSanitizado,
+      clave: claveSanitizada,
       rol: rol,
     );
     return await registrarColaborador(nuevo);
   }
 
+  /// Inicia sesión verificando credenciales con sanitización Trim & UpperCase
+  /// y consulta SQL insensible a mayúsculas mediante COLLATE NOCASE.
   Future<bool> iniciarSesion(String idONombre, String clave) async {
-    final idSanitizado = idONombre.trim();
+    final idSanitizado = idONombre.trim().toUpperCase();
+    final nombreOriginalLimpio = idONombre.trim();
     final claveSanitizada = clave.trim();
 
     if (idSanitizado.isEmpty || claveSanitizada.isEmpty) {
@@ -158,23 +167,25 @@ class ControladorAutenticacion extends ChangeNotifier {
       if (_colaboradoresPrueba != null) {
         resultados = _colaboradoresPrueba!
             .where((c) =>
-                c.id.trim().toLowerCase() == idSanitizado.toLowerCase() ||
-                c.nombre.trim().toLowerCase() == idSanitizado.toLowerCase())
+                c.id.trim().toUpperCase() == idSanitizado ||
+                c.nombre.trim().toUpperCase() == idSanitizado ||
+                c.nombre.trim().toLowerCase() == nombreOriginalLimpio.toLowerCase())
             .map((c) => c.toMap())
             .toList();
       } else {
         final db = await BaseDeDatos.instancia.database;
-        resultados = await db.query(
-          'colaboradores',
-          where: 'LOWER(TRIM(id)) = LOWER(?) OR LOWER(TRIM(nombre)) = LOWER(?)',
-          whereArgs: [idSanitizado, idSanitizado],
+        // Consulta SQL insensible a mayúsculas usando COLLATE NOCASE
+        resultados = await db.rawQuery(
+          'SELECT * FROM colaboradores WHERE id = ? COLLATE NOCASE OR nombre = ? COLLATE NOCASE',
+          [idSanitizado, nombreOriginalLimpio],
         );
       }
 
       if (resultados.isNotEmpty) {
         final map = resultados.first;
         final claveAlmacenada = map['clave'] as String;
-        final saltReal = (map['id'] as String).trim();
+        // Salt exacto uniforme en mayúsculas extraído de la base de datos
+        final saltReal = (map['id'] as String).trim().toUpperCase();
 
         // Motor criptográfico unificado: verificación PBKDF2 con el salt exacto del colaborador
         final esValida = await ServicioCriptografia.verificarClave(
@@ -184,24 +195,32 @@ class ControladorAutenticacion extends ChangeNotifier {
         );
 
         if (esValida) {
-          // Si la clave no está en formato PBKDF2 moderno, migrar automáticamente
-          if (!claveAlmacenada.startsWith('\$pbkdf2\$')) {
+          // Si la clave no está en formato PBKDF2 moderno o el salt no estaba en mayúsculas, migrar automáticamente
+          final partes = claveAlmacenada.startsWith('\$pbkdf2\$') ? claveAlmacenada.split('\$') : null;
+          final bool requiereRehash = !claveAlmacenada.startsWith('\$pbkdf2\$') ||
+              (partes != null && partes.length >= 5 && partes[3] != saltReal);
+
+          if (requiereRehash) {
             final nuevoHash = await hashearClaveKdf(claveSanitizada, saltReal);
             if (_colaboradoresPrueba == null) {
               final db = await BaseDeDatos.instancia.database;
               await db.update(
                 'colaboradores',
-                {'clave': nuevoHash},
-                where: 'id = ?',
+                {'id': saltReal, 'clave': nuevoHash},
+                where: 'id = ? COLLATE NOCASE',
                 whereArgs: [saltReal],
               );
             }
             _usuarioActual = Colaborador.fromMap({
               ...map,
+              'id': saltReal,
               'clave': nuevoHash,
             });
           } else {
-            _usuarioActual = Colaborador.fromMap(map);
+            _usuarioActual = Colaborador.fromMap({
+              ...map,
+              'id': saltReal,
+            });
           }
           notifyListeners();
           return true;
@@ -226,10 +245,11 @@ class ControladorAutenticacion extends ChangeNotifier {
     required String tokenVerificacion,
   }) async {
     final ahora = DateTime.now();
+    final idSanitizado = id.trim().toUpperCase();
 
     // 1. Verificación de token de desafío biométrico efímero
     final bool esTokenDesafioValido = _tokenDesafioActivo != null &&
-        _usuarioDesafio == id &&
+        _usuarioDesafio?.trim().toUpperCase() == idSanitizado &&
         _tokenDesafioActivo == tokenVerificacion &&
         _expiracionTokenDesafio != null &&
         ahora.isBefore(_expiracionTokenDesafio!);
@@ -242,11 +262,11 @@ class ControladorAutenticacion extends ChangeNotifier {
         await secureStorage.leer('planteapp_ultimo_usuario_id');
     final bool esSesionRecordadaValida = tokenAlmacenado != null &&
         tokenAlmacenado == tokenVerificacion &&
-        ultimoIdRecordado == id;
+        ultimoIdRecordado?.trim().toUpperCase() == idSanitizado;
 
     if (!esTokenDesafioValido && !esSesionRecordadaValida) {
       debugPrint(
-        'Alerta de seguridad: Intento de inicio de sesión no autorizado para el ID $id (token no válido o expirado)',
+        'Alerta de seguridad: Intento de inicio de sesión no autorizado para el ID $idSanitizado (token no válido o expirado)',
       );
       return false;
     }
@@ -257,11 +277,21 @@ class ControladorAutenticacion extends ChangeNotifier {
     _usuarioDesafio = null;
 
     try {
+      if (_colaboradoresPrueba != null) {
+        final colab = _colaboradoresPrueba!
+            .where((c) => c.id.trim().toUpperCase() == idSanitizado)
+            .firstOrNull;
+        if (colab != null) {
+          _usuarioActual = colab;
+          notifyListeners();
+          return true;
+        }
+      }
+
       final db = await BaseDeDatos.instancia.database;
-      final resultados = await db.query(
-        'colaboradores',
-        where: 'id = ?',
-        whereArgs: [id],
+      final resultados = await db.rawQuery(
+        'SELECT * FROM colaboradores WHERE id = ? COLLATE NOCASE',
+        [idSanitizado],
       );
 
       if (resultados.isNotEmpty) {
@@ -310,9 +340,10 @@ class ControladorAutenticacion extends ChangeNotifier {
     String? nuevaClave,
   }) async {
     // 1. Protección Anti-Degradación en Capa de Dominio / Negocio
+    final idSanitizado = colaborador.id.trim().toUpperCase();
     RolUsuario rolAGuardar = colaborador.rol;
     if (_usuarioActual != null &&
-        _usuarioActual!.id == colaborador.id &&
+        _usuarioActual!.id.trim().toUpperCase() == idSanitizado &&
         _usuarioActual!.rol.esDuena &&
         !colaborador.rol.esDuena) {
       debugPrint(
@@ -323,24 +354,26 @@ class ControladorAutenticacion extends ChangeNotifier {
 
     final db = await BaseDeDatos.instancia.database;
     final map = <String, dynamic>{
-      'nombre': colaborador.nombre,
+      'id': idSanitizado,
+      'nombre': colaborador.nombre.trim(),
       'rol': rolAGuardar.valor,
     };
 
     if (nuevaClave != null && nuevaClave.trim().isNotEmpty) {
-      map['clave'] = await hashearClaveKdf(nuevaClave.trim(), colaborador.id);
+      map['clave'] = await hashearClaveKdf(nuevaClave.trim(), idSanitizado);
     }
 
     await db.update(
       'colaboradores',
       map,
-      where: 'id = ?',
-      whereArgs: [colaborador.id],
+      where: 'id = ? COLLATE NOCASE',
+      whereArgs: [idSanitizado],
     );
 
-    if (_usuarioActual != null && _usuarioActual!.id == colaborador.id) {
+    if (_usuarioActual != null && _usuarioActual!.id.trim().toUpperCase() == idSanitizado) {
       _usuarioActual = _usuarioActual!.copyWith(
-        nombre: colaborador.nombre,
+        id: idSanitizado,
+        nombre: colaborador.nombre.trim(),
         rol: rolAGuardar,
         clave: map['clave'] as String? ?? _usuarioActual!.clave,
       );
@@ -348,10 +381,11 @@ class ControladorAutenticacion extends ChangeNotifier {
 
     if (_colaboradoresPrueba != null) {
       final index =
-          _colaboradoresPrueba!.indexWhere((c) => c.id == colaborador.id);
+          _colaboradoresPrueba!.indexWhere((c) => c.id.trim().toUpperCase() == idSanitizado);
       if (index != -1) {
         _colaboradoresPrueba![index] = colaborador.copyWith(
-          nombre: colaborador.nombre,
+          id: idSanitizado,
+          nombre: colaborador.nombre.trim(),
           rol: rolAGuardar,
           clave: map['clave'] as String? ?? _colaboradoresPrueba![index].clave,
         );
@@ -364,8 +398,10 @@ class ControladorAutenticacion extends ChangeNotifier {
   /// Elimina un colaborador del sistema en SQLite.
   /// Implementa "Protección Anti-Suicidio": Impide que el usuario en sesión activa se elimine a sí mismo.
   Future<bool> eliminarColaborador(String idColaborador) async {
+    final idSanitizado = idColaborador.trim().toUpperCase();
+
     // 1. Protección Anti-Suicidio en capa de Dominio / Controlador
-    if (_usuarioActual != null && _usuarioActual!.id == idColaborador) {
+    if (_usuarioActual != null && _usuarioActual!.id.trim().toUpperCase() == idSanitizado) {
       debugPrint(
         'Seguridad RBAC: Intento de auto-eliminación bloqueado para ID $idColaborador',
       );
@@ -376,7 +412,7 @@ class ControladorAutenticacion extends ChangeNotifier {
 
     if (_colaboradoresPrueba != null) {
       final index =
-          _colaboradoresPrueba!.indexWhere((c) => c.id == idColaborador);
+          _colaboradoresPrueba!.indexWhere((c) => c.id.trim().toUpperCase() == idSanitizado);
       if (index != -1) {
         _colaboradoresPrueba!.removeAt(index);
         await obtenerColaboradores();
@@ -388,8 +424,8 @@ class ControladorAutenticacion extends ChangeNotifier {
     final db = await BaseDeDatos.instancia.database;
     final eliminados = await db.delete(
       'colaboradores',
-      where: 'id = ?',
-      whereArgs: [idColaborador],
+      where: 'id = ? COLLATE NOCASE',
+      whereArgs: [idSanitizado],
     );
 
     if (eliminados > 0) {
@@ -425,15 +461,16 @@ class ControladorAutenticacion extends ChangeNotifier {
   }
 
   Future<void> cambiarClave(String id, String nuevaClave) async {
+    final idSanitizado = id.trim().toUpperCase();
     final db = await BaseDeDatos.instancia.database;
-    final claveHasheada = await hashearClaveKdf(nuevaClave, id);
+    final claveHasheada = await hashearClaveKdf(nuevaClave.trim(), idSanitizado);
     await db.update(
       'colaboradores',
       {'clave': claveHasheada},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? COLLATE NOCASE',
+      whereArgs: [idSanitizado],
     );
-    if (_usuarioActual != null && _usuarioActual!.id == id) {
+    if (_usuarioActual != null && _usuarioActual!.id.trim().toUpperCase() == idSanitizado) {
       _usuarioActual = _usuarioActual!.copyWith(clave: claveHasheada);
     }
   }

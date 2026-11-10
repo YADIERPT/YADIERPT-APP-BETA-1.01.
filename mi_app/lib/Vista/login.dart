@@ -78,9 +78,11 @@ class _LoginVistaState extends State<LoginVista> {
 
     if (exito) {
       final secureStorage = SecureStorageService.instancia;
+      final authCtrl = context.read<ControladorAutenticacion>();
+      final idGuardado = authCtrl.usuarioActual?.id ?? id.toUpperCase();
       if (_recordarTerminal) {
         await secureStorage.guardar('planteapp_recordar_sesion', 'true');
-        await secureStorage.guardar('planteapp_ultimo_usuario_id', id);
+        await secureStorage.guardar('planteapp_ultimo_usuario_id', idGuardado);
         final tokenSesion = ServicioCriptografia.generarClaveAleatoriaSegura(32);
         await secureStorage.guardar('planteapp_token_sesion_recordada', tokenSesion);
       } else {

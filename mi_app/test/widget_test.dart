@@ -2984,6 +2984,45 @@ void main() {
       );
       expect(loginUsuarioInexistente, isFalse);
     });
+
+    test('agregarEmpleado normaliza ID a UPPERCASE y TRIM, y SQLite COLLATE NOCASE permite login insensible a mayúsculas', () async {
+      final authCtrl = ControladorAutenticacion();
+      const String idOriginalMinusculas = '  emp-case-test-42  ';
+      const String idEsperadoMayusculas = 'EMP-CASE-TEST-42';
+      const String nombre = 'Empleado Sensible';
+      const String clave = 'ClaveSecreta123';
+
+      // 1. Registro con ID en minúsculas y espacios
+      final registro = await authCtrl.agregarEmpleado(
+        id: idOriginalMinusculas,
+        nombre: nombre,
+        clave: clave,
+        rol: RolUsuario.empleado,
+      );
+      expect(registro, isTrue);
+
+      // 2. Verificar que en SQLite se guardó estrictamente en MAYÚSCULAS y sin espacios
+      final db = await BaseDeDatos.instancia.database;
+      final query = await db.rawQuery(
+        'SELECT * FROM colaboradores WHERE id = ? COLLATE NOCASE',
+        [idEsperadoMayusculas],
+      );
+      expect(query.isNotEmpty, isTrue);
+      expect(query.first['id'], idEsperadoMayusculas);
+
+      // Verificar que el salt PBKDF2 en la clave coincida con el ID en mayúsculas
+      final hash = query.first['clave'] as String;
+      expect(hash.contains(idEsperadoMayusculas), isTrue);
+
+      // 3. Login con combinaciones mixtas de mayúsculas y minúsculas
+      authCtrl.cerrarSesion();
+      final loginMixto = await authCtrl.iniciarSesion(
+        '  eMp-CaSe-TeSt-42  ',
+        '  $clave  ',
+      );
+      expect(loginMixto, isTrue);
+      expect(authCtrl.usuarioActual?.id, idEsperadoMayusculas);
+    });
   });
 
   group('Diseño Responsivo con Slivers y Adaptación a Tablets en InventarioVista', () {
