@@ -41,7 +41,7 @@ class RoleGuard extends StatelessWidget {
     this.onAccion,
   });
 
-  /// Constructor de conveniencia exclusivo para la Dueña y Gerencia
+  /// Constructor de conveniencia exclusivo para la Dueña y Gerencia (exclusivo Dueño en política 2 roles)
   const RoleGuard.gerencia({
     super.key,
     required this.child,
@@ -52,10 +52,22 @@ class RoleGuard extends StatelessWidget {
     this.mensaje,
     this.textoAccion,
     this.onAccion,
-  }) : rolesPermitidos = const [RolUsuario.duena, RolUsuario.gerente];
+  }) : rolesPermitidos = const [RolUsuario.duena];
 
-  /// Constructor de conveniencia exclusivo para la Dueña del vivero
+  /// Constructor de conveniencia exclusivo para el Dueño/a del vivero
   const RoleGuard.soloDuena({
+    super.key,
+    required this.child,
+    this.rolActual,
+    this.modo = RoleGuardMode.ocultar,
+    this.fallback,
+    this.titulo,
+    this.mensaje,
+    this.textoAccion,
+    this.onAccion,
+  }) : rolesPermitidos = const [RolUsuario.duena];
+
+  const RoleGuard.soloDueno({
     super.key,
     required this.child,
     this.rolActual,
@@ -110,7 +122,7 @@ class AccesoDenegadoView extends StatelessWidget {
   const AccesoDenegadoView({
     super.key,
     this.rolActual,
-    this.rolesRequeridos = const [RolUsuario.duena, RolUsuario.gerente],
+    this.rolesRequeridos = const [RolUsuario.duena],
     this.titulo,
     this.mensaje,
     this.textoAccion,

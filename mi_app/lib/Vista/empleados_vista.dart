@@ -8,6 +8,9 @@ import 'Widgets/role_guard.dart';
 import 'Widgets/dialogo_seguridad_admin.dart';
 import 'Widgets/formulario_empleado_sheet.dart';
 
+/// Alias semántico para la vista de gestión de usuarios / colaboradores
+typedef UsuariosVista = EmpleadosVista;
+
 class EmpleadosVista extends StatefulWidget {
   final ControladorAutenticacion controladorAutenticacion;
 
@@ -67,7 +70,7 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
 
   /// Inicia el flujo de registro de nuevo empleado con barrera de seguridad
   Future<void> _iniciarRegistroEmpleado() async {
-    // 1. Barrera de seguridad: Verificación obligatoria de contraseña de Dueña/Admin
+    // 1. Barrera de seguridad: Verificación obligatoria de contraseña de Dueño/Admin
     final bool autorizada = await DialogoSeguridadAdmin.verificar(
       context: context,
       controladorAutenticacion: widget.controladorAutenticacion,
@@ -75,7 +78,7 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
 
     if (!autorizada) return;
 
-    // 2. Si la validación es correcta, navegar al formulario
+    // 2. Si la validación es correcta, desplegar modal de registro
     if (!mounted) return;
     final bool guardado = await FormularioEmpleadoSheet.mostrar(
       context: context,
@@ -83,7 +86,6 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
     );
 
     if (guardado) {
-      // 3. Reactividad inmediata
       await _cargarEmpleados();
       _mostrarToast('Colaborador registrado correctamente');
     }
@@ -108,21 +110,96 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
     );
 
     if (guardado) {
-      // 3. Reactividad inmediata
       await _cargarEmpleados();
       _mostrarToast('Perfil de "${emp.nombre}" actualizado correctamente');
+    }
+  }
+
+  /// Elimina un colaborador con confirmación y Protección Anti-Suicidio
+  Future<void> _confirmarEliminarEmpleado(Colaborador emp) async {
+    // 1. Protección Anti-Suicidio en la Vista: Nunca permitir auto-eliminación
+    final usuarioActual = widget.controladorAutenticacion.usuarioActual;
+    if (usuarioActual != null && usuarioActual.id == emp.id) {
+      _mostrarToast(
+        'Protección Anti-Suicidio: No puedes eliminar tu propia cuenta activa.',
+        esError: true,
+      );
+      return;
+    }
+
+    // 2. Diálogo de confirmación explícito
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              'Eliminar Colaborador',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar a "${emp.nombre}" (${emp.rol.etiqueta})?\n\nEsta acción revocará su acceso al sistema y no se puede deshacer.',
+          style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    // 3. Ejecución segura a través del controlador
+    try {
+      final exito = await widget.controladorAutenticacion.eliminarColaborador(emp.id);
+      if (exito) {
+        await _cargarEmpleados();
+        _mostrarToast('Colaborador "${emp.nombre}" eliminado correctamente');
+      }
+    } catch (e) {
+      _mostrarToast(
+        e.toString().replaceAll('Exception: ', ''),
+        esError: true,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final rolActual = widget.controladorAutenticacion.usuarioActual?.rol;
+    final usuarioActualId = widget.controladorAutenticacion.usuarioActual?.id;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: Text(
-          'Empleados',
+          'Gestión de Empleados',
           style: TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
@@ -132,23 +209,25 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
         iconTheme: IconThemeData(color: AppColors.textPrimary),
         elevation: 0,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _iniciarRegistroEmpleado,
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add),
-        label: const Text(
-          'Nuevo Empleado',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
+      floatingActionButton: rolActual?.esDuena == true
+          ? FloatingActionButton.extended(
+              onPressed: _iniciarRegistroEmpleado,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add),
+              label: const Text(
+                'Nuevo Empleado',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
       body: RoleGuard(
-        rolesPermitidos: const [RolUsuario.duena, RolUsuario.gerente],
+        rolesPermitidos: const [RolUsuario.duena],
         rolActual: rolActual,
         modo: RoleGuardMode.placeholder,
         titulo: 'Gestión de Personal Reservada',
         mensaje:
-            'Solo la Dueña y la Gerencia tienen autorización para consultar y administrar el catálogo de colaboradores y sus accesos.',
+            'Solo el Dueño tiene autorización para consultar y administrar el catálogo de colaboradores y sus accesos.',
         textoAccion: 'Regresar',
         onAccion: () => Navigator.pop(context),
         child: _cargando
@@ -181,6 +260,10 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
                     itemCount: _empleados.length,
                     itemBuilder: (context, index) {
                       final emp = _empleados[index];
+                      // Regla de Protección Anti-Suicidio:
+                      final bool esSesionActiva =
+                          usuarioActualId != null && usuarioActualId == emp.id;
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
@@ -203,20 +286,14 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
                                   CircleAvatar(
                                     backgroundColor: emp.rol.esDuena
                                         ? AppColors.subtleAmber
-                                        : emp.rol.esGerente
-                                            ? AppColors.subtleTurquoise
-                                            : AppColors.primaryContainer,
+                                        : AppColors.primaryContainer,
                                     child: Icon(
                                       emp.rol.esDuena
                                           ? Icons.star_rounded
-                                          : emp.rol.esGerente
-                                              ? Icons.manage_accounts
-                                              : Icons.person,
+                                          : Icons.person,
                                       color: emp.rol.esDuena
                                           ? AppColors.amber
-                                          : emp.rol.esGerente
-                                              ? AppColors.turquoise
-                                              : AppColors.primary,
+                                          : AppColors.primary,
                                     ),
                                   ),
                                   const SizedBox(width: 14),
@@ -271,8 +348,60 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
                                       ],
                                     ),
                                   ),
+                                  // Acciones por usuario con Protección Anti-Suicidio
+                                  if (esSesionActiva)
+                                    Tooltip(
+                                      message:
+                                          'Sesión activa (No puedes auto-eliminarte)',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.subtleGreen,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: AppColors.primary
+                                                .withOpacity(0.3),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.shield_rounded,
+                                              size: 14,
+                                              color: AppColors.primary,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tú',
+                                              style: TextStyle(
+                                                color: AppColors.primary,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete_outline,
+                                        color: AppColors.error,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Eliminar colaborador',
+                                      onPressed: () =>
+                                          _confirmarEliminarEmpleado(emp),
+                                    ),
+                                  const SizedBox(width: 4),
                                   Icon(
-                                    Icons.edit_outlined,
+                                    Icons.chevron_right,
                                     color: AppColors.textSecondary,
                                     size: 18,
                                   ),
@@ -288,4 +417,5 @@ class _EmpleadosVistaState extends State<EmpleadosVista> {
     );
   }
 }
+
 

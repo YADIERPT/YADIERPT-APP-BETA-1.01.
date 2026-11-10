@@ -7,6 +7,7 @@ import '../Modelos/abono.dart';
 import '../Modelos/finanzas.dart';
 import '../BaseDatos/base_datos.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
+import '../Servicios/servicio_ticket_pdf.dart';
 import 'controlador_inventario.dart';
 import 'controlador_finanzas.dart';
 import 'controlador_perfil.dart';
@@ -474,8 +475,10 @@ class ControladorVentas extends ChangeNotifier {
     }
   }
 
-  /// Registra la venta actual bajo modalidad de apartado / cuenta por cobrar
-  Future<void> apartarVentaActual({
+  /// Registra la venta actual bajo modalidad de apartado / cuenta por cobrar,
+  /// garantizando integridad relacional en la tabla 'deudores' (FK venta_id)
+  /// y generando de forma automática el ticket de crédito / apartado con saldo pendiente.
+  Future<Venta?> apartarVentaActual({
     String cliente = 'Cliente Mostrador',
     double montoAbonoInicial = 0.0,
     String notas = '',
@@ -553,9 +556,24 @@ class ControladorVentas extends ChangeNotifier {
             'descripcion': 'Anticipo/Abono inicial venta apartada: ${venta.id} ($cliente)',
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
+
+        // 5. Integridad Relacional: Sincronización en tabla 'deudores' vinculada por FK a 'ventas(id)'
+        final double saldoPendiente = (venta.total - montoAbonoInicial).clamp(0.0, double.infinity);
+        await txn.insert('deudores', {
+          'id': 'deu_${venta.id}',
+          'venta_id': venta.id,
+          'cliente': cliente.isNotEmpty ? cliente : 'Cliente Mostrador',
+          'telefono': '',
+          'montoTotal': venta.total,
+          'montoPagado': montoAbonoInicial,
+          'saldoPendiente': saldoPendiente,
+          'fechaRegistro': venta.fecha.toIso8601String(),
+          'fechaLimite': null,
+          'estado': saldoPendiente <= 0.01 ? 'LIQUIDADA' : 'PENDIENTE',
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       });
 
-      // 5. Actualizar inventario en memoria tras éxito del commit
+      // 6. Actualizar inventario en memoria tras éxito del commit
       for (var articulo in venta.articulos) {
         final prodMemoria =
             controladorInventario.obtenerProducto(articulo.producto.id);
@@ -569,8 +587,21 @@ class ControladorVentas extends ChangeNotifier {
       if (montoAbonoInicial > 0) {
         await controladorFinanzas.cargarTransacciones();
       }
+
+      // Auto-generación offline de Ticket de Crédito / Apartado con desglose de plantas y saldo pendiente
+      try {
+        await ServicioTicketPdf.instancia.generarYGuardarTicketPdf(
+          venta,
+          esCredito: true,
+        );
+      } catch (e) {
+        debugPrint('Aviso al auto-generar ticket de crédito PDF: $e');
+      }
+
       notifyListeners();
+      return venta;
     }
+    return null;
   }
 
   Future<void> completarVentaActual() async {
@@ -717,8 +748,11 @@ class ControladorVentas extends ChangeNotifier {
 
       final double nuevoMontoPagado = montoPagadoActual + monto;
       final bool liquidada = nuevoMontoPagado >= (totalVenta - 0.01);
+      final double nuevoSaldoRestante =
+          (totalVenta - nuevoMontoPagado).clamp(0.0, double.infinity);
       final String nuevoEstado =
-          liquidada ? EstadoVenta.liquidada.name : EstadoVenta.apartada.name;
+          liquidada ? EstadoVenta.completada.name : EstadoVenta.apartada.name;
+      final String cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
 
       final abono = Abono(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -742,16 +776,29 @@ class ControladorVentas extends ChangeNotifier {
         whereArgs: whereArgs,
       );
 
-      // 6. Registrar el ingreso financiero correspondiente
-      final cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
+      // 6. Sincronizar tabla relacional deudores
+      await txn.update(
+        'deudores',
+        {
+          'montoPagado': nuevoMontoPagado,
+          'saldoPendiente': nuevoSaldoRestante,
+          'estado': liquidada ? 'LIQUIDADA' : 'PENDIENTE',
+        },
+        where: 'venta_id = ? OR id = ?',
+        whereArgs: [idStr, 'deu_$idStr'],
+      );
+
+      // 7. Registrar el ingreso financiero correspondiente
+      final String descripcionTransaccion = liquidada
+          ? 'Liquidación final cuenta por cobrar Folio #$idStr ($cliente)'
+          : 'Abono de deuda Folio #$idStr ($cliente)';
+
       await txn.insert('transacciones', {
         'id': '${abono.id}_ingreso',
         'tipo': TipoTransaccion.ingreso.name,
         'monto': monto,
         'fecha': DateTime.now().toIso8601String(),
-        'descripcion': liquidada
-            ? 'Liquidación final cuenta por cobrar (Venta #$idStr - $cliente)'
-            : 'Abono recibido (Venta #$idStr - $cliente)',
+        'descripcion': descripcionTransaccion,
       });
     });
 
@@ -760,10 +807,11 @@ class ControladorVentas extends ChangeNotifier {
     await controladorFinanzas.cargarTransacciones();
   }
 
-  /// Liquida el total del saldo pendiente de una venta de forma atómica
-  Future<void> liquidarDeudaTotal({
+  /// Liquida la totalidad del saldo pendiente de una venta de forma atómica y actualiza finanzas
+  Future<void> liquidarDeuda({
     required String ventaId,
     String metodoPago = 'Efectivo',
+    String notas = 'Liquidación total de deuda',
   }) async {
     final venta = _ventas.where((v) => v.id == ventaId).firstOrNull;
     if (venta == null) {
@@ -774,7 +822,18 @@ class ControladorVentas extends ChangeNotifier {
       ventaId: ventaId,
       monto: venta.saldoPendiente,
       metodoPago: metodoPago,
-      notas: 'Liquidación total de deuda',
+      notas: notas,
+    );
+  }
+
+  /// Alias de compatibilidad semántica con llamadas existentes a liquidarDeudaTotal
+  Future<void> liquidarDeudaTotal({
+    required String ventaId,
+    String metodoPago = 'Efectivo',
+  }) async {
+    await liquidarDeuda(
+      ventaId: ventaId,
+      metodoPago: metodoPago,
     );
   }
 

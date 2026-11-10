@@ -63,8 +63,7 @@ class _DashboardVistaState extends State<DashboardVista> {
 
         final usuarioActual = cAuth.usuarioActual;
         final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
-        final bool tienePermisoFinanzas = usuarioActual?.rol == RolUsuario.duena ||
-            usuarioActual?.rol == RolUsuario.gerente;
+        final bool tienePermisoFinanzas = usuarioActual?.rol?.puedeVerFinanzas ?? false;
         final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Scaffold(

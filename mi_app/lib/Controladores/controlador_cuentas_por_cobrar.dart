@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -5,6 +6,7 @@ import '../BaseDatos/base_datos.dart';
 import '../Modelos/abono.dart';
 import '../Modelos/finanzas.dart';
 import '../Modelos/venta.dart';
+import '../Servicios/servicio_ticket_pdf.dart';
 import 'controlador_finanzas.dart';
 import 'controlador_ventas.dart';
 
@@ -42,7 +44,9 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
   /// Sincroniza el catálogo de ventas y consulta en SQLite los folios con abonos vinculados.
   Future<List<Venta>> obtenerCuentasPorCobrar({bool recargar = true}) async {
     _cargando = true;
-    notifyListeners();
+    scheduleMicrotask(() {
+      notifyListeners();
+    });
 
     try {
       if (recargar) {
@@ -87,8 +91,10 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
   }
 
   /// Registra un abono parcial o abono final a una venta apartada en SQLite
-  /// ejecutando todas las mutaciones dentro de una transacción segura ACID (txn).
-  Future<void> registrarAbono({
+  /// ejecutando todas las mutaciones dentro de una transacción segura ACID (txn),
+  /// actualizando la tabla relacional 'deudores', asentando la transacción financiera
+  /// y retornando la estructura inmutable [ComprobanteAbono] para emisión de comprobante.
+  Future<ComprobanteAbono> registrarAbono({
     required String ventaId,
     required double monto,
     String metodoPago = 'Efectivo',
@@ -99,6 +105,8 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
     }
 
     final db = await BaseDeDatos.instancia.database;
+    late ComprobanteAbono comprobanteGenerado;
+
     await db.transaction((txn) async {
       // 1. Manejo seguro de tipos para whereArgs (compatibilidad String vs int)
       final String idStr = ventaId.trim();
@@ -157,9 +165,14 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
       }
 
       final double nuevoMontoPagado = montoPagadoActual + monto;
+      // 2. Traspaso al Historial de Ventas: si la cuenta se liquida por completo,
+      // su estado cambia a 'completada' para que aparezca en el Historial de Ventas del día
       final bool liquidada = nuevoMontoPagado >= (totalVenta - 0.01);
+      final double nuevoSaldoRestante =
+          (totalVenta - nuevoMontoPagado).clamp(0.0, double.infinity);
       final String nuevoEstado =
-          liquidada ? EstadoVenta.liquidada.name : EstadoVenta.apartada.name;
+          liquidada ? EstadoVenta.completada.name : EstadoVenta.apartada.name;
+      final String cliente = mapaVenta['cliente']?.toString() ?? 'Cliente Mostrador';
 
       final abono = Abono(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -183,30 +196,70 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
         whereArgs: whereArgs,
       );
 
-      // 6. Registrar el ingreso financiero correspondiente
-      final cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
+      // 6. Sincronizar tabla relacional deudores
+      await txn.update(
+        'deudores',
+        {
+          'montoPagado': nuevoMontoPagado,
+          'saldoPendiente': nuevoSaldoRestante,
+          'estado': liquidada ? 'LIQUIDADA' : 'PENDIENTE',
+        },
+        where: 'venta_id = ? OR id = ?',
+        whereArgs: [idStr, 'deu_$idStr'],
+      );
+
+      // 1. Registro Contable de Abonos (Ingresos Reales):
+      // Inserta un registro en finanzas/caja ('transacciones') por el monto exacto del abono
+      final String descripcionTransaccion = liquidada
+          ? 'Liquidación final cuenta por cobrar Folio #$idStr ($cliente)'
+          : 'Abono de deuda Folio #$idStr ($cliente)';
+
       await txn.insert('transacciones', {
         'id': '${abono.id}_ingreso',
         'tipo': TipoTransaccion.ingreso.name,
         'monto': monto,
         'fecha': DateTime.now().toIso8601String(),
-        'descripcion': liquidada
-            ? 'Liquidación final cuenta por cobrar (Venta #$idStr - $cliente)'
-            : 'Abono recibido (Venta #$idStr - $cliente)',
+        'descripcion': descripcionTransaccion,
       });
+
+      // 8. Crear comprobante inmutable del abono
+      comprobanteGenerado = ComprobanteAbono(
+        idAbono: abono.id,
+        ventaId: idStr,
+        cliente: cliente,
+        totalOriginal: totalVenta,
+        abonoHoy: monto,
+        saldoRestante: nuevoSaldoRestante,
+        totalPagado: nuevoMontoPagado,
+        fecha: abono.fecha,
+        metodoPago: metodoPago,
+        liquidado: liquidada,
+      );
     });
+
+    // Auto-generación y persistencia local del PDF del comprobante de abono
+    try {
+      await ServicioTicketPdf.instancia.generarYGuardarComprobanteAbonoPdf(comprobanteGenerado);
+    } catch (e) {
+      debugPrint('Aviso al auto-generar comprobante de abono PDF: $e');
+    }
 
     // Refrescar estado local y financiero en memoria
     await controladorVentas.cargarVentas();
     await controladorFinanzas.cargarTransacciones();
     await obtenerCuentasPorCobrar(recargar: false);
     notifyListeners();
+
+    return comprobanteGenerado;
   }
 
-  /// Liquida el total del saldo pendiente de una venta de forma atómica
-  Future<void> liquidarDeudaTotal({
+  /// Liquida la totalidad del saldo pendiente de una venta de forma atómica y genera su comprobante.
+  /// Cambia su estado a 'completada' en SQLite y en memoria, reflejándola en el Historial de Ventas
+  /// y sumando el remanente a los Ingresos Totales de caja.
+  Future<ComprobanteAbono?> liquidarDeuda({
     required String ventaId,
     String metodoPago = 'Efectivo',
+    String notas = 'Liquidación total de deuda',
   }) async {
     final venta = controladorVentas.ventas
         .where((v) => v.id == ventaId)
@@ -214,12 +267,50 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
     if (venta == null) {
       throw Exception('Cuenta de deudor no encontrada en el sistema');
     }
-    if (venta.saldoPendiente <= 0) return;
-    await registrarAbono(
+    if (venta.saldoPendiente <= 0) return null;
+    return await registrarAbono(
       ventaId: ventaId,
       monto: venta.saldoPendiente,
       metodoPago: metodoPago,
-      notas: 'Liquidación total de deuda',
+      notas: notas,
     );
+  }
+
+  /// Alias de compatibilidad semántica con llamadas existentes a liquidarDeudaTotal
+  Future<ComprobanteAbono?> liquidarDeudaTotal({
+    required String ventaId,
+    String metodoPago = 'Efectivo',
+  }) async {
+    return await liquidarDeuda(
+      ventaId: ventaId,
+      metodoPago: metodoPago,
+    );
+  }
+
+  /// Consulta relacional para obtener las plantas y artículos apartados por un deudor.
+  /// Ejecuta un JOIN entre deudores, ventas, articulos_venta y productos.
+  Future<List<Map<String, dynamic>>> obtenerPlantasDeudor(String deudorIdOVentaId) async {
+    final db = await BaseDeDatos.instancia.database;
+    const sql = '''
+      SELECT 
+        d.id AS deudor_id,
+        d.cliente,
+        d.saldoPendiente,
+        v.id AS venta_id,
+        p.id AS producto_id,
+        p.nombre AS planta_nombre,
+        p.tipo AS tipo_producto,
+        av.cantidad,
+        av.precioUnitario,
+        (av.cantidad * av.precioUnitario) AS subtotal
+      FROM deudores d
+      JOIN ventas v ON d.venta_id = v.id
+      JOIN articulos_venta av ON v.id = av.venta_id
+      JOIN productos p ON av.producto_id = p.id
+      WHERE d.id = ? OR d.venta_id = ?
+      ORDER BY p.nombre ASC;
+    ''';
+    final clave = deudorIdOVentaId.trim();
+    return await db.rawQuery(sql, [clave, clave]);
   }
 }

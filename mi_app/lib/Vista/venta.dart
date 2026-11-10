@@ -10,7 +10,9 @@ import 'Widgets/catalogo_bottom_sheet.dart';
 import 'Widgets/articulo_ticket_item.dart';
 import 'Widgets/venta_footer.dart';
 import 'impresion_ticket.dart';
+import '../Servicios/servicio_ticket_pdf.dart';
 import '../Utilidades/formateador.dart';
+import '../Utilidades/debouncer.dart';
 import '../Constantes/limites.dart';
 
 class VentaVista extends StatefulWidget {
@@ -32,6 +34,8 @@ class VentaVista extends StatefulWidget {
 class _VentaVistaState extends State<VentaVista> {
   final TextEditingController _montoRecibidoController =
       TextEditingController();
+  final Debouncer _cobroDebouncer =
+      Debouncer(delay: const Duration(milliseconds: 300));
   bool _cobrando = false;
 
   @override
@@ -50,6 +54,7 @@ class _VentaVistaState extends State<VentaVista> {
 
   @override
   void dispose() {
+    _cobroDebouncer.dispose();
     _montoRecibidoController.dispose();
     super.dispose();
   }
@@ -286,25 +291,265 @@ class _VentaVistaState extends State<VentaVista> {
     showDialog(
       context: context,
       builder: (dialogCtx) => DialogoApartadoVenta(
-        onConfirmar: (nombre, anticipo) async {
-          await widget.controladorVentas.apartarVentaActual(
-            cliente: nombre,
-            montoAbonoInicial: anticipo,
-          );
-          if (mounted) {
-            widget.controladorVentas.iniciarVenta();
-            _montoRecibidoController.clear();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Venta apartada para $nombre correctamente.'),
-                backgroundColor: AppColors.primary,
-              ),
-            );
-            Navigator.pop(context);
-          }
-        },
+        onConfirmar: (nombre, anticipo) => _procesarApartado(nombre, anticipo),
       ),
     );
+  }
+
+  Future<void> _procesarApartado(String nombre, double anticipo) async {
+    setState(() {
+      _cobrando = true;
+    });
+
+    try {
+      final ventaApartada = await widget.controladorVentas.apartarVentaActual(
+        cliente: nombre,
+        montoAbonoInicial: anticipo,
+      );
+
+      if (!mounted || ventaApartada == null) return;
+
+      final double total = ventaApartada.total;
+      final double saldoPendiente =
+          (total - anticipo).clamp(0.0, double.infinity);
+
+      // Diálogo de decisión: Interceptamos el éxito y consultamos antes de imprimir
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.subtleAmber,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.bookmark_added_rounded,
+                    color: AppColors.amber,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '¡Apartado Registrado!',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Apartado registrado con éxito para $nombre.\n¿Desea imprimir el ticket de comprobante?',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total apartado:',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            Formateador.moneda(total),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Anticipo recibido:',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            Formateador.moneda(anticipo),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Saldo pendiente:',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            Formateador.moneda(saldoPendiente),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.amber,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    // Opción: No, continuar (Limpia carrito y vuelve a la vista principal sin archivo)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogCtx);
+                          _finalizarApartadoYSalir(nombre);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'No, continuar',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Opción: Sí, imprimir (Genera PDF/Ticket térmico y luego limpia el carrito)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(dialogCtx);
+                          await _imprimirYFinalizarApartado(
+                            ventaApartada,
+                            nombre,
+                          );
+                        },
+                        icon: const Icon(Icons.print, size: 16),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Sí, imprimir',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        _mostrarAviso(context, 'Error al procesar el apartado: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cobrando = false;
+        });
+      }
+    }
+  }
+
+  void _finalizarApartadoYSalir(String nombre) {
+    if (!mounted) return;
+    widget.controladorVentas.iniciarVenta();
+    _montoRecibidoController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Venta apartada para $nombre correctamente.'),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  Future<void> _imprimirYFinalizarApartado(
+    Venta ventaApartada,
+    String nombre,
+  ) async {
+    try {
+      await ServicioTicketPdf.instancia.descargarYAbrirTicket(
+        context,
+        ventaApartada,
+        esCredito: true,
+      );
+    } catch (e) {
+      debugPrint('Error al generar comprobante de crédito: $e');
+    }
+    if (mounted) {
+      _finalizarApartadoYSalir(nombre);
+    }
   }
 
   void _eliminarArticulo(Venta venta, ArticuloVenta art, int index) {
@@ -378,6 +623,7 @@ class _VentaVistaState extends State<VentaVista> {
             final bool isLandscape = orientation == Orientation.landscape;
 
             return Scaffold(
+              resizeToAvoidBottomInset: false,
               backgroundColor: AppColors.surface,
               appBar: AppBar(
                 toolbarHeight: isLandscape ? 44 : 56,
@@ -473,14 +719,18 @@ class _VentaVistaState extends State<VentaVista> {
               : _buildArticulosList(venta, isLandscape: false),
         ),
         if (venta.articulos.isNotEmpty)
-          VentaFooter(
-            venta: venta,
-            montoRecibidoController: _montoRecibidoController,
-            onMontoCambiado: () => setState(() {}),
-            onProcesarCobro: _procesarCobro,
-            onApartarVenta: _mostrarDialogoApartado,
-            isLandscape: false,
-            cobrando: _cobrando,
+          RepaintBoundary(
+            child: VentaFooter(
+              venta: venta,
+              montoRecibidoController: _montoRecibidoController,
+              onMontoCambiado: () => _cobroDebouncer.run(() {
+                if (mounted) setState(() {});
+              }),
+              onProcesarCobro: _procesarCobro,
+              onApartarVenta: _mostrarDialogoApartado,
+              isLandscape: false,
+              cobrando: _cobrando,
+            ),
           ),
       ],
     );
@@ -509,14 +759,18 @@ class _VentaVistaState extends State<VentaVista> {
         Expanded(
           flex: 5,
           child: venta.articulos.isNotEmpty
-              ? VentaFooter(
-                  venta: venta,
-                  montoRecibidoController: _montoRecibidoController,
-                  onMontoCambiado: () => setState(() {}),
-                  onProcesarCobro: _procesarCobro,
-                  onApartarVenta: _mostrarDialogoApartado,
-                  isLandscape: true,
-                  cobrando: _cobrando,
+              ? RepaintBoundary(
+                  child: VentaFooter(
+                    venta: venta,
+                    montoRecibidoController: _montoRecibidoController,
+                    onMontoCambiado: () => _cobroDebouncer.run(() {
+                      if (mounted) setState(() {});
+                    }),
+                    onProcesarCobro: _procesarCobro,
+                    onApartarVenta: _mostrarDialogoApartado,
+                    isLandscape: true,
+                    cobrando: _cobrando,
+                  ),
                 )
               : _buildLandscapeEmptyCheckout(),
         ),
@@ -603,52 +857,54 @@ class _VentaVistaState extends State<VentaVista> {
       itemBuilder: (context, index) {
         final art = venta.articulos[index];
 
-        return Dismissible(
-          key: ValueKey('ticket_art_${art.producto.id}_$index'),
-          direction: DismissDirection.endToStart,
-          onDismissed: (_) => _eliminarArticulo(venta, art, index),
-          background: Container(
-            margin: EdgeInsets.only(bottom: isLandscape ? 8 : 12),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: AppColors.error,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: const [
-                Text(
-                  'Eliminar',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+        return RepaintBoundary(
+          child: Dismissible(
+            key: ValueKey('ticket_art_${art.producto.id}_$index'),
+            direction: DismissDirection.endToStart,
+            onDismissed: (_) => _eliminarArticulo(venta, art, index),
+            background: Container(
+              margin: EdgeInsets.only(bottom: isLandscape ? 8 : 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: AppColors.error,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: const [
+                  Text(
+                    'Eliminar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                SizedBox(width: 8),
-                Icon(Icons.delete_outline, color: Colors.white, size: 22),
-              ],
+                  SizedBox(width: 8),
+                  Icon(Icons.delete_outline, color: Colors.white, size: 22),
+                ],
+              ),
             ),
-          ),
-          child: ArticuloTicketItem(
-            art: art,
-            isLandscape: isLandscape,
-            onIncrementar: () {
-              try {
+            child: ArticuloTicketItem(
+              art: art,
+              isLandscape: isLandscape,
+              onIncrementar: () {
+                try {
+                  widget.controladorVentas
+                      .actualizarCantidadArticulo(index, art.cantidad + 1);
+                } catch (e) {
+                  _mostrarAviso(
+                    context,
+                    e.toString().replaceAll('Exception: ', ''),
+                  );
+                }
+              },
+              onDecrementar: () {
                 widget.controladorVentas
-                    .actualizarCantidadArticulo(index, art.cantidad + 1);
-              } catch (e) {
-                _mostrarAviso(
-                  context,
-                  e.toString().replaceAll('Exception: ', ''),
-                );
-              }
-            },
-            onDecrementar: () {
-              widget.controladorVentas
-                  .actualizarCantidadArticulo(index, art.cantidad - 1);
-            },
+                    .actualizarCantidadArticulo(index, art.cantidad - 1);
+              },
+            ),
           ),
         );
       },
@@ -837,42 +1093,46 @@ class _DialogoApartadoVentaState extends State<DialogoApartadoVenta> {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _nombreCtrl,
-              autofocus: true,
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-              decoration: InputDecoration(
-                labelText: 'Nombre del Cliente',
-                labelStyle: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                ),
-                filled: true,
-                fillColor: AppColors.secondarySurface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+            RepaintBoundary(
+              child: TextField(
+                controller: _nombreCtrl,
+                autofocus: true,
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Nombre del Cliente',
+                  labelStyle: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.secondarySurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: _anticipoCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
-              ],
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-              decoration: InputDecoration(
-                labelText: 'Anticipo / Abono Inicial (\$)',
-                labelStyle: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                ),
-                prefixText: '\$ ',
-                filled: true,
-                fillColor: AppColors.secondarySurface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+            RepaintBoundary(
+              child: TextField(
+                controller: _anticipoCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
+                ],
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Anticipo / Abono Inicial (\$)',
+                  labelStyle: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                  prefixText: '\$ ',
+                  filled: true,
+                  fillColor: AppColors.secondarySurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),

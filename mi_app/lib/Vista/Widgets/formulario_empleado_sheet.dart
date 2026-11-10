@@ -261,11 +261,7 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
                 items: const [
                   DropdownMenuItem(
                     value: RolUsuario.duena,
-                    child: Text('Dueña (Acceso Total y Seguridad)'),
-                  ),
-                  DropdownMenuItem(
-                    value: RolUsuario.gerente,
-                    child: Text('Gerente (Gestión Operativa e Inventario)'),
+                    child: Text('Dueño (Acceso Total y Seguridad)'),
                   ),
                   DropdownMenuItem(
                     value: RolUsuario.empleado,

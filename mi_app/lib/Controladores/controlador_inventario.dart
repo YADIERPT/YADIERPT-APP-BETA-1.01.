@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../Modelos/producto.dart';
@@ -9,12 +10,28 @@ import '../BaseDatos/base_datos.dart';
 /// los observadores (`ChangeNotifier`) ante cualquier alta, baja o ajuste de existencias.
 class ControladorInventario extends ChangeNotifier {
   List<Producto> _productos = [];
+  bool _filtroSoloActivos = true;
 
   List<Producto> get productos => _productos;
 
-  /// Recarga el inventario de productos activos desde SQLite con soporte de paginación/límite.
-  /// Aplica borrado lógico (`activo = 1`), ordenamiento alfabético y auto-recuperación de esquema.
-  Future<void> cargarProductos({int? limite, int offset = 0}) async {
+  /// Indica si el catálogo actualmente cargado corresponde a productos activos (`true`)
+  /// o a productos ocultos / deshabilitados (`false`).
+  bool get filtroSoloActivos => _filtroSoloActivos;
+
+  /// Recarga el inventario de productos desde SQLite con soporte de filtro de estado,
+  /// paginación y auto-recuperación de esquema.
+  ///
+  /// Parámetros:
+  /// - [soloActivos]: `true` por defecto para mostrar únicamente productos operativos (`activo = 1`).
+  ///   Si se especifica `false`, consulta y carga exclusivamente los productos deshabilitados (`activo = 0`),
+  ///   permitiendo al dueño auditar artículos ocultos para restaurarlos o eliminarlos definitivamente.
+  /// - [limite] y [offset]: Soporte opcional de paginación de registros.
+  Future<void> cargarProductos({
+    bool soloActivos = true,
+    int? limite,
+    int offset = 0,
+  }) async {
+    _filtroSoloActivos = soloActivos;
     final db = await BaseDeDatos.instancia.database;
     try {
       await db.execute(
@@ -25,7 +42,8 @@ class ControladorInventario extends ChangeNotifier {
     }
     final mapas = await db.query(
       'productos',
-      where: 'activo = 1',
+      where: 'activo = ?',
+      whereArgs: [soloActivos ? 1 : 0],
       orderBy: 'nombre ASC',
       limit: limite,
       offset: offset > 0 ? offset : null,
@@ -39,50 +57,146 @@ class ControladorInventario extends ChangeNotifier {
     await cargarProductos();
   }
 
+  /// Agrega un nuevo producto desacoplando la persistencia pesada en SQLite
+  /// de la animación visual del hilo principal (UI Thread).
+  ///
+  /// Primero actualiza el estado visual mínimo necesario en memoria y notifica
+  /// a la UI para renderizado inmediato a 60/120 FPS sin frame drops.
+  /// Luego delega la escritura real en SQLite mediante una microtarea (`Future.microtask()`).
   Future<void> agregarProducto(Producto nuevoProducto) async {
     if (_productos.any((p) => p.id == nuevoProducto.id)) {
       throw Exception('El producto con este ID ya existe.');
     }
 
-    final db = await BaseDeDatos.instancia.database;
-
-    // Verificar si el registro ya existe en SQLite (ej. borrado lógicamente con anterioridad)
-    final coincidentes = await db.query(
-      'productos',
-      where: 'id = ?',
-      whereArgs: [nuevoProducto.id],
-    );
-
-    if (coincidentes.isNotEmpty) {
-      // Reactivar el producto existente y actualizar sus datos
-      nuevoProducto.activo = true;
-      await db.update(
-        'productos',
-        nuevoProducto.toMap(),
-        where: 'id = ?',
-        whereArgs: [nuevoProducto.id],
-      );
-    } else {
-      await db.insert('productos', nuevoProducto.toMap());
-    }
-
+    // 1. Actualización inmediata del estado visual en memoria (Optimistic UI)
     _productos.add(nuevoProducto);
     notifyListeners();
+
+    // 2. Microtareas: delega la inserción real en SQLite usando Future.microtask()
+    // para que se ejecute después de que el frame de la animación visual haya terminado de pintarse.
+    final completer = Completer<void>();
+    Future.microtask(() async {
+      try {
+        final db = await BaseDeDatos.instancia.database;
+
+        // Verificar si el registro ya existe en SQLite (ej. borrado lógicamente con anterioridad)
+        final coincidentes = await db.query(
+          'productos',
+          where: 'id = ?',
+          whereArgs: [nuevoProducto.id],
+        );
+
+        if (coincidentes.isNotEmpty) {
+          // Reactivar el producto existente y actualizar sus datos
+          nuevoProducto.activo = true;
+          await db.update(
+            'productos',
+            nuevoProducto.toMap(),
+            where: 'id = ?',
+            whereArgs: [nuevoProducto.id],
+          );
+        } else {
+          await db.insert('productos', nuevoProducto.toMap());
+        }
+        completer.complete();
+      } catch (e) {
+        // En caso de fallo transaccional en SQLite, revertir el estado en memoria
+        _productos.removeWhere((p) => p.id == nuevoProducto.id);
+        notifyListeners();
+        completer.completeError(e);
+      }
+    });
+
+    return completer.future;
   }
 
-  /// Realiza un borrado lógico (Soft Delete) del producto actualizando `activo = 0`.
-  /// Esto previene el error `FOREIGN KEY constraint failed (code 787)` al preservar
-  /// la integridad referencial con `articulos_venta` y mantener intacto el historial de ventas.
-  Future<void> eliminarProducto(String id) async {
+  /// Deshabilita un producto (Soft Delete) ejecutando `UPDATE productos SET activo = 0 WHERE id = ?`.
+  ///
+  /// Disponible para ambos roles ('empleado' y 'dueño').
+  /// Permite ocultar un producto registrado por equivocación sin romper la integridad referencial
+  /// en SQLite ni causar errores `FOREIGN KEY constraint failed (code 787)` con ventas históricas.
+  Future<void> deshabilitarProducto(dynamic id) async {
     final db = await BaseDeDatos.instancia.database;
+    final idParam = id.toString();
     await db.update(
       'productos',
       {'activo': 0},
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [idParam],
     );
-    _productos.removeWhere((p) => p.id == id);
+
+    // Actualización reactiva en memoria
+    final prod = _productos.where((p) => p.id == idParam).firstOrNull;
+    if (prod != null) {
+      prod.activo = false;
+      // Si la vista actual muestra solo productos activos, retirarlo de la lista visible
+      if (_filtroSoloActivos) {
+        _productos.removeWhere((p) => p.id == idParam);
+      }
+    }
     notifyListeners();
+  }
+
+  /// Restaura un producto deshabilitado ejecutando `UPDATE productos SET activo = 1 WHERE id = ?`.
+  ///
+  /// Acción reservada para el rol 'dueño'.
+  /// Reactiva el producto para que vuelva a estar disponible en el Punto de Venta (POS) y catálogo.
+  Future<void> restaurarProducto(dynamic id) async {
+    final db = await BaseDeDatos.instancia.database;
+    final idParam = id.toString();
+    await db.update(
+      'productos',
+      {'activo': 1},
+      where: 'id = ?',
+      whereArgs: [idParam],
+    );
+
+    // Actualización reactiva en memoria
+    final prod = _productos.where((p) => p.id == idParam).firstOrNull;
+    if (prod != null) {
+      prod.activo = true;
+      // Si la vista actual muestra solo deshabilitados, retirarlo de la lista de ocultos
+      if (!_filtroSoloActivos) {
+        _productos.removeWhere((p) => p.id == idParam);
+      }
+    } else if (_filtroSoloActivos) {
+      // Si estamos en la vista de activos y el producto no estaba en memoria, recargar
+      await cargarProductos(soloActivos: true);
+      return;
+    }
+    notifyListeners();
+  }
+
+  /// Elimina definitivamente un producto (Hard Delete) ejecutando `DELETE FROM productos WHERE id = ?`.
+  ///
+  /// Acción irreversible reservada exclusivamente para el rol 'dueño'.
+  /// Si el producto no cuenta con ventas registradas, se elimina físicamente de la base de datos.
+  /// En caso de poseer registros vinculados en `articulos_venta`, previene el fallo de clave foránea
+  /// notificando la restricción de integridad referencial.
+  Future<void> eliminarProductoDefinitivamente(dynamic id) async {
+    final db = await BaseDeDatos.instancia.database;
+    final idParam = id.toString();
+    try {
+      await db.delete(
+        'productos',
+        where: 'id = ?',
+        whereArgs: [idParam],
+      );
+      _productos.removeWhere((p) => p.id == idParam);
+      notifyListeners();
+    } catch (e) {
+      if (e.toString().contains('FOREIGN KEY')) {
+        throw Exception(
+          'No es posible eliminar definitivamente el producto porque posee registros de venta históricos. Consérvelo deshabilitado.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// Alias de retrocompatibilidad con llamadas preexistentes que ejecutan el borrado lógico (Soft Delete).
+  Future<void> eliminarProducto(String id) async {
+    await deshabilitarProducto(id);
   }
 
   Future<void> registrarMerma(String productoId, int cantidad) async {

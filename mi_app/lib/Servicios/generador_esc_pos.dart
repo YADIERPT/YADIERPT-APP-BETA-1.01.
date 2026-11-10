@@ -69,6 +69,20 @@ class GeneradorEscPos {
     _buffer.addAll([0x1D, 0x21, valor]);
   }
 
+  /// Codificación segura en Latin1 (ISO-8859-1) para miniprinters térmicas,
+  /// transcodificando caracteres especiales de puntuación Unicode a sus equivalentes Latin1/ASCII.
+  static List<int> codificarLatin1Seguro(String str) {
+    final saneada = str
+        .replaceAll('•', '-')
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'");
+    return saneada.runes.map((r) => r <= 255 ? r : 0x3F).toList();
+  }
+
   /// Escribe una línea de texto formateada con salto de línea opcional
   void texto(
     String contenido, {
@@ -82,7 +96,7 @@ class GeneradorEscPos {
     tamano(tamanoFuente);
 
     // Codificación segura Latin1 para caracteres en español
-    final bytesTexto = latin1.encode(contenido);
+    final bytesTexto = codificarLatin1Seguro(contenido);
     _buffer.addAll(bytesTexto);
 
     if (saltoLinea) {
@@ -123,7 +137,7 @@ class GeneradorEscPos {
     final String padding = ' ' * (espacios > 0 ? espacios : 1);
 
     final linea = '$izqAjustado$padding$derecha';
-    final bytesTexto = latin1.encode(linea);
+    final bytesTexto = codificarLatin1Seguro(linea);
     _buffer.addAll(bytesTexto);
     _buffer.add(0x0A);
   }

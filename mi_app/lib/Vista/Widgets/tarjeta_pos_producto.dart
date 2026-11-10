@@ -28,7 +28,8 @@ class TarjetaPosProducto extends StatelessWidget {
     final bool enTicket = cantidadEnTicket > 0;
     final bool sinUnidades = producto.cantidadEnInventario == 0;
 
-    return GestureDetector(
+    return RepaintBoundary(
+      child: GestureDetector(
       onTap: () {
         if (sinUnidades) {
           onSinUnidades();
@@ -198,6 +199,7 @@ class TarjetaPosProducto extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

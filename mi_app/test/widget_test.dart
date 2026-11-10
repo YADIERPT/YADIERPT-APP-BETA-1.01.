@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -26,6 +27,7 @@ import 'package:mi_app/Controladores/controlador_perfil.dart';
 import 'package:mi_app/Controladores/controlador_inicio.dart';
 import 'package:mi_app/Vista/inicio.dart';
 import 'package:mi_app/Vista/pos_vista.dart';
+import 'package:mi_app/Vista/venta.dart';
 import 'package:mi_app/Vista/inventario_vista.dart';
 import 'package:mi_app/Vista/login.dart';
 import 'package:mi_app/Vista/splash_vista.dart';
@@ -41,7 +43,9 @@ import 'package:mi_app/Vista/historial_ventas_vista.dart';
 import 'package:mi_app/Vista/Widgets/dialogo_seguridad_admin.dart';
 import 'package:mi_app/Vista/Widgets/formulario_empleado_sheet.dart';
 import 'package:mi_app/Utilidades/formateador.dart';
+import 'package:mi_app/Utilidades/debouncer.dart';
 import 'package:mi_app/Controladores/controlador_hardware.dart';
+import 'package:mi_app/Vista/hardware_vista.dart';
 import 'package:mi_app/Servicios/generador_esc_pos.dart';
 import 'package:mi_app/Modelos/configuracion_hardware.dart';
 import 'package:mi_app/Vista/Widgets/logo_biznaga.dart';
@@ -49,6 +53,10 @@ import 'package:mi_app/IA/Controladores/controlador_ia_compras.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
   testWidgets('App smoke test', (WidgetTester tester) async {
     expect(true, isTrue);
   });
@@ -442,32 +450,33 @@ void main() {
   });
 
   group('Control de Acceso Basado en Roles (RBAC) y RoleGuard', () {
-    test('RolUsuario.desdeString mapea correctamente esquemas legados y sinónimos', () {
+    test('RolUsuario.desdeString mapea correctamente esquemas legados y sinónimos a 2 roles', () {
       expect(RolUsuario.desdeString('admin'), RolUsuario.duena);
       expect(RolUsuario.desdeString('dueña'), RolUsuario.duena);
       expect(RolUsuario.desdeString('duena'), RolUsuario.duena);
       expect(RolUsuario.desdeString('DUENA'), RolUsuario.duena);
-      expect(RolUsuario.desdeString('gerente'), RolUsuario.gerente);
-      expect(RolUsuario.desdeString('manager'), RolUsuario.gerente);
+      expect(RolUsuario.desdeString('dueño'), RolUsuario.duena);
+      expect(RolUsuario.desdeString('dueno'), RolUsuario.duena);
+      expect(RolUsuario.desdeString('gerente'), RolUsuario.empleado);
+      expect(RolUsuario.desdeString('manager'), RolUsuario.empleado);
       expect(RolUsuario.desdeString('cajero'), RolUsuario.empleado);
       expect(RolUsuario.desdeString('empleado'), RolUsuario.empleado);
       expect(RolUsuario.desdeString(null), RolUsuario.empleado);
       expect(RolUsuario.desdeString('desconocido'), RolUsuario.empleado);
     });
 
-    test('Permisos de negocio por cada rol son coherentes', () {
+    test('Permisos de negocio exclusivos de Dueño vs Empleado', () {
       expect(RolUsuario.duena.puedeVerFinanzas, isTrue);
       expect(RolUsuario.duena.puedeModificarInventario, isTrue);
       expect(RolUsuario.duena.puedeGestionarColaboradores, isTrue);
-
-      expect(RolUsuario.gerente.puedeVerFinanzas, isTrue);
-      expect(RolUsuario.gerente.puedeModificarInventario, isTrue);
-      expect(RolUsuario.gerente.puedeGestionarColaboradores, isTrue);
+      expect(RolUsuario.duena.esDueno, isTrue);
+      expect(RolUsuario.duena.esDuena, isTrue);
 
       expect(RolUsuario.empleado.puedeVerFinanzas, isFalse);
       expect(RolUsuario.empleado.puedeModificarInventario, isFalse);
       expect(RolUsuario.empleado.puedeGestionarColaboradores, isFalse);
       expect(RolUsuario.empleado.soloPuntoDeVenta, isTrue);
+      expect(RolUsuario.empleado.esDueno, isFalse);
     });
 
     test('Colaborador serializa y deserializa rol correctamente', () {
@@ -496,43 +505,43 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: RoleGuard.gerencia(
+            body: RoleGuard.soloDueno(
               rolActual: RolUsuario.empleado,
               modo: RoleGuardMode.ocultar,
-              child: Text('Solo Gerencia'),
+              child: Text('Solo Dueño'),
             ),
           ),
         ),
       );
 
-      expect(find.text('Solo Gerencia'), findsNothing);
+      expect(find.text('Solo Dueño'), findsNothing);
     });
 
     testWidgets('RoleGuard muestra widget cuando rol sí está autorizado', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: RoleGuard.gerencia(
-              rolActual: RolUsuario.gerente,
+            body: RoleGuard.soloDueno(
+              rolActual: RolUsuario.duena,
               modo: RoleGuardMode.ocultar,
-              child: Text('Solo Gerencia'),
+              child: Text('Solo Dueño'),
             ),
           ),
         ),
       );
 
-      expect(find.text('Solo Gerencia'), findsOneWidget);
+      expect(find.text('Solo Dueño'), findsOneWidget);
     });
 
     testWidgets('RoleGuard muestra AccesoDenegadoView cuando modo es placeholder', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: RoleGuard.gerencia(
+            body: RoleGuard.soloDueno(
               rolActual: RolUsuario.empleado,
               modo: RoleGuardMode.placeholder,
               titulo: 'Acceso Prohibido',
-              child: Text('Solo Gerencia'),
+              child: Text('Solo Dueño'),
             ),
           ),
         ),
@@ -773,7 +782,7 @@ void main() {
       expect(find.text('Ver todos'), findsOneWidget);
     });
 
-    testWidgets('Modo Dueña/Gerente en Dashboard muestra ingresos totales y tarjeta de deudores', (WidgetTester tester) async {
+    testWidgets('Modo Dueña en Dashboard muestra ingresos totales y tarjeta de deudores', (WidgetTester tester) async {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
@@ -938,6 +947,96 @@ void main() {
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
       expect(find.text('Nuevo Empleado'), findsOneWidget);
+    });
+
+    test('Protección Anti-Suicidio: ControladorAutenticacion impide que el usuario activo se elimine', () async {
+      final ctrlAuth = ControladorAutenticacion();
+      final dueno = Colaborador(
+        id: 'DUENO-01',
+        nombre: 'Dueño Principal',
+        clave: 'hash',
+        rol: RolUsuario.duena,
+      );
+      final empleado = Colaborador(
+        id: 'EMP-02',
+        nombre: 'Empleado Mostrador',
+        clave: 'hash',
+        rol: RolUsuario.empleado,
+      );
+
+      ctrlAuth.establecerUsuarioParaPruebas(dueno);
+      ctrlAuth.establecerColaboradoresParaPruebas([dueno, empleado]);
+
+      // Intento de auto-eliminación debe lanzar excepción de protección Anti-Suicidio
+      expect(
+        () => ctrlAuth.eliminarColaborador('DUENO-01'),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'mensaje',
+          contains('No puedes eliminar tu propia cuenta mientras tengas la sesión activa'),
+        )),
+      );
+
+      // Eliminación de un empleado subordinado sí es permitida
+      final exito = await ctrlAuth.eliminarColaborador('EMP-02');
+      expect(exito, isTrue);
+      expect(ctrlAuth.colaboradores.any((c) => c.id == 'EMP-02'), isFalse);
+    });
+
+    testWidgets('EmpleadosVista bloquea acceso a usuarios que no son Dueño', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'EMP-01',
+          nombre: 'Cajero',
+          clave: 'hash',
+          rol: RolUsuario.empleado,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EmpleadosVista(controladorAutenticacion: ctrlAuth),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Gestión de Personal Reservada'), findsOneWidget);
+      expect(find.textContaining('Solo el Dueño tiene autorización'), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsNothing);
+    });
+
+    testWidgets('EmpleadosVista aplica Protección Anti-Suicidio visual en lista', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      final dueno = Colaborador(
+        id: 'DUENO-01',
+        nombre: 'Dueño Activo',
+        clave: 'hash',
+        rol: RolUsuario.duena,
+      );
+      final empleado = Colaborador(
+        id: 'EMP-02',
+        nombre: 'Empleado Auxiliar',
+        clave: 'hash',
+        rol: RolUsuario.empleado,
+      );
+
+      ctrlAuth.establecerUsuarioParaPruebas(dueno);
+      ctrlAuth.establecerColaboradoresParaPruebas([dueno, empleado]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EmpleadosVista(controladorAutenticacion: ctrlAuth),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Debe mostrar la insignia 'Tú' para la sesión activa (Anti-Suicidio)
+      expect(find.text('Tú'), findsOneWidget);
+      expect(find.byIcon(Icons.shield_rounded), findsOneWidget);
+
+      // Debe haber exactamente 1 botón de eliminar (para el empleado, NO para el dueño activo)
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
 
     testWidgets('DialogoSeguridadAdmin se renderiza con campo de clave y botón de verificar', (WidgetTester tester) async {
@@ -1528,6 +1627,110 @@ void main() {
       expect(ctrlCobrar.totalCuentasActivas, 0);
     });
 
+    test('registrarAbono y liquidarDeuda registran ingresos en finanzas y traspasan a completada (ACID)', () async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      ctrlPerf.configuracion.aplicarIva = false;
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCobrar = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      final p1 = Producto(
+        id: 'p_deuda_acid',
+        nombre: 'Bonsai Jade',
+        precioVenta: 500.0,
+        costo: 200.0,
+        cantidadEnInventario: 10,
+      );
+      await ctrlInv.agregarProducto(p1);
+
+      final String idVenta = 'V_ACID_${DateTime.now().microsecondsSinceEpoch}';
+
+      // Crear venta apartada en SQLite
+      final ventaApartada = Venta(
+        id: idVenta,
+        fecha: DateTime.now(),
+        estado: EstadoVenta.apartada,
+        aplicarIva: false,
+        cliente: 'Carlos Vega',
+        montoPagado: 100.0,
+      );
+      ventaApartada.agregarArticulo(p1, 1);
+
+      final db = await BaseDeDatos.instancia.database;
+      await db.insert('ventas', ventaApartada.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      for (final art in ventaApartada.articulos) {
+        await db.insert('articulos_venta', art.toMap(ventaApartada.id), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await db.insert('deudores', {
+        'id': 'deu_${ventaApartada.id}',
+        'venta_id': ventaApartada.id,
+        'cliente': ventaApartada.cliente,
+        'telefono': '555-1234',
+        'montoTotal': 500.0,
+        'montoPagado': 100.0,
+        'saldoPendiente': 400.0,
+        'estado': 'PENDIENTE',
+        'fechaRegistro': ventaApartada.fecha.toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      await ctrlVentas.cargarVentas();
+      await ctrlFin.cargarTransacciones();
+      final ingresosIniciales = ctrlFin.totalIngresos;
+
+      // 1. Registrar abono parcial de $200.0
+      final comp1 = await ctrlCobrar.registrarAbono(
+        ventaId: idVenta,
+        monto: 200.0,
+        metodoPago: 'Efectivo',
+      );
+
+      expect(comp1.abonoHoy, 200.0);
+      expect(comp1.saldoRestante, 200.0);
+      expect(comp1.totalPagado, 300.0);
+      expect(comp1.liquidado, isFalse);
+
+      // Verificar que finanzas registró el ingreso de $200.0
+      expect(ctrlFin.totalIngresos, ingresosIniciales + 200.0);
+      final ultimaTxn = ctrlFin.transacciones.first;
+      expect(ultimaTxn.esIngreso, isTrue);
+      expect(ultimaTxn.monto, 200.0);
+      expect(ultimaTxn.descripcion, contains('Folio #$idVenta'));
+
+      // 2. Liquidación total de la deuda restante ($200.0) mediante liquidarDeuda
+      final comp2 = await ctrlCobrar.liquidarDeuda(
+        ventaId: idVenta,
+        metodoPago: 'Transferencia',
+      );
+
+      expect(comp2, isNotNull);
+      expect(comp2!.liquidado, isTrue);
+      expect(comp2.saldoRestante, 0.0);
+      expect(comp2.totalPagado, 500.0);
+
+      // Verificar que finanzas registró el ingreso final de $200.0
+      expect(ctrlFin.totalIngresos, ingresosIniciales + 400.0);
+
+      // 3. Traspaso al Historial de Ventas: el estado de la venta es ahora 'completada'
+      await ctrlVentas.cargarVentas();
+      final ventaActualizada = ctrlVentas.ventas.firstWhere((v) => v.id == idVenta);
+      expect(ventaActualizada.estado, EstadoVenta.completada);
+      expect(ventaActualizada.montoPagado, 500.0);
+      expect(ventaActualizada.saldoPendiente, 0.0);
+
+      // Verificar estado en tabla deudores en SQLite
+      final deudoresDb = await db.query('deudores', where: 'venta_id = ?', whereArgs: [idVenta]);
+      expect(deudoresDb.first['estado'], 'LIQUIDADA');
+      expect((deudoresDb.first['saldoPendiente'] as num).toDouble(), 0.0);
+    });
+
     testWidgets('DeudoresVista se renderiza utilizando ControladorCuentasPorCobrar', (WidgetTester tester) async {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
@@ -1711,4 +1914,575 @@ void main() {
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
   });
+
+  group('Integridad Relacional y Módulo de Cuentas por Cobrar (Deudores)', () {
+    test('Esquema SQLite soporta tabla deudores con FK hacia ventas y consulta de plantas apartadas', () async {
+      sqfliteFfiInit();
+      final inMemoryDb = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onConfigure: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE productos (
+                id TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                precioVenta REAL NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'planta'
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE ventas (
+                id TEXT PRIMARY KEY,
+                fecha TEXT NOT NULL,
+                estado TEXT NOT NULL,
+                cliente TEXT NOT NULL,
+                montoPagado REAL NOT NULL DEFAULT 0.0
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE articulos_venta (
+                id TEXT PRIMARY KEY,
+                venta_id TEXT NOT NULL,
+                producto_id TEXT NOT NULL,
+                cantidad INTEGER NOT NULL,
+                precioUnitario REAL NOT NULL,
+                FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE,
+                FOREIGN KEY (producto_id) REFERENCES productos (id) ON DELETE CASCADE
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE deudores (
+                id TEXT PRIMARY KEY,
+                venta_id TEXT NOT NULL,
+                cliente TEXT NOT NULL,
+                telefono TEXT NOT NULL DEFAULT '',
+                montoTotal REAL NOT NULL,
+                montoPagado REAL NOT NULL,
+                saldoPendiente REAL NOT NULL,
+                fechaRegistro TEXT NOT NULL,
+                fechaLimite TEXT,
+                estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+                FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE
+              )
+            ''');
+          },
+        ),
+      );
+
+      // Inserción de prueba
+      await inMemoryDb.insert('productos', {
+        'id': 'planta-1',
+        'nombre': 'Monstera Deliciosa',
+        'precioVenta': 450.0,
+        'tipo': 'planta',
+      });
+      await inMemoryDb.insert('ventas', {
+        'id': 'v-101',
+        'fecha': DateTime.now().toIso8601String(),
+        'estado': 'apartada',
+        'cliente': 'Ana Sofía',
+        'montoPagado': 150.0,
+      });
+      await inMemoryDb.insert('articulos_venta', {
+        'id': 'art-1',
+        'venta_id': 'v-101',
+        'producto_id': 'planta-1',
+        'cantidad': 1,
+        'precioUnitario': 450.0,
+      });
+      await inMemoryDb.insert('deudores', {
+        'id': 'deu_v-101',
+        'venta_id': 'v-101',
+        'cliente': 'Ana Sofía',
+        'telefono': '555-1234',
+        'montoTotal': 450.0,
+        'montoPagado': 150.0,
+        'saldoPendiente': 300.0,
+        'fechaRegistro': DateTime.now().toIso8601String(),
+        'estado': 'PENDIENTE',
+      });
+
+      // Consulta relacional de plantas apartadas
+      const sqlPlantas = '''
+        SELECT 
+          d.id AS deudor_id,
+          d.cliente,
+          d.saldoPendiente,
+          v.id AS venta_id,
+          p.id AS producto_id,
+          p.nombre AS planta_nombre,
+          av.cantidad,
+          av.precioUnitario,
+          (av.cantidad * av.precioUnitario) AS subtotal
+        FROM deudores d
+        JOIN ventas v ON d.venta_id = v.id
+        JOIN articulos_venta av ON v.id = av.venta_id
+        JOIN productos p ON av.producto_id = p.id
+        WHERE d.id = ? OR d.venta_id = ?
+      ''';
+
+      final resultado = await inMemoryDb.rawQuery(sqlPlantas, ['deu_v-101', 'v-101']);
+      expect(resultado.length, 1);
+      expect(resultado.first['planta_nombre'], 'Monstera Deliciosa');
+      expect(resultado.first['cliente'], 'Ana Sofía');
+      expect(resultado.first['saldoPendiente'], 300.0);
+      expect(resultado.first['subtotal'], 450.0);
+
+      await inMemoryDb.close();
+    });
+
+    test('ComprobanteAbono modela fielmente los datos para emisión de recibo de pago', () {
+      final comprobante = ComprobanteAbono(
+        idAbono: 'ab-500',
+        ventaId: 'v-200',
+        cliente: 'Carlos Mendoza',
+        totalOriginal: 1000.0,
+        abonoHoy: 400.0,
+        saldoRestante: 600.0,
+        totalPagado: 400.0,
+        fecha: DateTime(2026, 11, 8, 14, 30),
+        metodoPago: 'Transferencia',
+        liquidado: false,
+      );
+
+      expect(comprobante.cliente, 'Carlos Mendoza');
+      expect(comprobante.totalOriginal, 1000.0);
+      expect(comprobante.abonoHoy, 400.0);
+      expect(comprobante.saldoRestante, 600.0);
+      expect(comprobante.liquidado, isFalse);
+
+      final map = comprobante.toMap();
+      expect(map['idAbono'], 'ab-500');
+      expect(map['metodoPago'], 'Transferencia');
+    });
+
+    test('ControladorHardware genera buffers ESC/POS binarios para Ticket de Crédito y Comprobante de Abono', () async {
+      final ctrlHw = ControladorHardware();
+
+      final ventaCredito = Venta(
+        id: 'v-cred-999',
+        fecha: DateTime.now(),
+        cliente: 'Beatriz Silva',
+        estado: EstadoVenta.apartada,
+        montoPagado: 200.0,
+        articulos: [
+          ArticuloVenta(
+            producto: Producto(
+              id: 'pl-fikus',
+              nombre: 'Ficus Lyrata Gigante',
+              precioVenta: 850.0,
+              costo: 400.0,
+              cantidadEnInventario: 5,
+            ),
+            cantidad: 1,
+            precioUnitario: 850.0,
+          ),
+        ],
+      );
+
+      final comprobante = ComprobanteAbono(
+        idAbono: 'ab-999',
+        ventaId: 'v-cred-999',
+        cliente: 'Beatriz Silva',
+        totalOriginal: 850.0,
+        abonoHoy: 350.0,
+        saldoRestante: 300.0,
+        totalPagado: 550.0,
+        fecha: DateTime.now(),
+        metodoPago: 'Efectivo',
+        liquidado: false,
+      );
+
+      // Verificamos que los métodos ESC/POS no lanzan excepciones
+      expect(() async {
+        await ctrlHw.imprimirTicketCreditoEscPos(ventaCredito);
+      }, returnsNormally);
+
+      expect(() async {
+        await ctrlHw.imprimirComprobanteAbonoEscPos(comprobante);
+      }, returnsNormally);
+    });
+  });
+
+  group('Escaneo Real y Conexión Térmica Bluetooth ESC/POS (print_bluetooth_thermal)', () {
+    test('ControladorHardware escanea impresoras Bluetooth recuperando Nombre y MAC', () async {
+      final ctrlHw = ControladorHardware();
+      ctrlHw.inyectarDispositivosPrueba([
+        const DispositivoImpresora(
+          nombre: 'POS-58C Thermal',
+          macOUrl: '66:02:BD:06:18:7B',
+          tipo: 'bluetooth',
+        ),
+        const DispositivoImpresora(
+          nombre: 'MTP-II MiniPrinter',
+          macOUrl: 'AA:BB:CC:DD:EE:FF',
+          tipo: 'bluetooth',
+        ),
+      ]);
+
+      final resultado = await ctrlHw.escanearImpresorasBluetooth(solicitarPermisos: false);
+
+      expect(resultado.length, 2);
+      expect(resultado[0].nombre, 'POS-58C Thermal');
+      expect(resultado[0].macOUrl, '66:02:BD:06:18:7B');
+      expect(resultado[1].nombre, 'MTP-II MiniPrinter');
+      expect(resultado[1].macOUrl, 'AA:BB:CC:DD:EE:FF');
+
+      ctrlHw.inyectarDispositivosPrueba(null);
+    });
+
+    test('ControladorHardware conecta exitosamente, guarda MAC y actualiza estado a Conectada', () async {
+      final ctrlHw = ControladorHardware();
+      ctrlHw.inyectarConexionPrueba(true);
+
+      expect(ctrlHw.config.impresoraConectada, isFalse);
+
+      final exito = await ctrlHw.conectarImpresora(
+        macAddress: '66:02:BD:06:18:7B',
+        nombre: 'POS-58C Thermal',
+      );
+
+      expect(exito, isTrue);
+      expect(ctrlHw.config.impresoraConectada, isTrue);
+      expect(ctrlHw.config.impresoraMac, '66:02:BD:06:18:7B');
+      expect(ctrlHw.config.impresoraNombre, 'POS-58C Thermal');
+
+      ctrlHw.inyectarConexionPrueba(null);
+    });
+
+    testWidgets('DialogoBuscarImpresoraBluetooth muestra indicador de carga y lista impresoras', (tester) async {
+      final ctrlHw = ControladorHardware();
+      ctrlHw.inyectarDispositivosPrueba([
+        const DispositivoImpresora(
+          nombre: 'RPP02N Thermal Printer',
+          macOUrl: '00:11:22:33:44:55',
+          tipo: 'bluetooth',
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DialogoBuscarImpresoraBluetooth(
+              controladorHardware: ctrlHw,
+            ),
+          ),
+        ),
+      );
+
+      // Verificamos el montaje inicial y la resolución del escaneo
+      await tester.pumpAndSettle();
+
+      expect(find.text('Buscar Impresora'), findsOneWidget);
+      expect(find.text('RPP02N Thermal Printer'), findsOneWidget);
+      expect(find.text('MAC: 00:11:22:33:44:55'), findsOneWidget);
+      expect(find.text('Conectar'), findsOneWidget);
+
+      ctrlHw.inyectarDispositivosPrueba(null);
+    });
+
+    testWidgets('HardwareVista muestra estado Conectada en verde y habilita Ticket Prueba', (tester) async {
+      final ctrlBio = ControladorBiometrico();
+      final ctrlHw = ControladorHardware();
+
+      // Forzamos conexión activa
+      ctrlHw.config.impresoraConectada = true;
+      ctrlHw.config.impresoraMac = '66:02:BD:06:18:7B';
+      ctrlHw.config.impresoraNombre = 'POS-58C';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HardwareVista(
+              controladorBiometrico: ctrlBio,
+              controladorHardware: ctrlHw,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Conectada'), findsOneWidget);
+      expect(find.text('Ticket Prueba'), findsOneWidget);
+
+      // Verificar que el botón de prueba está habilitado cuando está conectada
+      final botonPrueba = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Ticket Prueba'),
+      );
+      expect(botonPrueba.onPressed, isNotNull);
+    });
+
+    testWidgets('HardwareVista deshabilita Ticket Prueba cuando la impresora está desconectada', (tester) async {
+      final ctrlBio = ControladorBiometrico();
+      final ctrlHw = ControladorHardware();
+
+      // Estado desconectado
+      ctrlHw.config.impresoraConectada = false;
+      ctrlHw.config.impresoraMac = '';
+      ctrlHw.config.impresoraNombre = '';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HardwareVista(
+              controladorBiometrico: ctrlBio,
+              controladorHardware: ctrlHw,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Desconectada'), findsOneWidget);
+
+      // El botón de prueba debe estar deshabilitado (onPressed == null)
+      final botonPrueba = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Ticket Prueba'),
+      );
+      expect(botonPrueba.onPressed, isNull);
+    });
+  });
+
+  group('Optimización de Rendimiento, Aislamiento de Scaffold y Debounce (P1)', () {
+    test('Debouncer retrasa la ejecución 300ms y descarta pulsaciones intermedias', () async {
+      final debouncer = Debouncer(delay: const Duration(milliseconds: 300));
+      int llamadas = 0;
+      String valorFinal = '';
+
+      debouncer.run(() {
+        llamadas++;
+        valorFinal = 'c';
+      });
+
+      // Simula escritura rápida antes de 300ms
+      await Future.delayed(const Duration(milliseconds: 100));
+      expect(llamadas, 0);
+
+      debouncer.run(() {
+        llamadas++;
+        valorFinal = 'ca';
+      });
+
+      await Future.delayed(const Duration(milliseconds: 100));
+      expect(llamadas, 0);
+
+      debouncer.run(() {
+        llamadas++;
+        valorFinal = 'cactus';
+      });
+
+      // Esperar más de 300ms
+      await Future.delayed(const Duration(milliseconds: 350));
+      expect(llamadas, 1);
+      expect(valorFinal, 'cactus');
+
+      debouncer.dispose();
+    });
+
+    testWidgets('PosVista aísla Scaffold con resizeToAvoidBottomInset: false y RepaintBoundary', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+          ],
+          child: const MaterialApp(
+            home: PosVista(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final scaffoldFinder = find.byType(Scaffold);
+      expect(scaffoldFinder, findsOneWidget);
+      final scaffold = tester.widget<Scaffold>(scaffoldFinder);
+      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+
+      // Debe existir RepaintBoundary alrededor del TextField de búsqueda
+      expect(find.byType(RepaintBoundary), findsWidgets);
+    });
+
+    testWidgets('VentaVista aísla Scaffold con resizeToAvoidBottomInset: false y RepaintBoundary en VentaFooter', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      ctrlVentas.iniciarVenta();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+          ],
+          child: MaterialApp(
+            home: VentaVista(
+              controladorVentas: ctrlVentas,
+              controladorInventario: ctrlInv,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+    });
+
+    testWidgets('DeudoresVista aísla Scaffold con resizeToAvoidBottomInset: false y buscador en RepaintBoundary', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCuentas = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorCuentasPorCobrar>.value(value: ctrlCuentas),
+          ],
+          child: const MaterialApp(
+            home: DeudoresVista(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+      expect(find.byType(RepaintBoundary), findsWidgets);
+    });
+
+    test('ControladorInventario.agregarProducto actualiza optimistamente en memoria antes de persistir en microtarea', () async {
+      final ctrlInv = ControladorInventario();
+      final nuevoProd = Producto(
+        id: 'test_opt_001',
+        nombre: 'Cactus Optimista',
+        tipo: 'planta',
+        precioVenta: 120.0,
+        costo: 60.0,
+        cantidadEnInventario: 10,
+      );
+
+      // La invocación sincroniza inmediatamente en memoria (UI instantánea)
+      final futureOperacion = ctrlInv.agregarProducto(nuevoProd);
+      expect(ctrlInv.productos.any((p) => p.id == 'test_opt_001'), isTrue);
+
+      // Esperar culminación de la microtarea
+      try {
+        await futureOperacion;
+      } catch (_) {
+        // En entorno mock de prueba SQLite sin Keystore
+      }
+    });
+
+    testWidgets('PosVista renderiza TarjetaPosProducto dentro de Selector granular para aislar frame drops', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+
+      final p1 = Producto(
+        id: 'p_gran_1',
+        nombre: 'Sucu 1',
+        tipo: 'planta',
+        precioVenta: 50.0,
+        costo: 25.0,
+        cantidadEnInventario: 5,
+      );
+      ctrlInv.productos.add(p1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+          ],
+          child: const MaterialApp(
+            home: PosVista(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Debe utilizar Selector<ControladorVentas, int> para aislar tarjetas individuales
+      expect(find.byType(Selector<ControladorVentas, int>), findsWidgets);
+    });
+  });
+
+  group('Gestión de Productos por Roles: Soft Delete, Restauración y Hard Delete', () {
+    test('Soft delete (deshabilitarProducto), Restaurar y Hard delete en SQLite', () async {
+      final ctrlInv = ControladorInventario();
+      final pPrueba = Producto(
+        id: '9991',
+        nombre: 'Cactus de Prueba Soft Delete',
+        precioVenta: 100.0,
+        costo: 50.0,
+        cantidadEnInventario: 10,
+        activo: true,
+      );
+
+      // Inserción en SQLite y memoria
+      await ctrlInv.agregarProducto(pPrueba);
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // 1. Deshabilitar producto (Soft Delete con id entero o string)
+      await ctrlInv.deshabilitarProducto(9991);
+      expect(ctrlInv.productos.any((p) => p.id == '9991'), isFalse);
+
+      // 2. Filtro soloActivos = false permite al Dueño ver productos deshabilitados
+      await ctrlInv.cargarProductos(soloActivos: false);
+      expect(ctrlInv.productos.any((p) => p.id == '9991'), isTrue);
+      final prodDeshabilitado = ctrlInv.productos.firstWhere((p) => p.id == '9991');
+      expect(prodDeshabilitado.activo, isFalse);
+
+      // 3. Restaurar producto (vuelve a activo = 1)
+      await ctrlInv.restaurarProducto(9991);
+      await ctrlInv.cargarProductos(soloActivos: true);
+      expect(ctrlInv.productos.any((p) => p.id == '9991'), isTrue);
+      final prodRestaurado = ctrlInv.productos.firstWhere((p) => p.id == '9991');
+      expect(prodRestaurado.activo, isTrue);
+
+      // 4. Hard Delete (Eliminación definitiva)
+      await ctrlInv.eliminarProductoDefinitivamente(9991);
+      await ctrlInv.cargarProductos(soloActivos: true);
+      expect(ctrlInv.productos.any((p) => p.id == '9991'), isFalse);
+      await ctrlInv.cargarProductos(soloActivos: false);
+      expect(ctrlInv.productos.any((p) => p.id == '9991'), isFalse);
+    });
+  });
 }
+

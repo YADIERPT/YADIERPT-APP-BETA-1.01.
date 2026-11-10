@@ -6,6 +6,7 @@ import '../../Modelos/producto.dart';
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import '../../Utilidades/debouncer.dart';
 
 class CatalogoBottomSheet extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -25,6 +26,16 @@ class CatalogoBottomSheet extends StatefulWidget {
 
 class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
   String _busqueda = '';
+  final TextEditingController _busquedaController = TextEditingController();
+  final Debouncer _busquedaDebouncer =
+      Debouncer(delay: const Duration(milliseconds: 300));
+
+  @override
+  void dispose() {
+    _busquedaDebouncer.dispose();
+    _busquedaController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,22 +99,46 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
                 color: AppColors.secondarySurface,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: TextField(
-                onChanged: (val) => setState(() => _busqueda = val),
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Buscar planta o maceta...',
-                  hintStyle:
-                      TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: AppColors.textSecondary,
-                    size: 20,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+              child: RepaintBoundary(
+                child: TextField(
+                  controller: _busquedaController,
+                  onChanged: (val) {
+                    _busquedaDebouncer.run(() {
+                      if (mounted) {
+                        setState(() => _busqueda = val.trim());
+                      }
+                    });
+                  },
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar planta o maceta...',
+                    hintStyle:
+                        TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.close,
+                              color: AppColors.textSecondary,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              _busquedaDebouncer.cancel();
+                              _busquedaController.clear();
+                              setState(() => _busqueda = '');
+                              FocusScope.of(context).unfocus();
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -130,7 +165,8 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
                 final bool enTicket = cantidadEnTicket > 0;
                 final bool sinUnidades = prod.cantidadEnInventario == 0;
 
-                return GestureDetector(
+                return RepaintBoundary(
+                  child: GestureDetector(
                   onTap: () {
                     if (sinUnidades) {
                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -265,7 +301,8 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
                       ),
                     ),
                   ),
-                );
+                ),
+              );
               },
             ),
           ),

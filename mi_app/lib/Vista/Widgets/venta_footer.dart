@@ -142,49 +142,51 @@ class VentaFooter extends StatelessWidget {
         SizedBox(height: verticalSpacing),
 
         // Campo "$ Monto recibido"
-        Container(
-          height: isLandscape ? 42 : 48,
-          decoration: BoxDecoration(
-            color: AppColors.secondarySurface,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: TextField(
-            controller: montoRecibidoController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
-            ],
-            onChanged: (_) => onMontoCambiado(),
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
+        RepaintBoundary(
+          child: Container(
+            height: isLandscape ? 42 : 48,
+            decoration: BoxDecoration(
+              color: AppColors.secondarySurface,
+              borderRadius: BorderRadius.circular(10),
             ),
-            decoration: InputDecoration(
-              prefixIcon: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  '\$',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+            child: TextField(
+              controller: montoRecibidoController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FormateadorMilesMonetario(max: LimitesApp.maxMontoMonetario),
+              ],
+              onChanged: (_) => onMontoCambiado(),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '\$',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 0, minHeight: 0),
-              hintText: 'Monto recibido',
-              hintStyle: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.normal,
-              ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: isLandscape ? 10 : 14,
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 0, minHeight: 0),
+                hintText: 'Monto recibido',
+                hintStyle: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.normal,
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: isLandscape ? 10 : 14,
+                ),
               ),
             ),
           ),

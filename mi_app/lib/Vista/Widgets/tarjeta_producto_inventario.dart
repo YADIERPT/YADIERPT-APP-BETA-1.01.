@@ -32,8 +32,9 @@ class TarjetaProductoInventario extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isCritical = prod.esStockCritico;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -312,6 +313,7 @@ class TarjetaProductoInventario extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }

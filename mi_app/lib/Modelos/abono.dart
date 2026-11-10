@@ -35,3 +35,47 @@ class Abono {
   }
 }
 
+/// Estructura de datos inmutable para el Comprobante de Pago de Abono.
+/// Cumple con los requerimientos fiscales y operativos para comprobar abonos y saldos pendientes.
+class ComprobanteAbono {
+  final String idAbono;
+  final String ventaId;
+  final String cliente;
+  final double totalOriginal;
+  final double abonoHoy;
+  final double saldoRestante;
+  final double totalPagado;
+  final DateTime fecha;
+  final String metodoPago;
+  final bool liquidado;
+
+  ComprobanteAbono({
+    required this.idAbono,
+    required this.ventaId,
+    required this.cliente,
+    required this.totalOriginal,
+    required this.abonoHoy,
+    required this.saldoRestante,
+    required this.totalPagado,
+    required this.fecha,
+    this.metodoPago = 'Efectivo',
+    this.liquidado = false,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'idAbono': idAbono,
+      'ventaId': ventaId,
+      'cliente': cliente,
+      'totalOriginal': totalOriginal,
+      'abonoHoy': abonoHoy,
+      'saldoRestante': saldoRestante,
+      'totalPagado': totalPagado,
+      'fecha': fecha.toIso8601String(),
+      'metodoPago': metodoPago,
+      'liquidado': liquidado ? 1 : 0,
+    };
+  }
+}
+
+

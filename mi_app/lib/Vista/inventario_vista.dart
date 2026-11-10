@@ -16,6 +16,7 @@ import '../Controladores/controlador_autenticacion.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
+import '../Utilidades/debouncer.dart';
 
 class InventarioVista extends StatefulWidget {
   const InventarioVista({super.key});
@@ -28,7 +29,8 @@ class _InventarioVistaState extends State<InventarioVista> {
   String _busqueda = '';
   String _filtroActivo = 'todos'; // 'todos', 'plantas', 'articulos', 'critico'
   final TextEditingController _busquedaController = TextEditingController();
-  Timer? _debounceTimer;
+  final Debouncer _busquedaDebouncer =
+      Debouncer(delay: const Duration(milliseconds: 300));
 
   @override
   void initState() {
@@ -38,7 +40,7 @@ class _InventarioVistaState extends State<InventarioVista> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
+    _busquedaDebouncer.dispose();
     _busquedaController.dispose();
     super.dispose();
   }
@@ -46,8 +48,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   /// Efecto Debounce de 300 ms: cancela temporizadores previos y solo filtra
   /// el catálogo cuando el usuario detiene la escritura durante 300 ms.
   void _onBusquedaChanged(String val) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+    _busquedaDebouncer.run(() {
       if (mounted) {
         setState(() {
           _busqueda = val.trim();
@@ -57,7 +58,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _limpiarBusqueda() {
-    _debounceTimer?.cancel();
+    _busquedaDebouncer.cancel();
     _busquedaController.clear();
     setState(() {
       _busqueda = '';
@@ -312,50 +313,54 @@ class _InventarioVistaState extends State<InventarioVista> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // 1. Buscador con Debounce de 300 ms
-                        TextField(
-                          controller: _busquedaController,
-                          onChanged: _onBusquedaChanged,
-                          style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: 'Buscar planta o artículo...',
-                            hintStyle:
-                                TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: AppColors.textSecondary,
-                              size: 20,
-                            ),
-                            suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: Icon(Icons.clear,
-                                        color: AppColors.textSecondary, size: 18),
-                                    onPressed: _limpiarBusqueda,
-                                  )
-                                : null,
-                            filled: true,
-                            fillColor: AppColors.secondarySurface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: EdgeInsets.symmetric(
-                              vertical: isLandscape ? 8 : 12,
-                              horizontal: 14,
+                        // 1. Buscador con Debounce de 300 ms y aislamiento RepaintBoundary
+                        RepaintBoundary(
+                          child: TextField(
+                            controller: _busquedaController,
+                            onChanged: _onBusquedaChanged,
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Buscar planta o artículo...',
+                              hintStyle:
+                                  TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                color: AppColors.textSecondary,
+                                size: 20,
+                              ),
+                              suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: Icon(Icons.clear,
+                                          color: AppColors.textSecondary, size: 18),
+                                      onPressed: _limpiarBusqueda,
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: AppColors.secondarySurface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                vertical: isLandscape ? 8 : 12,
+                                horizontal: 14,
+                              ),
                             ),
                           ),
                         ),
                         SizedBox(height: isLandscape ? 8 : 12),
 
                         // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
-                        ResumenInventarioHeader(
-                          totalPlantas: totalPlantas,
-                          stockCritico: stockCritico,
-                          totalSkus: totalArticulos,
-                          filtroActivo: _filtroActivo,
-                          onFiltroSeleccionado: _cambiarFiltro,
-                          controladorIA: cIA,
-                          onVerSugerencias: _abrirSugerenciasIA,
+                        RepaintBoundary(
+                          child: ResumenInventarioHeader(
+                            totalPlantas: totalPlantas,
+                            stockCritico: stockCritico,
+                            totalSkus: totalArticulos,
+                            filtroActivo: _filtroActivo,
+                            onFiltroSeleccionado: _cambiarFiltro,
+                            controladorIA: cIA,
+                            onVerSugerencias: _abrirSugerenciasIA,
+                          ),
                         ),
                         SizedBox(height: isLandscape ? 10 : 16),
 
@@ -429,13 +434,15 @@ class _InventarioVistaState extends State<InventarioVista> {
                       itemCount: productos.length,
                       itemBuilder: (context, index) {
                         final prod = productos[index];
-                        return TarjetaProductoInventario(
-                          prod: prod,
-                          rolActual: rolActual,
-                          puedeModificar: puedeModificar,
-                          onEditar: () => _abrirEditarProducto(prod),
-                          onAjustar: () => _abrirAjuste(prod),
-                          onBorrar: () => _abrirBorrarProducto(prod),
+                        return RepaintBoundary(
+                          child: TarjetaProductoInventario(
+                            prod: prod,
+                            rolActual: rolActual,
+                            puedeModificar: puedeModificar,
+                            onEditar: () => _abrirEditarProducto(prod),
+                            onAjustar: () => _abrirAjuste(prod),
+                            onBorrar: () => _abrirBorrarProducto(prod),
+                          ),
                         );
                       },
                     ),
@@ -447,13 +454,15 @@ class _InventarioVistaState extends State<InventarioVista> {
                       itemCount: productos.length,
                       itemBuilder: (context, index) {
                         final prod = productos[index];
-                        return TarjetaProductoInventario(
-                          prod: prod,
-                          rolActual: rolActual,
-                          puedeModificar: puedeModificar,
-                          onEditar: () => _abrirEditarProducto(prod),
-                          onAjustar: () => _abrirAjuste(prod),
-                          onBorrar: () => _abrirBorrarProducto(prod),
+                        return RepaintBoundary(
+                          child: TarjetaProductoInventario(
+                            prod: prod,
+                            rolActual: rolActual,
+                            puedeModificar: puedeModificar,
+                            onEditar: () => _abrirEditarProducto(prod),
+                            onAjustar: () => _abrirAjuste(prod),
+                            onBorrar: () => _abrirBorrarProducto(prod),
+                          ),
                         );
                       },
                     ),

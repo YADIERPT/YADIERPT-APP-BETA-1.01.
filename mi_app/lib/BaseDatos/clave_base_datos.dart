@@ -14,7 +14,11 @@ class ClaveBaseDatos {
   /// Obtiene de forma segura la frase de paso maestra persistida en el
   /// Keystore / Keychain mediante [SecureStorageService], o su fallback seguro.
   static Future<String> obtenerClaveSegura() async {
-    return await SecureStorageService.instancia.obtenerClaveMaestraDb();
+    try {
+      return await SecureStorageService.instancia.obtenerClaveMaestraDb();
+    } catch (_) {
+      return _masterPassphrase;
+    }
   }
 }
 

@@ -43,7 +43,7 @@ class BaseDeDatos {
       dbInstancia = await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 13,
+        version: 14,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -53,7 +53,7 @@ class BaseDeDatos {
     } else {
       dbInstancia = await openDatabase(
         path,
-        version: 13,
+        version: 14,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -326,6 +326,62 @@ class BaseDeDatos {
         END;
       ''');
     }
+    if (oldVersion < 14) {
+      // Migración a Módulo Relacional de Deudores y Cuentas por Cobrar
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS deudores (
+          id TEXT PRIMARY KEY,
+          venta_id TEXT NOT NULL,
+          cliente TEXT NOT NULL,
+          telefono TEXT NOT NULL DEFAULT '',
+          montoTotal REAL NOT NULL,
+          montoPagado REAL NOT NULL,
+          saldoPendiente REAL NOT NULL,
+          fechaRegistro TEXT NOT NULL,
+          fechaLimite TEXT,
+          estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+          FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_venta_id ON deudores (venta_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_cliente ON deudores (cliente)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_estado ON deudores (estado)');
+
+      // Migración retrospectiva de ventas apartadas existentes
+      try {
+        final ventasApartadas = await db.query(
+          'ventas',
+          where: "estado = 'apartada' OR estado = 'liquidada'",
+        );
+        for (final row in ventasApartadas) {
+          final vId = row['id'].toString();
+          final arts = await db.query('articulos_venta', where: 'venta_id = ?', whereArgs: [vId]);
+          double subtotal = 0.0;
+          for (final a in arts) {
+            subtotal += ((a['cantidad'] as num?)?.toDouble() ?? 0.0) * ((a['precioUnitario'] as num?)?.toDouble() ?? 0.0);
+          }
+          final bool aplicarIva = row['aplicarIva'] == 1;
+          final double iva = aplicarIva ? subtotal * ((row['porcentajeIva'] as num?)?.toDouble() ?? 0.16) : 0.0;
+          final double total = subtotal + iva;
+          final double pagado = (row['montoPagado'] as num?)?.toDouble() ?? 0.0;
+          final double saldo = (total - pagado).clamp(0.0, double.infinity);
+
+          await db.insert('deudores', {
+            'id': 'deu_$vId',
+            'venta_id': vId,
+            'cliente': row['cliente']?.toString() ?? 'Cliente',
+            'telefono': '',
+            'montoTotal': total,
+            'montoPagado': pagado,
+            'saldoPendiente': saldo,
+            'fechaRegistro': row['fecha']?.toString() ?? DateTime.now().toIso8601String(),
+            'fechaLimite': null,
+            'estado': saldo <= 0.01 ? 'LIQUIDADA' : 'PENDIENTE',
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      } catch (_) {}
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -506,6 +562,27 @@ class BaseDeDatos {
         VALUES (new.rowid, new.nombre, coalesce(new.notas, ''), new.tipo);
       END;
     ''');
+
+    // Tabla de Deudores vinculada a ventas para integridad relacional
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS deudores (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        cliente TEXT NOT NULL,
+        telefono TEXT NOT NULL DEFAULT '',
+        montoTotal REAL NOT NULL,
+        montoPagado REAL NOT NULL,
+        saldoPendiente REAL NOT NULL,
+        fechaRegistro TEXT NOT NULL,
+        fechaLimite TEXT,
+        estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_venta_id ON deudores (venta_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_cliente ON deudores (cliente)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_deudores_estado ON deudores (estado)');
   }
 
   Future cerrar() async {

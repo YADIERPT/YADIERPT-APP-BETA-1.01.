@@ -1,12 +1,10 @@
 /// Enumeración fuertemente tipada de los roles de usuario del vivero.
 ///
-/// Define la jerarquía de accesos y responsabilidades de Planteapp:
-/// - [duena]: Acceso total al negocio (finanzas, auditoría, empleados, inventario y POS).
-/// - [gerente]: Gestión operativa, compras, inventario, reportes y supervisión de ventas.
+/// Define la jerarquía de accesos y responsabilidades de Planteapp con política simplificada de 2 roles:
+/// - [duena]: Acceso total al negocio (Dueño/a: finanzas, auditoría, empleados, inventario y POS).
 /// - [empleado]: Operación diaria focalizada exclusivamente en Punto de Venta (POS) y consulta básica.
 enum RolUsuario {
-  duena('duena', 'Dueña'),
-  gerente('gerente', 'Gerente'),
+  duena('dueño', 'Dueño'),
   empleado('empleado', 'Empleado');
 
   final String valor;
@@ -16,18 +14,15 @@ enum RolUsuario {
 
   // Getters semánticos para verificación rápida de rol
   bool get esDuena => this == RolUsuario.duena;
-  bool get esGerente => this == RolUsuario.gerente;
+  bool get esDueno => this == RolUsuario.duena;
   bool get esEmpleado => this == RolUsuario.empleado;
 
-  /// Control de permisos de negocio
-  bool get puedeVerFinanzas =>
-      this == RolUsuario.duena || this == RolUsuario.gerente;
+  /// Control de permisos de negocio exclusivos para el dueño
+  bool get puedeVerFinanzas => this == RolUsuario.duena;
 
-  bool get puedeModificarInventario =>
-      this == RolUsuario.duena || this == RolUsuario.gerente;
+  bool get puedeModificarInventario => this == RolUsuario.duena;
 
-  bool get puedeGestionarColaboradores =>
-      this == RolUsuario.duena || this == RolUsuario.gerente;
+  bool get puedeGestionarColaboradores => this == RolUsuario.duena;
 
   bool get soloPuntoDeVenta => this == RolUsuario.empleado;
 
@@ -38,13 +33,14 @@ enum RolUsuario {
     switch (normalizado) {
       case 'duena':
       case 'dueña':
+      case 'dueno':
+      case 'dueño':
       case 'admin':
       case 'administrador':
       case 'owner':
         return RolUsuario.duena;
       case 'gerente':
       case 'manager':
-        return RolUsuario.gerente;
       case 'empleado':
       case 'cajero':
       case 'colaborador':

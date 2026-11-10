@@ -7,6 +7,7 @@ import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
+import '../Utilidades/debouncer.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
 
@@ -20,6 +21,9 @@ class PosVista extends StatefulWidget {
 class _PosVistaState extends State<PosVista> {
   String _categoriaSeleccionada = 'all';
   String _busqueda = '';
+  final TextEditingController _busquedaController = TextEditingController();
+  final Debouncer _busquedaDebouncer =
+      Debouncer(delay: const Duration(milliseconds: 300));
 
   @override
   void initState() {
@@ -31,6 +35,13 @@ class _PosVistaState extends State<PosVista> {
         cVentas.iniciarVenta();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _busquedaDebouncer.dispose();
+    _busquedaController.dispose();
+    super.dispose();
   }
 
   void _abrirCobroModal() {
@@ -86,15 +97,9 @@ class _PosVistaState extends State<PosVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    // Inyección declarativa granular mediante Provider
-    final cVentas = context.watch<ControladorVentas>();
-
     return AnimatedBuilder(
       animation: ThemeManager.instance,
       builder: (context, _) {
-        final totalArticulos = cVentas.totalArticulosEnCarrito;
-        final totalVenta = cVentas.totalVentaActual;
-
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
@@ -136,7 +141,7 @@ class _PosVistaState extends State<PosVista> {
                           16,
                           isLandscape ? 4 : 8,
                           16,
-                          totalArticulos > 0 ? 80 : 20,
+                          88,
                         ),
                         gridDelegate:
                             SliverGridDelegateWithFixedCrossAxisCount(
@@ -148,52 +153,60 @@ class _PosVistaState extends State<PosVista> {
                         itemCount: productos.length,
                         itemBuilder: (context, index) {
                           final producto = productos[index];
-                          final int cantidadEnTicket =
-                              cVentas.obtenerCantidadEnCarrito(producto.id);
 
-                          return TarjetaPosProducto(
-                            producto: producto,
-                            cantidadEnTicket: cantidadEnTicket,
-                            onAgregar: () {
-                              try {
-                                context
-                                    .read<ControladorVentas>()
-                                    .agregarArticulo(producto, 1);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(e
-                                        .toString()
-                                        .replaceAll('Exception: ', '')),
-                                    backgroundColor: AppColors.error,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
+                          // Selector granular: sólo reconstruye la tarjeta afectada cuando
+                          // cambia su cantidad individual en el carrito, sin redibujar el grid completo.
+                          return Selector<ControladorVentas, int>(
+                            selector: (context, cVentas) =>
+                                cVentas.obtenerCantidadEnCarrito(producto.id),
+                            builder: (context, cantidadEnTicket, _) {
+                              return RepaintBoundary(
+                                child: TarjetaPosProducto(
+                                  producto: producto,
+                                  cantidadEnTicket: cantidadEnTicket,
+                                  onAgregar: () {
+                                    try {
+                                      context
+                                          .read<ControladorVentas>()
+                                          .agregarArticulo(producto, 1);
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e
+                                              .toString()
+                                              .replaceAll('Exception: ', '')),
+                                          backgroundColor: AppColors.error,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  onIncrementar: () {
+                                    try {
+                                      context
+                                          .read<ControladorVentas>()
+                                          .agregarArticulo(producto, 1);
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e
+                                              .toString()
+                                              .replaceAll('Exception: ', '')),
+                                          backgroundColor: AppColors.error,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  onDecrementar: () {
+                                    context
+                                        .read<ControladorVentas>()
+                                        .decrementarArticulo(producto.id);
+                                  },
+                                  onSinUnidades: _mostrarAvisoSinUnidades,
+                                ),
+                              );
                             },
-                            onIncrementar: () {
-                              try {
-                                context
-                                    .read<ControladorVentas>()
-                                    .agregarArticulo(producto, 1);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(e
-                                        .toString()
-                                        .replaceAll('Exception: ', '')),
-                                    backgroundColor: AppColors.error,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
-                            },
-                            onDecrementar: () {
-                              context
-                                  .read<ControladorVentas>()
-                                  .decrementarArticulo(producto.id);
-                            },
-                            onSinUnidades: _mostrarAvisoSinUnidades,
                           );
                         },
                       );
@@ -203,123 +216,145 @@ class _PosVistaState extends State<PosVista> {
               ],
             ),
           ),
-          bottomSheet: totalArticulos > 0
-              ? Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: isLandscape ? 6 : 12,
+          bottomSheet: Selector<ControladorVentas, (int, double)>(
+            selector: (_, cVentas) =>
+                (cVentas.totalArticulosEnCarrito, cVentas.totalVentaActual),
+            builder: (context, datosVenta, _) {
+              final totalArticulos = datosVenta.$1;
+              final totalVenta = datosVenta.$2;
+
+              if (totalArticulos == 0) return const SizedBox.shrink();
+
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: isLandscape ? 6 : 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  border: Border(
+                    top: BorderSide(color: AppColors.border, width: 1),
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    border: Border(
-                      top: BorderSide(color: AppColors.border, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, -2),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$totalArticulos ${totalArticulos == 1 ? "artículo" : "artículos"}',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              '\$${totalVenta.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: isLandscape ? 17 : 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _abrirCobroModal,
+                        icon: Icon(Icons.shopping_bag_outlined,
+                            size: isLandscape ? 16 : 18),
+                        label: Text(
+                          'Ver Ticket y Cobrar',
+                          style: TextStyle(
+                            fontSize: isLandscape ? 13 : 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isLandscape ? 12 : 16,
+                            vertical: isLandscape ? 8 : 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  child: SafeArea(
-                    top: false,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$totalArticulos ${totalArticulos == 1 ? "artículo" : "artículos"}',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              Text(
-                                '\$${totalVenta.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: isLandscape ? 17 : 20,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _abrirCobroModal,
-                          icon: Icon(Icons.shopping_bag_outlined,
-                              size: isLandscape ? 16 : 18),
-                          label: Text(
-                            'Ver Ticket y Cobrar',
-                            style: TextStyle(
-                              fontSize: isLandscape ? 13 : 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isLandscape ? 12 : 16,
-                              vertical: isLandscape ? 8 : 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : null,
+                ),
+              );
+            },
+          ),
         );
       },
     );
   }
 
   Widget _buildSearchBar(bool isLandscape) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, isLandscape ? 6 : 12, 16, isLandscape ? 4 : 6),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.secondarySurface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: TextField(
-          onChanged: (val) => setState(() => _busqueda = val),
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Buscar planta o variedad...',
-            hintStyle:
-                TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            prefixIcon: Icon(
-              Icons.search,
-              color: AppColors.textSecondary,
-              size: 20,
+    return RepaintBoundary(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, isLandscape ? 6 : 12, 16, isLandscape ? 4 : 6),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.secondarySurface,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: RepaintBoundary(
+            child: TextField(
+              controller: _busquedaController,
+              onChanged: (val) {
+                _busquedaDebouncer.run(() {
+                  if (mounted) {
+                    setState(() => _busqueda = val.trim());
+                  }
+                });
+              },
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Buscar planta o variedad...',
+                hintStyle:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: isLandscape ? 8 : 12,
+                ),
+                suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: AppColors.textSecondary,
+                          size: 18,
+                        ),
+                        onPressed: () {
+                          _busquedaDebouncer.cancel();
+                          _busquedaController.clear();
+                          setState(() => _busqueda = '');
+                          FocusScope.of(context).unfocus();
+                        },
+                      )
+                    : null,
+              ),
             ),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: isLandscape ? 8 : 12,
-            ),
-            suffixIcon: _busqueda.isNotEmpty
-                ? IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: AppColors.textSecondary,
-                      size: 18,
-                    ),
-                    onPressed: () {
-                      setState(() => _busqueda = '');
-                      FocusScope.of(context).unfocus();
-                    },
-                  )
-                : null,
           ),
         ),
       ),

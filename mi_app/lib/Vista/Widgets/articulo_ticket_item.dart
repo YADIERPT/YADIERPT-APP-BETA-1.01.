@@ -21,10 +21,9 @@ class ArticuloTicketItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLandscape) {
-      return _buildLandscapeItem();
-    }
-    return _buildPortraitItem();
+    return RepaintBoundary(
+      child: isLandscape ? _buildLandscapeItem() : _buildPortraitItem(),
+    );
   }
 
   // Layout compacto horizontal (Landscape)

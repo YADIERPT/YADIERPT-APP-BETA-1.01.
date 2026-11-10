@@ -33,10 +33,21 @@ class ControladorAutenticacion extends ChangeNotifier {
     return token;
   }
 
+  List<Colaborador>? _colaboradoresPrueba;
+
   /// Permite establecer el usuario actual en memoria (útil para pruebas unitarias y de widgets)
   void establecerUsuarioParaPruebas(Colaborador? colaborador) {
     _usuarioActual = colaborador;
     notifyListeners();
+  }
+
+  /// Permite inyectar colaboradores en memoria para pruebas unitarias y de widgets
+  void establecerColaboradoresParaPruebas(List<Colaborador>? colaboradores) {
+    _colaboradoresPrueba = colaboradores;
+    if (colaboradores != null) {
+      _colaboradores = List.from(colaboradores);
+      notifyListeners();
+    }
   }
 
   /// Método legado síncrono para hashes SHA-256 (mantenido para retrocompatibilidad)
@@ -198,6 +209,11 @@ class ControladorAutenticacion extends ChangeNotifier {
   }
 
   Future<List<Colaborador>> obtenerColaboradores() async {
+    if (_colaboradoresPrueba != null) {
+      _colaboradores = List.from(_colaboradoresPrueba!);
+      notifyListeners();
+      return _colaboradores;
+    }
     final db = await BaseDeDatos.instancia.database;
     final resultados = await db.query('colaboradores', orderBy: 'nombre ASC');
     _colaboradores =
@@ -239,24 +255,61 @@ class ControladorAutenticacion extends ChangeNotifier {
     await obtenerColaboradores();
   }
 
+  /// Elimina un colaborador del sistema en SQLite.
+  /// Implementa "Protección Anti-Suicidio": Impide que el usuario en sesión activa se elimine a sí mismo.
+  Future<bool> eliminarColaborador(String idColaborador) async {
+    // 1. Protección Anti-Suicidio en capa de Dominio / Controlador
+    if (_usuarioActual != null && _usuarioActual!.id == idColaborador) {
+      debugPrint(
+        'Seguridad RBAC: Intento de auto-eliminación bloqueado para ID $idColaborador',
+      );
+      throw Exception(
+        'Operación no permitida: No puedes eliminar tu propia cuenta mientras tengas la sesión activa.',
+      );
+    }
+
+    if (_colaboradoresPrueba != null) {
+      final index =
+          _colaboradoresPrueba!.indexWhere((c) => c.id == idColaborador);
+      if (index != -1) {
+        _colaboradoresPrueba!.removeAt(index);
+        await obtenerColaboradores();
+        return true;
+      }
+      return false;
+    }
+
+    final db = await BaseDeDatos.instancia.database;
+    final eliminados = await db.delete(
+      'colaboradores',
+      where: 'id = ?',
+      whereArgs: [idColaborador],
+    );
+
+    if (eliminados > 0) {
+      await obtenerColaboradores();
+      return true;
+    }
+    return false;
+  }
+
   /// Valida la clave de seguridad contra la cuenta de Dueña o Administrador activo en SQLite
   Future<bool> verificarClaveAdmin(String clave) async {
     if (clave.trim().isEmpty) return false;
 
-    // 1. Si el usuario en sesión es Dueña o Gerente, validamos directamente contra su credencial
-    if (_usuarioActual != null &&
-        (_usuarioActual!.rol.esDuena || _usuarioActual!.rol.esGerente)) {
+    // 1. Si el usuario en sesión es Dueño, validamos directamente contra su credencial
+    if (_usuarioActual != null && _usuarioActual!.rol.esDuena) {
       final esValida = await verificarClave(_usuarioActual!, clave.trim());
       if (esValida) return true;
     }
 
-    // 2. Si no o si falla, buscar en SQLite cualquier cuenta con rol Dueña o Admin
+    // 2. Si no o si falla, buscar en SQLite cualquier cuenta con rol Dueño o Admin
     final db = await BaseDeDatos.instancia.database;
     final resultados = await db.query('colaboradores');
 
     for (var mapa in resultados) {
       final colab = Colaborador.fromMap(mapa);
-      if (colab.rol.esDuena || colab.rol.esGerente) {
+      if (colab.rol.esDuena) {
         final esValida = await verificarClave(colab, clave.trim());
         if (esValida) return true;
       }

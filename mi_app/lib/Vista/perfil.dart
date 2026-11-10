@@ -243,7 +243,7 @@ class _PerfilVistaState extends State<PerfilVista> {
 
               const SizedBox(height: 16),
               _buildSectionTitle('Negocio'),
-              RoleGuard.gerencia(
+              RoleGuard.soloDueno(
                 rolActual: usuario?.rol,
                 modo: RoleGuardMode.ocultar,
                 child: _buildListTile(
@@ -262,7 +262,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                   ),
                 ),
               ),
-              RoleGuard.gerencia(
+              RoleGuard.soloDueno(
                 rolActual: usuario?.rol,
                 modo: RoleGuardMode.ocultar,
                 child: _buildListTile(
@@ -344,7 +344,7 @@ class _PerfilVistaState extends State<PerfilVista> {
                   ).then((_) => setState(() {}));
                 },
               ),
-              RoleGuard.gerencia(
+              RoleGuard.soloDueno(
                 rolActual: usuario?.rol,
                 modo: RoleGuardMode.ocultar,
                 child: _buildListTile(
