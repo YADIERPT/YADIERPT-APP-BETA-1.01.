@@ -173,11 +173,19 @@ class _DeudoresVistaState extends State<DeudoresVista> {
             _mostrarToast(
               'Abono de \$${monto.toStringAsFixed(2)} registrado correctamente',
             );
+
+            // Flujo de Decisión: Preguntar antes de imprimir comprobante
             if (mounted) {
-              await ServicioTicketPdf.instancia.descargarYAbrirComprobanteAbono(
+              final bool? deseaImprimir = await _mostrarDialogoPreguntaImpresion(
                 context,
-                comprobante: comprobante,
+                monto: monto,
               );
+              if (deseaImprimir == true && mounted) {
+                await ServicioTicketPdf.instancia.descargarYAbrirComprobanteAbono(
+                  context,
+                  comprobante: comprobante,
+                );
+              }
             }
           } catch (e) {
             _mostrarToast('Error al registrar abono: $e', esError: true);
@@ -304,15 +312,97 @@ class _DeudoresVistaState extends State<DeudoresVista> {
         await _cargarCuentas();
         _mostrarToast('Cuenta liquidada en su totalidad con éxito.');
         if (mounted && comprobante != null) {
-          await ServicioTicketPdf.instancia.descargarYAbrirComprobanteAbono(
+          final bool? deseaImprimir = await _mostrarDialogoPreguntaImpresion(
             context,
-            comprobante: comprobante,
+            monto: saldo,
+            esLiquidacion: true,
           );
+          if (deseaImprimir == true && mounted) {
+            await ServicioTicketPdf.instancia.descargarYAbrirComprobanteAbono(
+              context,
+              comprobante: comprobante,
+            );
+          }
         }
       } catch (e) {
         _mostrarToast('Error al liquidar deuda: $e', esError: true);
       }
     }
+  }
+
+  /// Diálogo nativo de decisión para impresión de comprobante de pago/abono
+  Future<bool?> _mostrarDialogoPreguntaImpresion(
+    BuildContext context, {
+    required double monto,
+    bool esLiquidacion = false,
+  }) {
+    final montoStr = Formateador.moneda(monto);
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.primaryContainer,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.receipt_long,
+            color: AppColors.primary,
+            size: 28,
+          ),
+        ),
+        title: Text(
+          esLiquidacion ? 'Cuenta Liquidada con Éxito' : 'Abono Registrado',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        content: Text(
+          'Abono de $montoStr registrado con éxito. ¿Desea imprimir el comprobante de pago?',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(
+              'No',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Sí, imprimir'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _verHistorialAbonos(Venta venta) {
@@ -1182,8 +1272,13 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
             // Botón de Confirmación
             SizedBox(
               height: 48,
-              child: ElevatedButton(
+              child: ElevatedButton.icon(
                 onPressed: _confirmarAbono,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text(
+                  'Confirmar Abono',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -1191,10 +1286,6 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-                child: const Text(
-                  'Registrar Pago en SQLite',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

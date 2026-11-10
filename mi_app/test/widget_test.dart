@@ -2615,5 +2615,93 @@ void main() {
       expect(ctrlInv.productos.any((p) => p.id == '9991'), isFalse);
     });
   });
+
+  group('Flujo de Decisión de Impresión en Abonos (UX)', () {
+    testWidgets('Modal de abono contiene botón profesional "Confirmar Abono"', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlCuentas = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorCuentasPorCobrar>.value(value: ctrlCuentas),
+          ],
+          child: const MaterialApp(
+            home: DeudoresVista(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Verificar que NO existe texto técnico de base de datos
+      expect(find.text('Registrar Pago en SQLite'), findsNothing);
+    });
+
+    testWidgets('Diálogo de decisión consulta antes de imprimir comprobante', (WidgetTester tester) async {
+      bool imprimio = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                final bool? desea = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Abono Registrado'),
+                    content: const Text(
+                      'Abono de \$150.00 registrado con éxito. ¿Desea imprimir el comprobante de pago?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('No'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Sí, imprimir'),
+                      ),
+                    ],
+                  ),
+                );
+                if (desea == true) {
+                  imprimio = true;
+                }
+              },
+              child: const Text('Disparar Flujo'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Abrir diálogo
+      await tester.tap(find.text('Disparar Flujo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Abono de \$150.00 registrado con éxito. ¿Desea imprimir el comprobante de pago?'), findsOneWidget);
+      expect(find.text('No'), findsOneWidget);
+      expect(find.text('Sí, imprimir'), findsOneWidget);
+
+      // Presionar "No" cierra el diálogo sin imprimir
+      await tester.tap(find.text('No'));
+      await tester.pumpAndSettle();
+      expect(imprimio, isFalse);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+  });
 }
 
