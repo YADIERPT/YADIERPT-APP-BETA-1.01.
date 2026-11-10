@@ -9,8 +9,6 @@ import 'empleados_vista.dart';
 import 'configuracion_financiera_vista.dart';
 import 'seguridad_acceso_vista.dart';
 import 'hardware_vista.dart';
-import 'seguridad_vista.dart';
-import 'configuracion_biometrica_vista.dart';
 import 'Widgets/verificacion_seguridad_sheet.dart';
 import 'Widgets/role_guard.dart';
 import 'Widgets/app_logo.dart';
