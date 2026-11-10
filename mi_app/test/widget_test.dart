@@ -3065,5 +3065,110 @@ void main() {
       expect(find.text('Monstera Deliciosa'), findsOneWidget);
     });
   });
+
+  group('Diseño Adaptativo con LayoutBuilder en PosVista', () {
+    testWidgets('PosVista en pantalla móvil (<600px) renderiza vista vertical estándar', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+          ],
+          child: const MaterialApp(
+            home: PosVista(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Debe utilizar LayoutBuilder
+      expect(find.byType(LayoutBuilder), findsOneWidget);
+
+      // En móvil NO debe mostrar el panel lateral de Ticket en Curso
+      expect(find.text('Ticket en Curso'), findsNothing);
+      expect(find.byType(VerticalDivider), findsNothing);
+    });
+
+    testWidgets('PosVista en tablet horizontal (>=600px) renderiza split-view 60/40 con catálogo y Ticket en Curso', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil();
+      cPerf.configuracion.aplicarIva = false;
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+
+      final p1 = Producto(
+        id: 'P_POS_01',
+        nombre: 'Kalanchoe Florido',
+        tipo: 'planta',
+        precioVenta: 180.0,
+        costo: 90.0,
+        cantidadEnInventario: 8,
+      );
+      cInv.establecerProductosParaPruebas([p1]);
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+          ],
+          child: const MaterialApp(
+            home: PosVista(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 1. Debe existir LayoutBuilder y el divisor vertical
+      expect(find.byType(LayoutBuilder), findsOneWidget);
+      expect(find.byType(VerticalDivider), findsOneWidget);
+
+      // 2. Lado derecho debe mostrar el "Ticket en Curso" y estado vacío inicial
+      expect(find.text('Ticket en Curso'), findsOneWidget);
+      expect(find.text('Sin artículos añadidos'), findsOneWidget);
+
+      // 3. Agregar artículo al carrito y verificar actualización en tiempo real en el panel derecho
+      cVentas.agregarArticulo(p1, 2);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 artículos'), findsOneWidget);
+      expect(find.text('Cobrar Ticket (\$360.00)'), findsOneWidget);
+    });
+  });
 }
 
