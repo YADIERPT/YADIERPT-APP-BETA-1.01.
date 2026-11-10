@@ -158,7 +158,10 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Container(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Container(
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -188,44 +191,50 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryContainer,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          esEdicion ? Icons.edit_note : Icons.person_add_alt_1,
-                          color: AppColors.primary,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            esEdicion ? 'Editar Empleado' : 'Nuevo Empleado',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          Text(
-                            esEdicion
-                                ? 'ID: ${widget.empleadoExistente!.id}'
-                                : 'Ingresa los datos del nuevo colaborador',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                          child: Icon(
+                            esEdicion ? Icons.edit_note : Icons.person_add_alt_1,
+                            color: AppColors.primary,
+                            size: 22,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                esEdicion ? 'Editar Empleado' : 'Nuevo Empleado',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                esEdicion
+                                    ? 'ID: ${widget.empleadoExistente!.id}'
+                                    : 'Ingresa los datos del nuevo colaborador',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
@@ -322,6 +331,7 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
               else
                 DropdownButtonFormField<RolUsuario>(
                   value: _rolSeleccionado,
+                  isExpanded: true,
                   dropdownColor: AppColors.card,
                   style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
@@ -434,6 +444,8 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
               ),
             ],
           ),
+        ),
+      ),
         ),
       ),
     );

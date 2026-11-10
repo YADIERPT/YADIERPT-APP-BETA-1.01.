@@ -209,100 +209,105 @@ class _DeudoresVistaState extends State<DeudoresVista> {
     final saldo = deudorActual.saldoPendiente;
     final bool? confirmar = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.subtleAmber,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.check_circle_outline,
-                color: AppColors.amber,
-                size: 22,
-              ),
+      builder: (ctx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.subtleAmber,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.amber,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Liquidar Cuenta',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Liquidar Cuenta',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '¿Deseas saldar en su totalidad la deuda de ${deudorActual.cliente}?',
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondarySurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Monto a liquidar:',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '\$${saldo.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: AppColors.amber,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Se registrará una transacción de ingreso y el estado del apartado pasará a Completada.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  'Cancelar',
+                  style: TextStyle(color: AppColors.textSecondary),
                 ),
               ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '¿Deseas saldar en su totalidad la deuda de ${deudorActual.cliente}?',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.secondarySurface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border, width: 1),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Monto a liquidar:',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  Text(
-                    '\$${saldo.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: AppColors.amber,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
+                ),
+                child: const Text('Liquidar Total'),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Se registrará una transacción de ingreso y el estado del apartado pasará a Completada.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-            ),
-          ],
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Liquidar Total'),
-          ),
-        ],
       ),
     );
 
@@ -340,69 +345,74 @@ class _DeudoresVistaState extends State<DeudoresVista> {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        icon: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.primaryContainer,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.receipt_long,
-            color: AppColors.primary,
-            size: 28,
-          ),
-        ),
-        title: Text(
-          esLiquidacion ? 'Cuenta Liquidada con Éxito' : 'Abono Registrado',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        content: Text(
-          esLiquidacion
-              ? 'La cuenta se liquidó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?'
-              : 'El abono se guardó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
-        ),
-        actionsAlignment: MainAxisAlignment.spaceEvenly,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: Text(
-              'No',
+      builder: (dialogCtx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            icon: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.receipt_long,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            title: Text(
+              esLiquidacion ? 'Cuenta Liquidada con Éxito' : 'Abono Registrado',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            content: Text(
+              esLiquidacion
+                  ? 'La cuenta se liquidó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?'
+                  : 'El abono se guardó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
             ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            icon: const Icon(Icons.print, size: 16),
-            label: const Text('Sí, imprimir'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+            actionsAlignment: MainAxisAlignment.spaceEvenly,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx, false),
+                child: Text(
+                  'No',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
               ),
-              elevation: 0,
-            ),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(dialogCtx, true),
+                icon: const Icon(Icons.print, size: 16),
+                label: const Text('Sí, imprimir'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -455,103 +465,108 @@ class _DeudoresVistaState extends State<DeudoresVista> {
           ),
         ],
       ),
-      body: _cargando
-          ? Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : RefreshIndicator(
-              color: AppColors.primary,
-              backgroundColor: AppColors.card,
-              strokeWidth: 2.5,
-              onRefresh: _handleRefresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                children: [
-                  // 1. Resumen KPI de la cartera
-                  _buildResumenCartera(),
-                  const SizedBox(height: 16),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: _cargando
+              ? Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                )
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  backgroundColor: AppColors.card,
+                  strokeWidth: 2.5,
+                  onRefresh: _handleRefresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    children: [
+                      // 1. Resumen KPI de la cartera
+                      _buildResumenCartera(),
+                      const SizedBox(height: 16),
 
-                  // 2. Buscador con Debounce de 300 ms y RepaintBoundary
-                  RepaintBoundary(
-                    child: TextField(
-                      controller: _busquedaController,
-                      onChanged: (val) {
-                        _busquedaDebouncer.run(() {
-                          if (mounted) {
-                            setState(() {
-                              _busqueda = val.trim();
+                      // 2. Buscador con Debounce de 300 ms y RepaintBoundary
+                      RepaintBoundary(
+                        child: TextField(
+                          controller: _busquedaController,
+                          onChanged: (val) {
+                            _busquedaDebouncer.run(() {
+                              if (mounted) {
+                                setState(() {
+                                  _busqueda = val.trim();
+                                });
+                              }
                             });
-                          }
-                        });
-                      },
-                      style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar por cliente o folio #...',
-                        hintStyle: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search,
-                          color: AppColors.textSecondary,
-                          size: 20,
-                        ),
-                        suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(
-                                  Icons.clear,
-                                  color: AppColors.textSecondary,
-                                  size: 18,
-                                ),
-                                onPressed: () {
-                                  _busquedaDebouncer.cancel();
-                                  _busquedaController.clear();
-                                  setState(() {
-                                    _busqueda = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: AppColors.secondarySurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 14,
+                          },
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Buscar por cliente o folio #...',
+                            hintStyle: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      Icons.clear,
+                                      color: AppColors.textSecondary,
+                                      size: 18,
+                                    ),
+                                    onPressed: () {
+                                      _busquedaDebouncer.cancel();
+                                      _busquedaController.clear();
+                                      setState(() {
+                                        _busqueda = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: AppColors.secondarySurface,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 14,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-                  // 3. Chips de Filtro
-                  Row(
-                    children: [
-                      _buildChipFiltro('pendientes', 'Con Saldo ($_cantidadDeudoresActivos)'),
-                      const SizedBox(width: 8),
-                      _buildChipFiltro('todos', 'Todos (${_cuentas.length})'),
-                      const SizedBox(width: 8),
-                      _buildChipFiltro('liquidados', 'Liquidados ($_cantidadLiquidados)'),
+                      // 3. Chips de Filtro
+                      Row(
+                        children: [
+                          _buildChipFiltro('pendientes', 'Con Saldo ($_cantidadDeudoresActivos)'),
+                          const SizedBox(width: 8),
+                          _buildChipFiltro('todos', 'Todos (${_cuentas.length})'),
+                          const SizedBox(width: 8),
+                          _buildChipFiltro('liquidados', 'Liquidados ($_cantidadLiquidados)'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 4. Listado de Deudores
+                      if (cuentasMostradas.isEmpty)
+                        _buildEstadoVacio()
+                      else
+                        ...cuentasMostradas.map((venta) => _buildTarjetaDeudor(venta)),
+
+                      const SizedBox(height: 30),
                     ],
                   ),
-                  const SizedBox(height: 16),
-
-                  // 4. Listado de Deudores
-                  if (cuentasMostradas.isEmpty)
-                    _buildEstadoVacio()
-                  else
-                    ...cuentasMostradas.map((venta) => _buildTarjetaDeudor(venta)),
-
-                  const SizedBox(height: 30),
-                ],
-              ),
-            ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -1115,7 +1130,10 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Container(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Container(
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1292,6 +1310,8 @@ class _ModalAbonoSheetState extends State<_ModalAbonoSheet> {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

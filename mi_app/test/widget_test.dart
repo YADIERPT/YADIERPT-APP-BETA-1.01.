@@ -3170,5 +3170,74 @@ void main() {
       expect(find.text('Cobrar Ticket (\$360.00)'), findsOneWidget);
     });
   });
+
+  group('Restricciones de Ancho Máximo y Ergonomía (ConstrainedBox)', () {
+    testWidgets('DeudoresVista envuelve su ListView en Center y ConstrainedBox(maxWidth: 800)', (WidgetTester tester) async {
+      final ctrlFin = ControladorFinanzas();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ControladorInventario(),
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ControladorPerfil(),
+      );
+      final ctrlCuentas = ControladorCuentasPorCobrar(
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+      );
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorCuentasPorCobrar>.value(value: ctrlCuentas),
+          ],
+          child: const MaterialApp(
+            home: DeudoresVista(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final constrainedBoxes = tester.widgetList<ConstrainedBox>(find.byType(ConstrainedBox));
+      final box800 = constrainedBoxes.where((cb) => cb.constraints.maxWidth == 800).firstOrNull;
+      expect(box800, isNotNull);
+      expect(box800!.constraints.maxWidth, 800.0);
+    });
+
+    testWidgets('FormularioEmpleadoSheet aplica ConstrainedBox(maxWidth: 500) para vista ergonómica en tablets', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormularioEmpleadoSheet(controladorAutenticacion: ctrlAuth),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final constrainedBoxes = tester.widgetList<ConstrainedBox>(find.byType(ConstrainedBox));
+      final box500 = constrainedBoxes.where((cb) => cb.constraints.maxWidth == 500).firstOrNull;
+      expect(box500, isNotNull);
+      expect(box500!.constraints.maxWidth, 500.0);
+    });
+  });
 }
 
