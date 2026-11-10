@@ -34,6 +34,7 @@ import 'package:mi_app/Vista/splash_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_producto_inventario.dart';
 import 'package:mi_app/Vista/Widgets/dashboard_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_historial_venta.dart';
+import 'package:mi_app/Vista/Widgets/venta_footer.dart';
 import 'package:mi_app/Servicios/servicio_ticket_pdf.dart';
 import 'package:mi_app/Vista/perfil.dart';
 import 'package:mi_app/Tema/app_theme.dart';
@@ -2364,7 +2365,7 @@ void main() {
       debouncer.dispose();
     });
 
-    testWidgets('PosVista aísla Scaffold con resizeToAvoidBottomInset: false y RepaintBoundary', (WidgetTester tester) async {
+    testWidgets('PosVista configura Scaffold con resizeToAvoidBottomInset: true y RepaintBoundary', (WidgetTester tester) async {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
@@ -2391,13 +2392,13 @@ void main() {
       final scaffoldFinder = find.byType(Scaffold);
       expect(scaffoldFinder, findsOneWidget);
       final scaffold = tester.widget<Scaffold>(scaffoldFinder);
-      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+      expect(scaffold.resizeToAvoidBottomInset, isTrue);
 
       // Debe existir RepaintBoundary alrededor del TextField de búsqueda
       expect(find.byType(RepaintBoundary), findsWidgets);
     });
 
-    testWidgets('VentaVista aísla Scaffold con resizeToAvoidBottomInset: false y RepaintBoundary en VentaFooter', (WidgetTester tester) async {
+    testWidgets('VentaVista configura Scaffold con resizeToAvoidBottomInset: true, SingleChildScrollView y viewInsets en VentaFooter', (WidgetTester tester) async {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
@@ -2426,10 +2427,59 @@ void main() {
       await tester.pumpAndSettle();
 
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+      expect(scaffold.resizeToAvoidBottomInset, isTrue);
     });
 
-    testWidgets('DeudoresVista aísla Scaffold con resizeToAvoidBottomInset: false y buscador en RepaintBoundary', (WidgetTester tester) async {
+    testWidgets('VentaVista y VentaFooter ajustan dinamicamente con teclado virtual activo (viewInsets.bottom)', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      ctrlVentas.iniciarVenta();
+      final prod = Producto(
+        id: 'P_BOT_01',
+        nombre: 'Monstera Deliciosa',
+        tipo: 'planta',
+        precioVenta: 150.0,
+        costo: 80.0,
+        cantidadEnInventario: 5,
+      );
+      ctrlVentas.agregarArticulo(prod, 1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(400, 800),
+                viewInsets: EdgeInsets.only(bottom: 300),
+              ),
+              child: VentaVista(
+                controladorVentas: ctrlVentas,
+                controladorInventario: ctrlInv,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VentaFooter), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Monstera Deliciosa'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+
+    testWidgets('DeudoresVista configura Scaffold con resizeToAvoidBottomInset: true y buscador en RepaintBoundary', (WidgetTester tester) async {
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlPerf = ControladorPerfil();
@@ -2458,7 +2508,7 @@ void main() {
       await tester.pump();
 
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+      expect(scaffold.resizeToAvoidBottomInset, isTrue);
       expect(find.byType(RepaintBoundary), findsWidgets);
     });
 

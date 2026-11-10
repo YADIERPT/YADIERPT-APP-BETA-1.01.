@@ -341,7 +341,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
     final cuentasMostradas = _cuentasFiltradas;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: Text(

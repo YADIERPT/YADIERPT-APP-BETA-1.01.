@@ -623,7 +623,7 @@ class _VentaVistaState extends State<VentaVista> {
             final bool isLandscape = orientation == Orientation.landscape;
 
             return Scaffold(
-              resizeToAvoidBottomInset: false,
+              resizeToAvoidBottomInset: true,
               backgroundColor: AppColors.surface,
               appBar: AppBar(
                 toolbarHeight: isLandscape ? 44 : 56,
@@ -719,17 +719,22 @@ class _VentaVistaState extends State<VentaVista> {
               : _buildArticulosList(venta, isLandscape: false),
         ),
         if (venta.articulos.isNotEmpty)
-          RepaintBoundary(
-            child: VentaFooter(
-              venta: venta,
-              montoRecibidoController: _montoRecibidoController,
-              onMontoCambiado: () => _cobroDebouncer.run(() {
-                if (mounted) setState(() {});
-              }),
-              onProcesarCobro: _procesarCobro,
-              onApartarVenta: _mostrarDialogoApartado,
-              isLandscape: false,
-              cobrando: _cobrando,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: RepaintBoundary(
+              child: VentaFooter(
+                venta: venta,
+                montoRecibidoController: _montoRecibidoController,
+                onMontoCambiado: () => _cobroDebouncer.run(() {
+                  if (mounted) setState(() {});
+                }),
+                onProcesarCobro: _procesarCobro,
+                onApartarVenta: _mostrarDialogoApartado,
+                isLandscape: false,
+                cobrando: _cobrando,
+              ),
             ),
           ),
       ],

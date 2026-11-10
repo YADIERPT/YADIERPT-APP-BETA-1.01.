@@ -340,8 +340,14 @@ class VentaFooter extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: content,
               )
-            : Padding(
-                padding: const EdgeInsets.all(16),
+            : SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+                ),
                 child: content,
               ),
       ),

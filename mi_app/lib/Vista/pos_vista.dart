@@ -101,7 +101,7 @@ class _PosVistaState extends State<PosVista> {
       animation: ThemeManager.instance,
       builder: (context, _) {
         return Scaffold(
-          resizeToAvoidBottomInset: false,
+          resizeToAvoidBottomInset: true,
           backgroundColor: AppColors.surface,
           body: SafeArea(
             child: Column(
