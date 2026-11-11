@@ -32,7 +32,11 @@ import 'package:mi_app/Vista/inventario_vista.dart';
 import 'package:mi_app/Vista/login.dart';
 import 'package:mi_app/Vista/splash_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_producto_inventario.dart';
+import 'package:mi_app/Vista/Widgets/tarjeta_pos_producto.dart';
+import 'package:mi_app/Vista/Widgets/catalogo_bottom_sheet.dart';
 import 'package:mi_app/Vista/Widgets/resumen_inventario_header.dart';
+import 'package:mi_app/Vista/Widgets/editar_producto_sheet.dart';
+import 'package:mi_app/Vista/nuevo_lote.dart';
 import 'package:mi_app/Vista/Widgets/dashboard_vista.dart';
 import 'package:mi_app/Vista/Widgets/tarjeta_historial_venta.dart';
 import 'package:mi_app/Vista/Widgets/venta_footer.dart';
@@ -470,12 +474,14 @@ void main() {
     test('Permisos de negocio exclusivos de Dueño vs Empleado', () {
       expect(RolUsuario.duena.puedeVerFinanzas, isTrue);
       expect(RolUsuario.duena.puedeModificarInventario, isTrue);
+      expect(RolUsuario.duena.puedeEliminarDefinitivamente, isTrue);
       expect(RolUsuario.duena.puedeGestionarColaboradores, isTrue);
       expect(RolUsuario.duena.esDueno, isTrue);
       expect(RolUsuario.duena.esDuena, isTrue);
 
       expect(RolUsuario.empleado.puedeVerFinanzas, isFalse);
-      expect(RolUsuario.empleado.puedeModificarInventario, isFalse);
+      expect(RolUsuario.empleado.puedeModificarInventario, isTrue);
+      expect(RolUsuario.empleado.puedeEliminarDefinitivamente, isFalse);
       expect(RolUsuario.empleado.puedeGestionarColaboradores, isFalse);
       expect(RolUsuario.empleado.soloPuntoDeVenta, isTrue);
       expect(RolUsuario.empleado.esDueno, isFalse);
@@ -2706,7 +2712,7 @@ void main() {
   });
 
   group('Escudo del Catálogo en Inventario (RBAC y Soft Delete)', () {
-    testWidgets('TarjetaProductoInventario para rol empleado SOLO muestra opción "Deshabilitar"', (WidgetTester tester) async {
+    testWidgets('TarjetaProductoInventario para rol empleado muestra Editar, Añadir (Stock) y Deshabilitar, sin Eliminar Definitivamente', (WidgetTester tester) async {
       final prodActivo = Producto(
         id: 'P_ACT_01',
         nombre: 'Ficus Lyrata',
@@ -2716,16 +2722,21 @@ void main() {
         activo: true,
       );
 
+      bool edito = false;
+      bool anadio = false;
+      bool deshabilito = false;
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: TarjetaProductoInventario(
               prod: prodActivo,
               rolActual: RolUsuario.empleado,
-              onEditar: () {},
-              onAjustar: () {},
-              onBorrar: () {},
-              onDeshabilitar: () {},
+              puedeModificar: RolUsuario.empleado.puedeModificarInventario,
+              onEditar: () => edito = true,
+              onAjustar: () => anadio = true,
+              onBorrar: () => deshabilito = true,
+              onDeshabilitar: () => deshabilito = true,
             ),
           ),
         ),
@@ -2733,13 +2744,143 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Empleado SOLO ve el botón "Deshabilitar"
+      // Empleado DEBE ver el ícono de lápiz (Editar), el botón verde "Añadir" y "Deshabilitar"
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(find.text('Añadir'), findsOneWidget);
       expect(find.text('Deshabilitar'), findsOneWidget);
-      expect(find.text('Añadir'), findsNothing);
-      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      // Nunca debe ver "Eliminar Definitivamente", "Restaurar" ni costo mayorista
       expect(find.text('Restaurar'), findsNothing);
       expect(find.text('Eliminar Definitivamente'), findsNothing);
       expect(find.text('COSTO'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.tap(find.text('Añadir'));
+      await tester.tap(find.text('Deshabilitar'));
+      expect(edito, isTrue);
+      expect(anadio, isTrue);
+      expect(deshabilito, isTrue);
+    });
+
+    testWidgets('TarjetaProductoInventario con producto deshabilitado nunca muestra Eliminar Definitivamente al empleado', (WidgetTester tester) async {
+      final prodDeshabilitado = Producto(
+        id: 'P_DES_EMP',
+        nombre: 'Helecho Boston',
+        precioVenta: 120.0,
+        costo: 50.0,
+        cantidadEnInventario: 0,
+        activo: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TarjetaProductoInventario(
+              prod: prodDeshabilitado,
+              rolActual: RolUsuario.empleado,
+              onEditar: () {},
+              onAjustar: () {},
+              onBorrar: () {},
+              onRestaurar: () {},
+              onEliminarDefinitivamente: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('Eliminar Definitivamente'), findsNothing);
+      expect(find.text('Restaurar'), findsNothing);
+    });
+
+    testWidgets('InventarioVista y InicioVista muestran el FAB Crear Nuevo Producto funcional para el rol empleado', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlPerf = ControladorPerfil();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'EMP-200',
+          nombre: 'Lucía Vendedora',
+          clave: 'hash',
+          rol: RolUsuario.empleado,
+        ),
+      );
+      final ctrlBio = ControladorBiometrico();
+      final ctrlIA = ControladorIACompras(
+        controladorInventario: ctrlInv,
+      );
+      final ctrlInicio = ControladorInicio(
+        controladorInventario: ctrlInv,
+        controladorVentas: ctrlVentas,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerf,
+        controladorIA: ctrlIA,
+        controladorBiometrico: ctrlBio,
+      );
+
+      // 1. Verificar FAB funcional dentro de InicioVista al cambiar a la pestaña de Inventario
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: ctrlInv),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: ctrlFin),
+            Provider<ControladorPerfil>.value(value: ctrlPerf),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+            ChangeNotifierProvider<ControladorIACompras>.value(value: ctrlIA),
+            ChangeNotifierProvider<ControladorInicio>.value(value: ctrlInicio),
+          ],
+          child: const MaterialApp(home: InicioVista()),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Inventario').last);
+      await tester.pumpAndSettle();
+
+      final fabPrincipal = find.byKey(const ValueKey('fab_inventario_principal'));
+      expect(fabPrincipal, findsOneWidget);
+      await tester.tap(fabPrincipal);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NuevoLoteVista), findsOneWidget);
+    });
+
+    testWidgets('EditarProductoSheet muestra exclusivamente Deshabilitar y nunca Eliminar Definitivamente para empleado', (WidgetTester tester) async {
+      final ctrlInv = ControladorInventario();
+      final prodDeshabilitado = Producto(
+        id: 'P_EDIT_ESC',
+        nombre: 'Monstera Adansonii',
+        precioVenta: 200.0,
+        costo: 90.0,
+        cantidadEnInventario: 3,
+        activo: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditarProductoSheet(
+              producto: prodDeshabilitado,
+              controladorInventario: ctrlInv,
+              rolActual: RolUsuario.empleado,
+              onActualizado: () {},
+              onDeshabilitar: () {},
+              onEliminarDefinitivamente: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('Deshabilitar'), findsOneWidget);
+      expect(find.text('Eliminar Definitivamente'), findsNothing);
     });
 
     testWidgets('TarjetaProductoInventario para rol dueño con producto activo muestra "Añadir", "Editar" y "Deshabilitar"', (WidgetTester tester) async {
@@ -3340,6 +3481,365 @@ void main() {
       final box500 = constrainedBoxes.where((cb) => cb.constraints.maxWidth == 500).firstOrNull;
       expect(box500, isNotNull);
       expect(box500!.constraints.maxWidth, 500.0);
+    });
+  });
+
+  group('Permisos de Hardware y Periféricos en PerfilVista (RBAC)', () {
+    testWidgets('PerfilVista muestra Hardware y Periféricos para Empleado y Dueño, y el empleado navega a HardwareVista sin restricciones', (WidgetTester tester) async {
+      final ctrlPerfil = ControladorPerfil();
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerfil,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      final ctrlBio = ControladorBiometrico();
+      final ctrlHw = ControladorHardware();
+
+      // 1. Iniciar sesión simulada como Empleado
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'EMP-100',
+          nombre: 'Carlos Vendedor',
+          clave: 'hash',
+          rol: RolUsuario.empleado,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<ControladorPerfil>.value(value: ctrlPerfil),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+            ChangeNotifierProvider<ControladorHardware>.value(value: ctrlHw),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: PerfilVista(onLogout: () {}),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Para Empleado: Hardware y Periféricos debe estar visible
+      expect(find.text('Hardware y Periféricos'), findsOneWidget);
+      // Pero módulos exclusivos del Dueño deben seguir ocultos
+      expect(find.text('Configuración Financiera'), findsNothing);
+      expect(find.text('Empleados'), findsNothing);
+
+      // 2. Desplazar hasta Hardware y Periféricos y abrir la vista
+      final tileHw = find.text('Hardware y Periféricos');
+      await tester.ensureVisible(tileHw);
+      await tester.tap(tileHw);
+      await tester.pumpAndSettle();
+
+      // Verificar que entró a HardwareVista sin bloqueos de acceso ni placeholders
+      expect(find.byType(HardwareVista), findsOneWidget);
+      expect(find.text('Buscar Impresora'), findsOneWidget);
+      expect(find.text('Acceso Restringido'), findsNothing);
+
+      // Regresar y probar también con Dueño
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'VO-4092',
+          nombre: 'Admin Vivero',
+          clave: 'hash',
+          rol: RolUsuario.duena,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hardware y Periféricos'), findsOneWidget);
+      expect(find.text('Configuración Financiera'), findsOneWidget);
+      expect(find.text('Empleados'), findsOneWidget);
+    });
+  });
+
+  group('Responsividad Horizontal (Landscape), FittedBox y Proporciones de Grid', () {
+    testWidgets('TarjetaProductoInventario usa FittedBox en Añadir/Deshabilitar/Restaurar/Eliminar y maxLines: 2 + ellipsis sin desbordamientos en ancho estrecho', (WidgetTester tester) async {
+      final prodLargo = Producto(
+        id: 'P_LAND_01',
+        nombre: 'Monstera Deliciosa Variegata Thai Constellation Ejemplar Premium Ultra Largo',
+        precioVenta: 12500.0,
+        costo: 8200.0,
+        cantidadEnInventario: 145,
+        tipo: 'planta',
+        notas: 'Requiere sustrato drenante e iluminación indirecta intensa',
+        activo: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 240,
+                height: 238,
+                child: TarjetaProductoInventario(
+                  prod: prodLargo,
+                  rolActual: RolUsuario.duena,
+                  onEditar: () {},
+                  onAjustar: () {},
+                  onBorrar: () {},
+                  onDeshabilitar: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Botones con FittedBox
+      expect(
+        find.ancestor(of: find.text('Añadir'), matching: find.byType(FittedBox)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: find.text('Deshabilitar'), matching: find.byType(FittedBox)),
+        findsOneWidget,
+      );
+
+      // Control de textos largos en el título
+      final titulo = tester.widget<Text>(find.text(prodLargo.nombre));
+      expect(titulo.maxLines, 2);
+      expect(titulo.overflow, TextOverflow.ellipsis);
+
+      // Verificar también tarjeta deshabilitada estrecha para Dueño (Restaurar / Eliminar Definitivamente)
+      final prodDeshabilitado = prodLargo.copyWith(activo: false);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 240,
+                height: 238,
+                child: TarjetaProductoInventario(
+                  prod: prodDeshabilitado,
+                  rolActual: RolUsuario.duena,
+                  onEditar: () {},
+                  onAjustar: () {},
+                  onBorrar: () {},
+                  onRestaurar: () {},
+                  onEliminarDefinitivamente: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.ancestor(of: find.text('Restaurar'), matching: find.byType(FittedBox)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: find.text('Eliminar Definitivamente'), matching: find.byType(FittedBox)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('InventarioVista ajusta childAspectRatio a 1.1 en modo Landscape sin desbordamientos', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+      cAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'VO-4092',
+          nombre: 'Dueño',
+          clave: 'hash',
+          rol: RolUsuario.duena,
+        ),
+      );
+      final cIA = ControladorIACompras(controladorInventario: cInv);
+
+      cInv.establecerProductosParaPruebas([
+        Producto(
+          id: 'INV_L1',
+          nombre: 'Philodendron Pink Princess Maceta Decorativa Grande',
+          precioVenta: 980.0,
+          costo: 450.0,
+          cantidadEnInventario: 3,
+          tipo: 'planta',
+          notas: 'Regar cada 4 días sin encharcar',
+        ),
+      ]);
+
+      tester.view.physicalSize = const Size(800, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+            ChangeNotifierProvider<ControladorIACompras>.value(value: cIA),
+          ],
+          child: const MaterialApp(home: InventarioVista()),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Desplazar ligeramente para garantizar que el SliverGrid entre en el viewport de 400px de alto
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final sliverGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+      final delegate =
+          sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+      expect(delegate.maxCrossAxisExtent, 350.0);
+      expect(delegate.childAspectRatio, 1.1);
+      expect(delegate.mainAxisExtent, 252.0);
+      expect(find.byType(TarjetaProductoInventario), findsOneWidget);
+    });
+
+    testWidgets('PosVista (Catálogo) usa SliverGrid con maxCrossAxisExtent: 280, childAspectRatio: 0.85 en Landscape y FittedBox en Cobrar', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil();
+      cPerf.configuracion.aplicarIva = false;
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+
+      final prod = Producto(
+        id: 'POS_L1',
+        nombre: 'Calathea Orbifolia Hojas Anchas Nombre Largo De Exhibición',
+        precioVenta: 420.0,
+        costo: 200.0,
+        cantidadEnInventario: 10,
+        tipo: 'planta',
+      );
+      cInv.establecerProductosParaPruebas([prod]);
+      cVentas.iniciarVenta();
+      cVentas.agregarArticulo(prod, 1);
+
+      // Landscape 800x400 (split-view tablet/phone horizontal)
+      tester.view.physicalSize = const Size(800, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+          ],
+          child: const MaterialApp(home: PosVista()),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final sliverGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+      expect(sliverGrid.gridDelegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
+      final delegate =
+          sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+      expect(delegate.maxCrossAxisExtent, 280.0);
+      expect(delegate.childAspectRatio, 0.85);
+
+      // Control de textos largos en tarjeta del catálogo
+      final titulo = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(TarjetaPosProducto),
+          matching: find.text(prod.nombre),
+        ),
+      );
+      expect(titulo.maxLines, 2);
+      expect(titulo.overflow, TextOverflow.ellipsis);
+
+      // Botón Cobrar envuelto en FittedBox
+      expect(
+        find.ancestor(
+          of: find.text('Cobrar Ticket (\$420.00)'),
+          matching: find.byType(FittedBox),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('CatalogoBottomSheet ajusta maxCrossAxisExtent: 280 y childAspectRatio: 0.85 en modo Landscape sin desbordamientos', (WidgetTester tester) async {
+      final cInv = ControladorInventario();
+      final prod = Producto(
+        id: 'CAT_L1',
+        nombre: 'Maceta Cerámica Minimalista Talavera Blanco Hueso Grande',
+        precioVenta: 260.0,
+        costo: 110.0,
+        cantidadEnInventario: 0,
+        tipo: 'articulo',
+      );
+      cInv.establecerProductosParaPruebas([prod]);
+
+      final venta = Venta(id: 'V_CAT_01', fecha: DateTime(2026, 11, 10));
+
+      tester.view.physicalSize = const Size(640, 360);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CatalogoBottomSheet(
+              controladorInventario: cInv,
+              ventaActual: venta,
+              onProductoSeleccionado: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final sliverGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+      final delegate =
+          sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+      expect(delegate.maxCrossAxisExtent, 280.0);
+      expect(delegate.childAspectRatio, 0.85);
+
+      final titulo = tester.widget<Text>(find.text(prod.nombre));
+      expect(titulo.maxLines, 2);
+      expect(titulo.overflow, TextOverflow.ellipsis);
     });
   });
 }

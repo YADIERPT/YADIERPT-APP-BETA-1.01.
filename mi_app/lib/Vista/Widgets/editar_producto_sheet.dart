@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../Controladores/controlador_inventario.dart';
+import '../../Modelos/colaborador.dart';
 import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
 import '../../Constantes/limites.dart';
@@ -11,12 +12,18 @@ class EditarProductoSheet extends StatefulWidget {
   final Producto producto;
   final ControladorInventario controladorInventario;
   final VoidCallback onActualizado;
+  final RolUsuario? rolActual;
+  final VoidCallback? onDeshabilitar;
+  final VoidCallback? onEliminarDefinitivamente;
 
   const EditarProductoSheet({
     super.key,
     required this.producto,
     required this.controladorInventario,
     required this.onActualizado,
+    this.rolActual,
+    this.onDeshabilitar,
+    this.onEliminarDefinitivamente,
   });
 
   @override
@@ -219,6 +226,7 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
       umbralStockCritico: widget.producto.umbralStockCritico,
       imagenes: imagenesFinales,
       notas: _notasCtrl.text.trim(),
+      activo: widget.producto.activo,
     );
 
     try {
@@ -616,6 +624,67 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                     ),
                   ],
                 ),
+                // Escudo de Eliminación en pantalla de edición:
+                // Para empleados (y productos activos), el único botón destructivo es "Deshabilitar".
+                // "Eliminar Definitivamente" está bloqueado y oculto para empleados.
+                if (widget.onDeshabilitar != null &&
+                    (widget.producto.activo ||
+                        !(widget.rolActual?.puedeEliminarDefinitivamente ?? false))) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onDeshabilitar?.call();
+                    },
+                    icon: const Icon(Icons.visibility_off_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Deshabilitar',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.amber,
+                      side: BorderSide(color: AppColors.amber),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ] else if (!widget.producto.activo &&
+                    (widget.rolActual?.puedeEliminarDefinitivamente ?? false) &&
+                    widget.onEliminarDefinitivamente != null) ...[
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onEliminarDefinitivamente?.call();
+                    },
+                    icon: const Icon(Icons.delete_forever, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Eliminar Definitivamente',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

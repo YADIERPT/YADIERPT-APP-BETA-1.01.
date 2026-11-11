@@ -287,6 +287,8 @@ class VentaFooter extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text(
                       'Cobrar ${Formateador.moneda(venta.total)}',
+                      maxLines: 1,
+                      softWrap: false,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -305,9 +307,14 @@ class VentaFooter extends StatelessWidget {
                   ? null
                   : onApartarVenta,
               icon: const Icon(Icons.bookmark_add_outlined, size: 16),
-              label: const Text(
-                'Apartar / Cuenta por Cobrar',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              label: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'Apartar / Cuenta por Cobrar',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.amber,

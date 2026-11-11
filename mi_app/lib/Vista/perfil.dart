@@ -17,6 +17,8 @@ import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
+import '../Controladores/controlador_hardware.dart';
+import '../Modelos/colaborador.dart';
 
 class PerfilVista extends StatefulWidget {
   final VoidCallback onLogout;
@@ -342,7 +344,8 @@ class _PerfilVistaState extends State<PerfilVista> {
                   ).then((_) => setState(() {}));
                 },
               ),
-              RoleGuard.soloDueno(
+              RoleGuard(
+                rolesPermitidos: const [RolUsuario.duena, RolUsuario.empleado],
                 rolActual: usuario?.rol,
                 modo: RoleGuardMode.ocultar,
                 child: _buildListTile(
@@ -351,14 +354,23 @@ class _PerfilVistaState extends State<PerfilVista> {
                   'Lector de huellas, impresoras y conexiones',
                   iconBgColor: AppColors.subtleAmber,
                   iconColor: AppColors.amber,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => HardwareVista(
-                        controladorBiometrico: context.read<ControladorBiometrico>(),
+                  onTap: () {
+                    ControladorHardware? ctrlHardware;
+                    try {
+                      ctrlHardware = context.read<ControladorHardware>();
+                    } catch (_) {}
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => HardwareVista(
+                          controladorBiometrico: context.read<ControladorBiometrico>(),
+                          controladorHardware: ctrlHardware,
+                        ),
                       ),
-                    ),
-                  ).then((_) => setState(() {})),
+                    ).then((_) {
+                      if (mounted) setState(() {});
+                    });
+                  },
                 ),
               ),
               _buildListTile(

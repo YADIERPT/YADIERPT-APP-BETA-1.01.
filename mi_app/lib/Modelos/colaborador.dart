@@ -17,10 +17,15 @@ enum RolUsuario {
   bool get esDueno => this == RolUsuario.duena;
   bool get esEmpleado => this == RolUsuario.empleado;
 
-  /// Control de permisos de negocio exclusivos para el dueño
+  /// Control de permisos de negocio y operación RBAC
   bool get puedeVerFinanzas => this == RolUsuario.duena;
 
-  bool get puedeModificarInventario => this == RolUsuario.duena;
+  /// Permite crear productos, editar detalles, ajustar stock y deshabilitar (Dueño y Empleado)
+  bool get puedeModificarInventario =>
+      this == RolUsuario.duena || this == RolUsuario.empleado;
+
+  /// Exclusivo del Dueño: ver catálogo deshabilitado, restaurar o eliminar definitivamente (Hard Delete)
+  bool get puedeEliminarDefinitivamente => this == RolUsuario.duena;
 
   bool get puedeGestionarColaboradores => this == RolUsuario.duena;
 

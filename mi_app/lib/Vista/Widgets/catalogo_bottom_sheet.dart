@@ -146,164 +146,172 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: isLandscape ? 4 : 2,
-                childAspectRatio: isLandscape ? 0.78 : 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: filtrados.length,
-              itemBuilder: (context, index) {
-                final prod = filtrados[index];
-                final art = widget.ventaActual.articulos
-                    .where((a) => a.producto.id == prod.id)
-                    .firstOrNull;
-                final int cantidadEnTicket = art?.cantidad ?? 0;
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 280,
+                      childAspectRatio: isLandscape ? 0.85 : 0.72,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final prod = filtrados[index];
+                        final art = widget.ventaActual.articulos
+                            .where((a) => a.producto.id == prod.id)
+                            .firstOrNull;
+                        final int cantidadEnTicket = art?.cantidad ?? 0;
 
-                final bool enTicket = cantidadEnTicket > 0;
-                final bool sinUnidades = prod.cantidadEnInventario == 0;
+                        final bool enTicket = cantidadEnTicket > 0;
+                        final bool sinUnidades = prod.cantidadEnInventario == 0;
 
-                return RepaintBoundary(
-                  child: GestureDetector(
-                  onTap: () {
-                    if (sinUnidades) {
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: AppColors.coral,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 3),
-                          content: const Text(
-                            'Este producto no tiene unidades disponibles.',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          action: SnackBarAction(
-                            label: 'Entendido',
-                            textColor: Colors.white,
-                            onPressed: () {
+                        return RepaintBoundary(
+                          child: GestureDetector(
+                          onTap: () {
+                            if (sinUnidades) {
                               ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                            },
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: AppColors.coral,
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(seconds: 3),
+                                  content: const Text(
+                                    'Este producto no tiene unidades disponibles.',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  action: SnackBarAction(
+                                    label: 'Entendido',
+                                    textColor: Colors.white,
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                    },
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            widget.onProductoSeleccionado(prod);
+                            setState(() {});
+                          },
+                          child: Opacity(
+                            opacity: sinUnidades ? 0.65 : 1.0,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: enTicket ? AppColors.brightGreen : AppColors.border,
+                                  width: enTicket ? 2 : 1,
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondarySurface,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: _buildImagenProducto(prod),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    prod.nombre,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Flexible(
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            '\$${prod.precioVenta.toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              color: AppColors.brightGreen,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      if (sinUnidades)
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.subtleCoral,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(
+                                                'Sin unidades',
+                                                style: TextStyle(
+                                                  color: AppColors.coral,
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      else if (enTicket)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '$cantidadEnTicket',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       );
-                      return;
-                    }
-                    widget.onProductoSeleccionado(prod);
-                    setState(() {});
-                  },
-                  child: Opacity(
-                    opacity: sinUnidades ? 0.65 : 1.0,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: enTicket ? AppColors.brightGreen : AppColors.border,
-                          width: enTicket ? 2 : 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: AppColors.secondarySurface,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: _buildImagenProducto(prod),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            prod.nombre,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: AppColors.textPrimary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Flexible(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    '\$${prod.precioVenta.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: AppColors.brightGreen,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              if (sinUnidades)
-                                Flexible(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.subtleCoral,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'Sin unidades',
-                                        style: TextStyle(
-                                          color: AppColors.coral,
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              else if (enTicket)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '$cantidadEnTicket',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      },
+                      childCount: filtrados.length,
                     ),
                   ),
                 ),
-              );
-              },
+              ],
             ),
           ),
         ],

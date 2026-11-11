@@ -136,6 +136,11 @@ class _InventarioVistaState extends State<InventarioVista> {
       builder: (sheetCtx) => EditarProductoSheet(
         producto: producto,
         controladorInventario: context.read<ControladorInventario>(),
+        rolActual: rolActual,
+        onDeshabilitar: () => _abrirDeshabilitarProducto(producto),
+        onEliminarDefinitivamente: (rolActual?.puedeEliminarDefinitivamente ?? false)
+            ? () => _abrirEliminarDefinitivamente(producto)
+            : null,
         onActualizado: () {
           _cargarInventario();
           _mostrarToast('Producto actualizado correctamente');
@@ -368,11 +373,35 @@ class _InventarioVistaState extends State<InventarioVista> {
             final rolActual = cAuth.usuarioActual?.rol;
             final bool puedeModificar =
                 rolActual?.puedeModificarInventario ?? true;
+            // Si está embebido en InicioVista, InicioVista ya provee el FAB central para evitar FABs duplicados;
+            // si InventarioVista se monta de forma independiente, provee su propio FAB para Dueño y Empleado.
+            final bool sinScaffoldPadre = Scaffold.maybeOf(context) == null;
 
             return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: AppColors.surface,
-          floatingActionButton: null,
+          floatingActionButton: (sinScaffoldPadre && puedeModificar)
+              ? FloatingActionButton(
+                  key: const ValueKey('fab_inventario_standalone'),
+                  heroTag: 'fab_inventario_standalone',
+                  tooltip: 'Crear Nuevo Producto',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (ctx) => NuevoLoteVista(
+                          controladorInventario: context.read<ControladorInventario>(),
+                        ),
+                      ),
+                    ).then((_) => _cargarInventario());
+                  },
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: AppColors.onSecondary,
+                  elevation: 3,
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.add, size: 28),
+                )
+              : null,
           body: SafeArea(
             child: RefreshIndicator(
               color: AppColors.primary,
@@ -562,12 +591,12 @@ class _InventarioVistaState extends State<InventarioVista> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
                     sliver: SliverGrid(
                       gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                          SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 350,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
-                        childAspectRatio: 1.4,
-                        mainAxisExtent: 215,
+                        childAspectRatio: isLandscape ? 1.1 : 1.4,
+                        mainAxisExtent: isLandscape ? 252 : 242,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {

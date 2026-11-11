@@ -131,14 +131,22 @@ class TarjetaPosProducto extends StatelessWidget {
                           ),
                         )
                       else
-                        Text(
-                          '${producto.cantidadEnInventario} u.',
-                          style: TextStyle(
-                            color: producto.esStockCritico
-                                ? AppColors.amber
-                                : AppColors.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${producto.cantidadEnInventario} u.',
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                color: producto.esStockCritico
+                                    ? AppColors.amber
+                                    : AppColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
                     ],

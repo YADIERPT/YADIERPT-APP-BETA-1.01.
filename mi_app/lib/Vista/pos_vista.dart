@@ -226,11 +226,16 @@ class _PosVistaState extends State<PosVista> {
                         onPressed: _abrirCobroModal,
                         icon: Icon(Icons.shopping_bag_outlined,
                             size: isLandscape ? 16 : 18),
-                        label: Text(
-                          'Ver Ticket y Cobrar',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 13 : 14,
-                            fontWeight: FontWeight.bold,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Ver Ticket y Cobrar',
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: isLandscape ? 13 : 14,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -284,78 +289,89 @@ class _PosVistaState extends State<PosVista> {
           );
         }
 
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            esTablet ? 4 : 8,
-            16,
-            esTablet ? 16 : 88,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: esTablet ? 3 : 2,
-            childAspectRatio: esTablet ? 0.78 : 0.70,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: productos.length,
-          itemBuilder: (context, index) {
-            final producto = productos[index];
+        final bool isLandscape =
+            MediaQuery.of(context).orientation == Orientation.landscape;
 
-            // Selector granular: sólo reconstruye la tarjeta afectada cuando
-            // cambia su cantidad individual en el carrito, sin redibujar el grid completo.
-            return Selector<ControladorVentas, int>(
-              selector: (context, cVentas) =>
-                  cVentas.obtenerCantidadEnCarrito(producto.id),
-              builder: (context, cantidadEnTicket, _) {
-                return RepaintBoundary(
-                  child: TarjetaPosProducto(
-                    producto: producto,
-                    cantidadEnTicket: cantidadEnTicket,
-                    onAgregar: () {
-                      try {
-                        context
-                            .read<ControladorVentas>()
-                            .agregarArticulo(producto, 1);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(e
-                                .toString()
-                                .replaceAll('Exception: ', '')),
-                            backgroundColor: AppColors.error,
-                            behavior: SnackBarBehavior.floating,
+        return CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                esTablet ? 4 : 8,
+                16,
+                esTablet ? 16 : 88,
+              ),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 280,
+                  childAspectRatio: isLandscape ? 0.85 : 0.72,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final producto = productos[index];
+
+                    // Selector granular: sólo reconstruye la tarjeta afectada cuando
+                    // cambia su cantidad individual en el carrito, sin redibujar el grid completo.
+                    return Selector<ControladorVentas, int>(
+                      selector: (context, cVentas) =>
+                          cVentas.obtenerCantidadEnCarrito(producto.id),
+                      builder: (context, cantidadEnTicket, _) {
+                        return RepaintBoundary(
+                          child: TarjetaPosProducto(
+                            producto: producto,
+                            cantidadEnTicket: cantidadEnTicket,
+                            onAgregar: () {
+                              try {
+                                context
+                                    .read<ControladorVentas>()
+                                    .agregarArticulo(producto, 1);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            onIncrementar: () {
+                              try {
+                                context
+                                    .read<ControladorVentas>()
+                                    .agregarArticulo(producto, 1);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            onDecrementar: () {
+                              context
+                                  .read<ControladorVentas>()
+                                  .decrementarArticulo(producto.id);
+                            },
+                            onSinUnidades: _mostrarAvisoSinUnidades,
                           ),
                         );
-                      }
-                    },
-                    onIncrementar: () {
-                      try {
-                        context
-                            .read<ControladorVentas>()
-                            .agregarArticulo(producto, 1);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(e
-                                .toString()
-                                .replaceAll('Exception: ', '')),
-                            backgroundColor: AppColors.error,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                    onDecrementar: () {
-                      context
-                          .read<ControladorVentas>()
-                          .decrementarArticulo(producto.id);
-                    },
-                    onSinUnidades: _mostrarAvisoSinUnidades,
-                  ),
-                );
-              },
-            );
-          },
+                      },
+                    );
+                  },
+                  childCount: productos.length,
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -582,13 +598,18 @@ class _PosVistaState extends State<PosVista> {
                                 // Subtotal por renglón
                                 SizedBox(
                                   width: 58,
-                                  child: Text(
-                                    '\$${art.subtotal.toStringAsFixed(2)}',
-                                    textAlign: TextAlign.end,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '\$${art.subtotal.toStringAsFixed(2)}',
+                                      textAlign: TextAlign.end,
+                                      maxLines: 1,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textPrimary,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -663,13 +684,18 @@ class _PosVistaState extends State<PosVista> {
                       child: ElevatedButton.icon(
                         onPressed: articulos.isEmpty ? null : _abrirCobroModal,
                         icon: const Icon(Icons.point_of_sale, size: 18),
-                        label: Text(
-                          articulos.isEmpty
-                              ? 'Ticket Vacío'
-                              : 'Cobrar Ticket (\$${totalVenta.toStringAsFixed(2)})',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            articulos.isEmpty
+                                ? 'Ticket Vacío'
+                                : 'Cobrar Ticket (\$${totalVenta.toStringAsFixed(2)})',
+                            maxLines: 1,
+                            softWrap: false,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         style: ElevatedButton.styleFrom(

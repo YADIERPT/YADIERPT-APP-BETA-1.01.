@@ -179,15 +179,15 @@ class _InicioVistaState extends State<InicioVista> {
   /// Evita la aparición de botones fantasma al regresar de subpantallas (como Empleados).
   Widget? _buildFloatingActionButton() {
     switch (_indiceActual) {
-      case 2: // Pestaña de Inventario
-        final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
+      case 2: // Pestaña de Inventario (visible para Dueño y Empleado)
+        final rolActual = context.watch<ControladorAutenticacion>().usuarioActual?.rol;
         final bool puedeModificar = rolActual?.puedeModificarInventario ?? true;
         if (!puedeModificar) return null;
 
         return FloatingActionButton(
           key: const ValueKey('fab_inventario_principal'),
           heroTag: 'fab_inventario_principal',
-          tooltip: 'Añadir nuevo producto',
+          tooltip: 'Crear Nuevo Producto',
           onPressed: () {
             Navigator.push(
               context,
@@ -197,8 +197,9 @@ class _InicioVistaState extends State<InicioVista> {
                 ),
               ),
             ).then((_) {
+              if (!mounted) return;
               context.read<ControladorInventario>().cargarProductos();
-              if (mounted) setState(() {});
+              setState(() {});
             });
           },
           backgroundColor: AppColors.secondary,
