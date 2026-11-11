@@ -6,6 +6,8 @@ class ConfiguracionPerfil {
   double porcentajeIvaDefecto;
   bool aplicarIva;
   List<String> etiquetas;
+  bool sonidoHabilitado;
+  bool vibracionHabilitada;
 
   ConfiguracionPerfil({
     this.modoTema = 2,
@@ -13,6 +15,8 @@ class ConfiguracionPerfil {
     this.porcentajeIvaDefecto = 0.16,
     this.aplicarIva = true,
     this.etiquetas = const ['Interior', 'Suculentas', 'Macetas', 'Regalos'],
+    this.sonidoHabilitado = true,
+    this.vibracionHabilitada = true,
   });
 
   bool get temaOscuro => modoTema == 1;
@@ -26,6 +30,8 @@ class ConfiguracionPerfil {
       'porcentajeIvaDefecto': porcentajeIvaDefecto,
       'aplicarIva': aplicarIva ? 1 : 0,
       'etiquetasJson': jsonEncode(etiquetas),
+      'sonidoHabilitado': sonidoHabilitado ? 1 : 0,
+      'vibracionHabilitada': vibracionHabilitada ? 1 : 0,
     };
   }
 
@@ -57,6 +63,12 @@ class ConfiguracionPerfil {
           : 0.16,
       aplicarIva: map['aplicarIva'] != null ? map['aplicarIva'] == 1 : true,
       etiquetas: etiq,
+      sonidoHabilitado: map['sonidoHabilitado'] != null
+          ? map['sonidoHabilitado'] == 1
+          : true,
+      vibracionHabilitada: map['vibracionHabilitada'] != null
+          ? map['vibracionHabilitada'] == 1
+          : true,
     );
   }
 

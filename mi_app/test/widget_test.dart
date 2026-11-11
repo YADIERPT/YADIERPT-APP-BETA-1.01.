@@ -56,6 +56,9 @@ import 'package:mi_app/Servicios/generador_esc_pos.dart';
 import 'package:mi_app/Modelos/configuracion_hardware.dart';
 import 'package:mi_app/Vista/Widgets/logo_biznaga.dart';
 import 'package:mi_app/IA/Controladores/controlador_ia_compras.dart';
+import 'package:mi_app/main.dart' show ViverApp;
+import 'package:mi_app/Modelos/configuracion.dart';
+import 'package:mi_app/Servicios/motor_feedback.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 void main() {
@@ -702,7 +705,7 @@ void main() {
     });
 
     testWidgets('PerfilVista no muestra el apartado de Alertas y Notificaciones', (WidgetTester tester) async {
-      final ctrlPerfil = ControladorPerfil();
+      final ctrlPerfil = ControladorPerfil(persistirEnBd: false);
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlVentas = ControladorVentas(
@@ -1064,7 +1067,7 @@ void main() {
       expect(find.text('Cancelar'), findsOneWidget);
     });
 
-    testWidgets('FormularioEmpleadoSheet presenta campos de Nombre, Rol y Contraseña', (WidgetTester tester) async {
+    testWidgets('FormularioEmpleadoSheet presenta campos de Nombre, Rol y Contraseña sin textos técnicos PBKDF2', (WidgetTester tester) async {
       final ctrlAuth = ControladorAutenticacion();
 
       await tester.pumpWidget(
@@ -1079,15 +1082,33 @@ void main() {
       expect(find.text('Nombre completo *'), findsOneWidget);
       expect(find.text('Rol en Planteapp *'), findsOneWidget);
       expect(find.text('Contraseña de acceso *'), findsOneWidget);
+      expect(find.text('Mínimo 6 caracteres para el acceso'), findsOneWidget);
+      expect(find.textContaining('PBKDF2'), findsNothing);
+      expect(find.textContaining('salt único'), findsNothing);
+      expect(find.text('ID de usuario'), findsNothing);
       expect(find.text('Registrar Empleado'), findsOneWidget);
+
+      // Validar mínimo de 6 caracteres en contraseña nueva
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nombre completo *'),
+        'Lucía Flores',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña de acceso *'),
+        '12345',
+      );
+      await tester.tap(find.text('Registrar Empleado'));
+      await tester.pump();
+
+      expect(find.text('La contraseña debe tener al menos 6 caracteres'), findsOneWidget);
     });
 
-    testWidgets('FormularioEmpleadoSheet aplica Protección Anti-Degradación cuando el Dueño edita su propio usuario', (WidgetTester tester) async {
+    testWidgets('FormularioEmpleadoSheet aplica Protección Anti-Degradación, ID readOnly y oculta Nueva contraseña cuando el Dueño edita su propio usuario', (WidgetTester tester) async {
       final ctrlAuth = ControladorAutenticacion();
       final dueno = Colaborador(
         id: 'DUENO-99',
         nombre: 'Ana Dueña',
-        clave: '1234',
+        clave: '123456',
         rol: RolUsuario.duena,
       );
       ctrlAuth.establecerUsuarioParaPruebas(dueno);
@@ -1104,23 +1125,73 @@ void main() {
       );
 
       expect(find.text('Editar Empleado'), findsOneWidget);
+      expect(find.text('ID de usuario'), findsOneWidget);
+      final idTextField = tester.widget<TextField>(
+        find.descendant(
+          of: find.widgetWithText(TextFormField, 'DUENO-99'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(idTextField.readOnly, isTrue);
+
       expect(find.text('Rol: Dueño (No modificable)'), findsOneWidget);
       expect(find.text('TÚ'), findsOneWidget);
       expect(find.byType(DropdownButtonFormField<RolUsuario>), findsNothing);
+      expect(find.text('Nueva contraseña (opcional)'), findsNothing);
+      expect(find.textContaining('PBKDF2'), findsNothing);
     });
 
-    testWidgets('FormularioEmpleadoSheet permite editar rol si el Dueño edita a otro colaborador', (WidgetTester tester) async {
+    testWidgets('FormularioEmpleadoSheet oculta Nueva contraseña y mantiene ID readOnly cuando se edita otro usuario con rol dueño', (WidgetTester tester) async {
+      final ctrlAuth = ControladorAutenticacion();
+      final duenoActivo = Colaborador(
+        id: 'VO-4092',
+        nombre: 'Admin Principal',
+        clave: '123456',
+        rol: RolUsuario.duena,
+      );
+      final otroDueno = Colaborador(
+        id: 'DUENO-02',
+        nombre: 'Socio Vivero',
+        clave: '654321',
+        rol: RolUsuario.duena,
+      );
+      ctrlAuth.establecerUsuarioParaPruebas(duenoActivo);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FormularioEmpleadoSheet(
+              empleadoExistente: otroDueno,
+              controladorAutenticacion: ctrlAuth,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Editar Empleado'), findsOneWidget);
+      expect(find.text('ID de usuario'), findsOneWidget);
+      final idTextField = tester.widget<TextField>(
+        find.descendant(
+          of: find.widgetWithText(TextFormField, 'DUENO-02'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(idTextField.readOnly, isTrue);
+      expect(find.text('Nueva contraseña (opcional)'), findsNothing);
+    });
+
+    testWidgets('FormularioEmpleadoSheet permite editar rol, ID readOnly y Nueva contraseña amigable si se edita a un empleado', (WidgetTester tester) async {
       final ctrlAuth = ControladorAutenticacion();
       final dueno = Colaborador(
         id: 'DUENO-99',
         nombre: 'Ana Dueña',
-        clave: '1234',
+        clave: '123456',
         rol: RolUsuario.duena,
       );
       final empleado = Colaborador(
         id: 'EMP-01',
         nombre: 'Juan Empleado',
-        clave: '1234',
+        clave: '123456',
         rol: RolUsuario.empleado,
       );
       ctrlAuth.establecerUsuarioParaPruebas(dueno);
@@ -1137,9 +1208,24 @@ void main() {
       );
 
       expect(find.text('Editar Empleado'), findsOneWidget);
+      expect(find.text('ID de usuario'), findsOneWidget);
+      final idTextField = tester.widget<TextField>(
+        find.descendant(
+          of: find.widgetWithText(TextFormField, 'EMP-01'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(idTextField.readOnly, isTrue);
+
       expect(find.text('Rol en Planteapp *'), findsOneWidget);
       expect(find.byType(DropdownButtonFormField<RolUsuario>), findsOneWidget);
       expect(find.text('Rol: Dueño (No modificable)'), findsNothing);
+      expect(find.text('Nueva contraseña (opcional)'), findsOneWidget);
+      expect(
+        find.text('Déjalo en blanco para mantener la actual • Mínimo 6 caracteres para el acceso'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('PBKDF2'), findsNothing);
     });
 
     test('ControladorAutenticacion.actualizarColaborador bloquea auto-degradación de rol a nivel de dominio', () async {
@@ -2334,6 +2420,43 @@ void main() {
       );
       expect(botonPrueba.onPressed, isNull);
     });
+
+    testWidgets('HardwareVista (KISS) oculta lector biométrico/TCP/Serial y muestra solo tarjeta ESC/POS esencial', (tester) async {
+      final ctrlHw = ControladorHardware();
+
+      tester.view.physicalSize = const Size(800, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HardwareVista(controladorHardware: ctrlHw),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Única tarjeta requerida
+      expect(find.text('IMPRESORA TÉRMICA DE TICKETS (ESC/POS)'), findsOneWidget);
+      expect(find.text('Desconectada'), findsOneWidget);
+      expect(find.text('Ancho de Rollo'), findsOneWidget);
+      expect(find.text('58 mm'), findsOneWidget);
+      expect(find.text('80 mm'), findsOneWidget);
+      expect(find.text('Buscar Impresora'), findsOneWidget);
+      expect(find.text('Ticket Prueba'), findsOneWidget);
+
+      // Eliminado por completo: lector de huellas y sus pestañas TCP/USB/Serial
+      expect(find.text('LECTOR DE HUELLAS DACTILARES'), findsNothing);
+      expect(find.text('WiFi / Red'), findsNothing);
+      expect(find.text('Cable USB'), findsNothing);
+      expect(find.textContaining('Puerto Serial'), findsNothing);
+      expect(find.textContaining('Dirección IP'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+    });
   });
 
   group('Optimización de Rendimiento, Aislamiento de Scaffold y Debounce (P1)', () {
@@ -3310,17 +3433,28 @@ void main() {
     });
   });
 
-  group('Diseño Adaptativo con LayoutBuilder en PosVista', () {
-    testWidgets('PosVista en pantalla móvil (<600px) renderiza vista vertical estándar', (WidgetTester tester) async {
+  group('Scroll Unificado en PosVista (Vertical y Horizontal)', () {
+    testWidgets('PosVista en pantalla móvil vertical (<600px) usa CustomScrollView unificado sin LayoutBuilder ni VerticalDivider', (WidgetTester tester) async {
       final cInv = ControladorInventario();
       final cFin = ControladorFinanzas();
       final cPerf = ControladorPerfil();
+      cPerf.configuracion.aplicarIva = false;
       final cVentas = ControladorVentas(
         controladorInventario: cInv,
         controladorFinanzas: cFin,
         controladorPerfil: cPerf,
       );
       final cAuth = ControladorAutenticacion();
+
+      final p1 = Producto(
+        id: 'P_POS_MOVIL',
+        nombre: 'Suculenta Echeveria',
+        tipo: 'planta',
+        precioVenta: 95.0,
+        costo: 40.0,
+        cantidadEnInventario: 5,
+      );
+      cInv.establecerProductosParaPruebas([p1]);
 
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -3345,15 +3479,30 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Debe utilizar LayoutBuilder
-      expect(find.byType(LayoutBuilder), findsOneWidget);
-
-      // En móvil NO debe mostrar el panel lateral de Ticket en Curso
-      expect(find.text('Ticket en Curso'), findsNothing);
+      // Flujo único: sin LayoutBuilder ni divisor vertical
+      expect(
+        find.descendant(
+          of: find.byType(PosVista),
+          matching: find.byType(LayoutBuilder),
+        ),
+        findsNothing,
+      );
       expect(find.byType(VerticalDivider), findsNothing);
+      expect(find.byType(CustomScrollView), findsOneWidget);
+
+      // Catálogo arriba y panel de Ticket en Curso debajo dentro del mismo scroll
+      await tester.scrollUntilVisible(
+        find.text('Ticket en Curso'),
+        200.0,
+        scrollable: find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
+      expect(find.text('Ticket en Curso'), findsOneWidget);
     });
 
-    testWidgets('PosVista en tablet horizontal (>=600px) renderiza split-view 60/40 con catálogo y Ticket en Curso', (WidgetTester tester) async {
+    testWidgets('PosVista en horizontal (>=600px) mantiene flujo vertical unificado sin división 60/40', (WidgetTester tester) async {
       final cInv = ControladorInventario();
       final cFin = ControladorFinanzas();
       final cPerf = ControladorPerfil();
@@ -3398,19 +3547,45 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // 1. Debe existir LayoutBuilder y el divisor vertical
-      expect(find.byType(LayoutBuilder), findsOneWidget);
-      expect(find.byType(VerticalDivider), findsOneWidget);
+      // 1. NO debe existir LayoutBuilder ni VerticalDivider en PosVista
+      expect(
+        find.descendant(
+          of: find.byType(PosVista),
+          matching: find.byType(LayoutBuilder),
+        ),
+        findsNothing,
+      );
+      expect(find.byType(VerticalDivider), findsNothing);
+      expect(find.byType(CustomScrollView), findsOneWidget);
 
-      // 2. Lado derecho debe mostrar el "Ticket en Curso" y estado vacío inicial
+      // 2. El catálogo debe estar arriba y el "Ticket en Curso" debajo (flujo natural)
       expect(find.text('Ticket en Curso'), findsOneWidget);
       expect(find.text('Sin artículos añadidos'), findsOneWidget);
 
-      // 3. Agregar artículo al carrito y verificar actualización en tiempo real en el panel derecho
+      final cardRect = tester.getRect(find.byType(TarjetaPosProducto));
+      final ticketRect = tester.getRect(find.text('Ticket en Curso'));
+      expect(ticketRect.top, greaterThanOrEqualTo(cardRect.bottom));
+
+      // 3. Agregar artículo al carrito y verificar actualización en tiempo real abajo y en bottomSheet
       cVentas.agregarArticulo(p1, 2);
       await tester.pumpAndSettle();
 
-      expect(find.text('2 artículos'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.text('2 artículos'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Ver Ticket y Cobrar'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Cobrar Ticket (\$360.00)'),
+        200.0,
+        scrollable: find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
       expect(find.text('Cobrar Ticket (\$360.00)'), findsOneWidget);
     });
   });
@@ -3486,7 +3661,7 @@ void main() {
 
   group('Permisos de Hardware y Periféricos en PerfilVista (RBAC)', () {
     testWidgets('PerfilVista muestra Hardware y Periféricos para Empleado y Dueño, y el empleado navega a HardwareVista sin restricciones', (WidgetTester tester) async {
-      final ctrlPerfil = ControladorPerfil();
+      final ctrlPerfil = ControladorPerfil(persistirEnBd: false);
       final ctrlInv = ControladorInventario();
       final ctrlFin = ControladorFinanzas();
       final ctrlVentas = ControladorVentas(
@@ -3745,7 +3920,7 @@ void main() {
       cVentas.iniciarVenta();
       cVentas.agregarArticulo(prod, 1);
 
-      // Landscape 800x400 (split-view tablet/phone horizontal)
+      // Landscape 800x400 (flujo unificado horizontal)
       tester.view.physicalSize = const Size(800, 400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -3784,6 +3959,16 @@ void main() {
       );
       expect(titulo.maxLines, 2);
       expect(titulo.overflow, TextOverflow.ellipsis);
+
+      // Desplazar hacia abajo en el CustomScrollView unificado para alcanzar el panel de cobro
+      await tester.scrollUntilVisible(
+        find.text('Cobrar Ticket (\$420.00)'),
+        200.0,
+        scrollable: find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
 
       // Botón Cobrar envuelto en FittedBox
       expect(
@@ -3840,6 +4025,262 @@ void main() {
       final titulo = tester.widget<Text>(find.text(prod.nombre));
       expect(titulo.maxLines, 2);
       expect(titulo.overflow, TextOverflow.ellipsis);
+    });
+  });
+
+  group('Límite Global de Escalado de Texto (MediaQuery.withClampedTextScaling)', () {
+    testWidgets('ViverApp restringe el textScaler del sistema a máximo 1.1 (+10%) mediante MaterialApp.builder', (WidgetTester tester) async {
+      tester.binding.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.binding.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => ControladorAutenticacion()),
+          ],
+          child: const ViverApp(),
+        ),
+      );
+      await tester.pump();
+
+      final splashContext = tester.element(find.byType(SplashVista));
+      final scaler = MediaQuery.textScalerOf(splashContext);
+      expect(scaler.scale(100.0), closeTo(110.0, 0.01));
+
+      // Verificar también con escala normal 1.0
+      tester.binding.platformDispatcher.textScaleFactorTestValue = 1.0;
+      await tester.pump();
+      final scalerNormal = MediaQuery.textScalerOf(
+        tester.element(find.byType(SplashVista)),
+      );
+      expect(scalerNormal.scale(100.0), closeTo(100.0, 0.01));
+
+      // Desmontar SplashVista para cancelar su temporizador antes del tearDown
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+  });
+
+  group('MotorFeedback y Preferencias de Sonido/Vibración en PerfilVista', () {
+    test('ConfiguracionPerfil tiene sonidoHabilitado y vibracionHabilitada en true por defecto y los serializa', () {
+      final def = ConfiguracionPerfil();
+      expect(def.sonidoHabilitado, isTrue);
+      expect(def.vibracionHabilitada, isTrue);
+
+      final mapa = def.toMap();
+      expect(mapa['sonidoHabilitado'], 1);
+      expect(mapa['vibracionHabilitada'], 1);
+
+      def.sonidoHabilitado = false;
+      def.vibracionHabilitada = false;
+      final recargado = ConfiguracionPerfil.fromMap(def.toMap());
+      expect(recargado.sonidoHabilitado, isFalse);
+      expect(recargado.vibracionHabilitada, isFalse);
+
+      // Compatibilidad con filas antiguas sin columnas de audio/vibración
+      final retro = ConfiguracionPerfil.fromMap({'temaOscuro': 1});
+      expect(retro.sonidoHabilitado, isTrue);
+      expect(retro.vibracionHabilitada, isTrue);
+    });
+
+    test('ControladorPerfil persiste sonidoHabilitado y vibracionHabilitada en SQLite y sincroniza MotorFeedback', () async {
+      final ctrl = ControladorPerfil();
+      await ctrl.cargarConfiguracion();
+
+      addTearDown(() async {
+        await ctrl.actualizarSonidoHabilitado(true);
+        await ctrl.actualizarVibracionHabilitada(true);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      await ctrl.actualizarSonidoHabilitado(false);
+      await ctrl.actualizarVibracionHabilitada(false);
+
+      final ctrlRecargado = ControladorPerfil();
+      await ctrlRecargado.cargarConfiguracion();
+      expect(ctrlRecargado.sonidoHabilitado, isFalse);
+      expect(ctrlRecargado.vibracionHabilitada, isFalse);
+      expect(MotorFeedback.sonidoHabilitado, isFalse);
+      expect(MotorFeedback.vibracionHabilitada, isFalse);
+    });
+
+    test('MotorFeedback respeta sonidoHabilitado y vibracionHabilitada antes de emitir háptica o reproducir MP3', () async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+      MotorFeedback.reproductorPruebas = (ruta) async {
+        sonidos.add(ruta);
+      };
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async {
+        sonidos.add(ruta);
+      };
+
+      // Con ambos habilitados (true por defecto)
+      await MotorFeedback.vibracionLigera();
+      await MotorFeedback.vibracionFuerte();
+      await MotorFeedback.reproducirBeep();
+      await MotorFeedback.reproducirError();
+
+      expect(haptics, [
+        'HapticFeedbackType.lightImpact',
+        'HapticFeedbackType.heavyImpact',
+      ]);
+      expect(sonidos, ['sounds/beep.mp3', 'sounds/error.mp3']);
+
+      // Desactivar vibración: sonidos siguen funcionando, háptica se silencia
+      haptics.clear();
+      sonidos.clear();
+      MotorFeedback.vibracionHabilitada = false;
+      await MotorFeedback.vibracionLigera();
+      await MotorFeedback.vibracionFuerte();
+      await MotorFeedback.reproducirBeep();
+      expect(haptics, isEmpty);
+      expect(sonidos, ['sounds/beep.mp3']);
+
+      // Desactivar sonido: sonidos se silencian por completo
+      sonidos.clear();
+      MotorFeedback.sonidoHabilitado = false;
+      await MotorFeedback.reproducirBeep();
+      await MotorFeedback.reproducirError();
+      await MotorFeedback.feedbackExito();
+      await MotorFeedback.feedbackError();
+      expect(sonidos, isEmpty);
+      expect(haptics, isEmpty);
+    });
+
+    testWidgets('PerfilVista renderiza interruptores Efectos de Sonido y Vibración del Sistema bajo Tema Visual y actualiza estado global', (WidgetTester tester) async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async {
+        sonidos.add(ruta);
+      };
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      final ctrlPerfil = ControladorPerfil(persistirEnBd: false);
+      final ctrlInv = ControladorInventario();
+      final ctrlFin = ControladorFinanzas();
+      final ctrlVentas = ControladorVentas(
+        controladorInventario: ctrlInv,
+        controladorFinanzas: ctrlFin,
+        controladorPerfil: ctrlPerfil,
+      );
+      final ctrlAuth = ControladorAutenticacion();
+      ctrlAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'VO-8001',
+          nombre: 'Dueño Test',
+          clave: 'hash',
+          rol: RolUsuario.duena,
+        ),
+      );
+      final ctrlBio = ControladorBiometrico();
+      final ctrlHw = ControladorHardware();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<ControladorPerfil>.value(value: ctrlPerfil),
+            ChangeNotifierProvider<ControladorVentas>.value(value: ctrlVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: ctrlAuth),
+            Provider<ControladorBiometrico>.value(value: ctrlBio),
+            ChangeNotifierProvider<ControladorHardware>.value(value: ctrlHw),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: PerfilVista(onLogout: () {}),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verificar orden debajo de "Tema Visual" en "Preferencias"
+      final temaFinder = find.text('Tema Visual');
+      final sonidoFinder = find.text('Efectos de Sonido');
+      final vibracionFinder = find.text('Vibración del Sistema');
+      expect(temaFinder, findsOneWidget);
+      expect(sonidoFinder, findsOneWidget);
+      expect(vibracionFinder, findsOneWidget);
+      expect(tester.getTopLeft(sonidoFinder).dy, greaterThan(tester.getTopLeft(temaFinder).dy));
+      expect(tester.getTopLeft(vibracionFinder).dy, greaterThan(tester.getTopLeft(sonidoFinder).dy));
+
+      final switchSonidoFinder = find.ancestor(
+        of: sonidoFinder,
+        matching: find.byType(SwitchListTile),
+      );
+      final switchVibracionFinder = find.ancestor(
+        of: vibracionFinder,
+        matching: find.byType(SwitchListTile),
+      );
+      expect(switchSonidoFinder, findsOneWidget);
+      expect(switchVibracionFinder, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(switchSonidoFinder).value, isTrue);
+      expect(tester.widget<SwitchListTile>(switchVibracionFinder).value, isTrue);
+
+      // Apagar Efectos de Sonido
+      await tester.ensureVisible(switchSonidoFinder);
+      await tester.tap(switchSonidoFinder);
+      await tester.pumpAndSettle();
+      expect(ctrlPerfil.sonidoHabilitado, isFalse);
+      expect(MotorFeedback.sonidoHabilitado, isFalse);
+      expect(tester.widget<SwitchListTile>(switchSonidoFinder).value, isFalse);
+      expect(sonidos, isEmpty);
+
+      // Encender nuevamente Efectos de Sonido -> debe actualizar global y reproducir beep.mp3
+      await tester.tap(switchSonidoFinder);
+      await tester.pumpAndSettle();
+      expect(ctrlPerfil.sonidoHabilitado, isTrue);
+      expect(MotorFeedback.sonidoHabilitado, isTrue);
+      expect(tester.widget<SwitchListTile>(switchSonidoFinder).value, isTrue);
+      expect(sonidos, ['sounds/beep.mp3']);
+
+      // Apagar Vibración del Sistema
+      haptics.clear();
+      await tester.ensureVisible(switchVibracionFinder);
+      await tester.tap(switchVibracionFinder);
+      await tester.pumpAndSettle();
+      expect(ctrlPerfil.vibracionHabilitada, isFalse);
+      expect(MotorFeedback.vibracionHabilitada, isFalse);
+      expect(tester.widget<SwitchListTile>(switchVibracionFinder).value, isFalse);
+      expect(haptics, isEmpty);
+
+      // Encender Vibración del Sistema -> debe emitir vibración ligera
+      await tester.tap(switchVibracionFinder);
+      await tester.pumpAndSettle();
+      expect(ctrlPerfil.vibracionHabilitada, isTrue);
+      expect(MotorFeedback.vibracionHabilitada, isTrue);
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
     });
   });
 }

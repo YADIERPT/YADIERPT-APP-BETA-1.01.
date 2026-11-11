@@ -8,6 +8,7 @@ import '../Controladores/controlador_ventas.dart';
 import '../Modelos/producto.dart';
 import '../Modelos/venta.dart';
 import '../Tema/app_theme.dart';
+import '../Servicios/motor_feedback.dart';
 import '../Utilidades/debouncer.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
@@ -50,6 +51,7 @@ class _PosVistaState extends State<PosVista> {
     final cInventario = context.read<ControladorInventario>();
     final venta = cVentas.ventaActual;
     if (cVentas.totalArticulosEnCarrito == 0) {
+      MotorFeedback.feedbackError();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Agrega al menos un producto al ticket para cobrar.'),
@@ -72,6 +74,7 @@ class _PosVistaState extends State<PosVista> {
   }
 
   void _mostrarAvisoSinUnidades() {
+    MotorFeedback.feedbackError();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -93,6 +96,22 @@ class _PosVistaState extends State<PosVista> {
     );
   }
 
+  void _intentarAgregarAlCarrito(Producto producto) {
+    try {
+      context.read<ControladorVentas>().agregarArticulo(producto, 1);
+      MotorFeedback.feedbackExito();
+    } catch (e) {
+      MotorFeedback.feedbackError();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isLandscape =
@@ -105,73 +124,42 @@ class _PosVistaState extends State<PosVista> {
           resizeToAvoidBottomInset: true,
           backgroundColor: AppColors.surface,
           body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // 1. Lectura del ancho máximo disponible
-                final bool esTablet = constraints.maxWidth >= 600;
-
-                // 2. Si el ancho es MENOR a 600px (teléfono o vertical):
-                // Retorna el diseño original (Lista de artículos en Expanded y panel de cobro debajo)
-                if (!esTablet) {
-                  return Column(
+            child: CustomScrollView(
+              slivers: [
+                // 1. Parte superior: Buscador y filtros de categoría
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildSearchBar(false),
-                      _buildCategoryChips(false),
-                      _buildContextStrip(false),
-                      Expanded(
-                        child: _buildCatalogoGrid(esTablet: false),
-                      ),
+                      _buildSearchBar(isLandscape),
+                      _buildCategoryChips(isLandscape),
+                      _buildContextStrip(isLandscape),
                     ],
-                  );
-                }
+                  ),
+                ),
 
-                // 3. Si el ancho es MAYOR a 600px (tablet en horizontal):
-                // Retorna un Row que divide la pantalla profesionalmente:
-                // - Lado izquierdo (60% del ancho): Catálogo o buscador rápido de productos
-                // - Lado derecho (40% del ancho): Ticket en Curso y panel de cobro fijo
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Lado Izquierdo (60% del ancho): Catálogo o buscador rápido
-                    Expanded(
-                      flex: 6,
-                      child: Column(
-                        children: [
-                          _buildSearchBar(true),
-                          _buildCategoryChips(true),
-                          _buildContextStrip(true),
-                          Expanded(
-                            child: _buildCatalogoGrid(esTablet: true),
-                          ),
-                        ],
+                // 2. Parte superior/central: Catálogo de productos
+                _buildCatalogoGrid(isLandscape: isLandscape),
+
+                // 3. Parte inferior: Panel "Ticket en Curso" en flujo vertical unificado
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  sliver: SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 800),
+                        child: _buildPanelTicketEnCurso(),
                       ),
                     ),
-
-                    // Divisor sutil vertical
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: AppColors.border,
-                    ),
-
-                    // Lado Derecho (40% del ancho): Ticket en Curso y panel de cobro fijo
-                    Expanded(
-                      flex: 4,
-                      child: _buildPanelTicketEnCurso(),
-                    ),
-                  ],
-                );
-              },
+                  ),
+                ),
+              ],
             ),
           ),
           bottomSheet: Selector<ControladorVentas, (int, double)>(
             selector: (_, cVentas) =>
                 (cVentas.totalArticulosEnCarrito, cVentas.totalVentaActual),
             builder: (context, datosVenta, _) {
-              // En pantallas tablet (ancho >= 600), el panel de cobro ya se encuentra fijo en el lado derecho
-              final bool esPantallaAncha = MediaQuery.of(context).size.width >= 600;
-              if (esPantallaAncha) return const SizedBox.shrink();
-
               final totalArticulos = datosVenta.$1;
               final totalVenta = datosVenta.$2;
 
@@ -261,8 +249,8 @@ class _PosVistaState extends State<PosVista> {
     );
   }
 
-  /// Construye la cuadrícula del catálogo de productos para POS
-  Widget _buildCatalogoGrid({required bool esTablet}) {
+  /// Construye el Sliver del catálogo de productos para el flujo unificado del POS
+  Widget _buildCatalogoGrid({required bool isLandscape}) {
     return Selector<ControladorInventario, List<Producto>>(
       selector: (context, cInv) =>
           cInv.productos.map((p) => p.copyWith()).toList(),
@@ -281,104 +269,71 @@ class _PosVistaState extends State<PosVista> {
         }).toList();
 
         if (productos.isEmpty) {
-          return Center(
-            child: Text(
-              'No hay productos que coincidan con la búsqueda',
-              style: TextStyle(color: AppColors.textSecondary),
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: Center(
+                child: Text(
+                  'No hay productos que coincidan con la búsqueda',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
             ),
           );
         }
 
-        final bool isLandscape =
-            MediaQuery.of(context).orientation == Orientation.landscape;
+        return SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            isLandscape ? 4 : 8,
+            16,
+            12,
+          ),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 280,
+              childAspectRatio: isLandscape ? 0.85 : 0.72,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final producto = productos[index];
 
-        return CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                esTablet ? 4 : 8,
-                16,
-                esTablet ? 16 : 88,
-              ),
-              sliver: SliverGrid(
-                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 280,
-                  childAspectRatio: isLandscape ? 0.85 : 0.72,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final producto = productos[index];
-
-                    // Selector granular: sólo reconstruye la tarjeta afectada cuando
-                    // cambia su cantidad individual en el carrito, sin redibujar el grid completo.
-                    return Selector<ControladorVentas, int>(
-                      selector: (context, cVentas) =>
-                          cVentas.obtenerCantidadEnCarrito(producto.id),
-                      builder: (context, cantidadEnTicket, _) {
-                        return RepaintBoundary(
-                          child: TarjetaPosProducto(
-                            producto: producto,
-                            cantidadEnTicket: cantidadEnTicket,
-                            onAgregar: () {
-                              try {
-                                context
-                                    .read<ControladorVentas>()
-                                    .agregarArticulo(producto, 1);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(e
-                                        .toString()
-                                        .replaceAll('Exception: ', '')),
-                                    backgroundColor: AppColors.error,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
-                            },
-                            onIncrementar: () {
-                              try {
-                                context
-                                    .read<ControladorVentas>()
-                                    .agregarArticulo(producto, 1);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(e
-                                        .toString()
-                                        .replaceAll('Exception: ', '')),
-                                    backgroundColor: AppColors.error,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
-                            },
-                            onDecrementar: () {
-                              context
-                                  .read<ControladorVentas>()
-                                  .decrementarArticulo(producto.id);
-                            },
-                            onSinUnidades: _mostrarAvisoSinUnidades,
-                          ),
-                        );
-                      },
+                // Selector granular: sólo reconstruye la tarjeta afectada cuando
+                // cambia su cantidad individual en el carrito, sin redibujar el grid completo.
+                return Selector<ControladorVentas, int>(
+                  selector: (context, cVentas) =>
+                      cVentas.obtenerCantidadEnCarrito(producto.id),
+                  builder: (context, cantidadEnTicket, _) {
+                    return RepaintBoundary(
+                      child: TarjetaPosProducto(
+                        producto: producto,
+                        cantidadEnTicket: cantidadEnTicket,
+                        onAgregar: () => _intentarAgregarAlCarrito(producto),
+                        onIncrementar: () => _intentarAgregarAlCarrito(producto),
+                        onDecrementar: () {
+                          context
+                              .read<ControladorVentas>()
+                              .decrementarArticulo(producto.id);
+                          MotorFeedback.vibracionLigera();
+                        },
+                        onSinUnidades: _mostrarAvisoSinUnidades,
+                      ),
                     );
                   },
-                  childCount: productos.length,
-                ),
-              ),
+                );
+              },
+              childCount: productos.length,
             ),
-          ],
+          ),
         );
       },
     );
   }
 
-  /// Construye el panel lateral derecho (40% de ancho) para Tablets:
-  /// Muestra el "Ticket en Curso" en tiempo real y el panel de cobro fijo.
+  /// Construye el panel de "Ticket en Curso" al final del flujo unificado:
+  /// Muestra los artículos actuales en tiempo real y el panel de cobro.
   Widget _buildPanelTicketEnCurso() {
     return Consumer<ControladorVentas>(
       builder: (context, cVentas, _) {
@@ -388,8 +343,14 @@ class _PosVistaState extends State<PosVista> {
         final totalVenta = cVentas.totalVentaActual;
 
         return Container(
-          color: AppColors.card,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border, width: 1),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 1. Cabecera del Ticket en Curso
@@ -458,46 +419,48 @@ class _PosVistaState extends State<PosVista> {
                 ),
               ),
 
-              // 2. Lista scrolleable de artículos del ticket
-              Expanded(
-                child: articulos.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.shopping_cart_outlined,
-                                size: 52,
-                                color: AppColors.border,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Ticket Vacío',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Toca productos del catálogo para agregarlos al ticket.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary.withValues(alpha: 0.7),
-                                ),
-                              ),
-                            ],
+              // 2. Lista de artículos del ticket
+              if (articulos.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 52,
+                          color: AppColors.border,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Ticket Vacío',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textSecondary,
                           ),
                         ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        itemCount: articulos.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Toca productos del catálogo para agregarlos al ticket.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: articulos.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final art = articulos[index];
                           final prod = art.producto;
@@ -569,21 +532,7 @@ class _PosVistaState extends State<PosVista> {
                                       ),
                                       InkWell(
                                         borderRadius: BorderRadius.circular(8),
-                                        onTap: () {
-                                          try {
-                                            cVentas.agregarArticulo(prod, 1);
-                                          } catch (e) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  e.toString().replaceAll('Exception: ', ''),
-                                                ),
-                                                backgroundColor: AppColors.error,
-                                                behavior: SnackBarBehavior.floating,
-                                              ),
-                                            );
-                                          }
-                                        },
+                                        onTap: () => _intentarAgregarAlCarrito(prod),
                                         child: const Padding(
                                           padding: EdgeInsets.all(5.0),
                                           child: Icon(Icons.add, size: 14),
@@ -618,7 +567,6 @@ class _PosVistaState extends State<PosVista> {
                           );
                         },
                       ),
-              ),
 
               // 3. Panel de Cobro Fijo
               Container(

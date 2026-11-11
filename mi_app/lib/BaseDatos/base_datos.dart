@@ -43,7 +43,7 @@ class BaseDeDatos {
       dbInstancia = await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 14,
+        version: 15,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -53,7 +53,7 @@ class BaseDeDatos {
     } else {
       dbInstancia = await openDatabase(
         path,
-        version: 14,
+        version: 15,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -382,6 +382,14 @@ class BaseDeDatos {
         }
       } catch (_) {}
     }
+    if (oldVersion < 15) {
+      await db.execute(
+        'ALTER TABLE configuracion ADD COLUMN sonidoHabilitado INTEGER NOT NULL DEFAULT 1',
+      );
+      await db.execute(
+        'ALTER TABLE configuracion ADD COLUMN vibracionHabilitada INTEGER NOT NULL DEFAULT 1',
+      );
+    }
   }
 
   Future _crearEsquema(Database db, int version) async {
@@ -456,12 +464,14 @@ class BaseDeDatos {
         tipoCambioUSD REAL NOT NULL,
         porcentajeIvaDefecto REAL NOT NULL,
         aplicarIva INTEGER NOT NULL,
-        etiquetasJson TEXT NOT NULL
+        etiquetasJson TEXT NOT NULL,
+        sonidoHabilitado INTEGER NOT NULL DEFAULT 1,
+        vibracionHabilitada INTEGER NOT NULL DEFAULT 1
       )
     ''');
     await db.execute('''
-      INSERT INTO configuracion (id, temaOscuro, tipoCambioUSD, porcentajeIvaDefecto, aplicarIva, etiquetasJson)
-      VALUES (1, 2, 18.0, 0.16, 1, '["Interior", "Suculentas", "Macetas", "Regalos"]')
+      INSERT INTO configuracion (id, temaOscuro, tipoCambioUSD, porcentajeIvaDefecto, aplicarIva, etiquetasJson, sonidoHabilitado, vibracionHabilitada)
+      VALUES (1, 2, 18.0, 0.16, 1, '["Interior", "Suculentas", "Macetas", "Regalos"]', 1, 1)
     ''');
     await db.execute('''
       CREATE TABLE configuracion_biometrica (

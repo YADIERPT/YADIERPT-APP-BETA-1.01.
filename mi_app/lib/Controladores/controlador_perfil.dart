@@ -1,10 +1,17 @@
 import '../Modelos/configuracion.dart';
 import '../BaseDatos/base_datos.dart';
 
+import '../Servicios/motor_feedback.dart';
+
 class ControladorPerfil {
   ConfiguracionPerfil _configuracion = ConfiguracionPerfil();
+  final bool persistirEnBd;
+
+  ControladorPerfil({this.persistirEnBd = true});
 
   ConfiguracionPerfil get configuracion => _configuracion;
+  bool get sonidoHabilitado => _configuracion.sonidoHabilitado;
+  bool get vibracionHabilitada => _configuracion.vibracionHabilitada;
 
   Future<void> cargarConfiguracion() async {
     final db = await BaseDeDatos.instancia.database;
@@ -20,6 +27,30 @@ class ControladorPerfil {
       _configuracion = ConfiguracionPerfil();
       await _guardarConfiguracion();
     }
+    MotorFeedback.sincronizarPreferencias(
+      sonidoHabilitado: _configuracion.sonidoHabilitado,
+      vibracionHabilitada: _configuracion.vibracionHabilitada,
+    );
+  }
+
+  /// Activa o desactiva los efectos de sonido globalmente y persiste la preferencia.
+  Future<void> actualizarSonidoHabilitado(bool habilitado) async {
+    _configuracion.sonidoHabilitado = habilitado;
+    MotorFeedback.sonidoHabilitado = habilitado;
+    await _guardarConfiguracionSafely();
+  }
+
+  /// Activa o desactiva la vibración del sistema globalmente y persiste la preferencia.
+  Future<void> actualizarVibracionHabilitada(bool habilitado) async {
+    _configuracion.vibracionHabilitada = habilitado;
+    MotorFeedback.vibracionHabilitada = habilitado;
+    await _guardarConfiguracionSafely();
+  }
+
+  Future<void> _guardarConfiguracionSafely() async {
+    try {
+      await _guardarConfiguracion();
+    } catch (_) {}
   }
 
   Future<void> alternarTema() async {
@@ -49,6 +80,7 @@ class ControladorPerfil {
   }
 
   Future<void> _guardarConfiguracion() async {
+    if (!persistirEnBd) return;
     final db = await BaseDeDatos.instancia.database;
     await db.update(
       'configuracion',

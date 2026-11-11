@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_perfil.dart';
+import '../Servicios/motor_feedback.dart';
 import 'historial_ventas_vista.dart';
 import 'deudores_vista.dart';
 import 'empleados_vista.dart';
@@ -133,17 +134,62 @@ class _PerfilVistaState extends State<PerfilVista> {
     );
   }
 
+  ControladorPerfil? _obtenerControladorPerfil() {
+    try {
+      return context.read<ControladorPerfil>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _alternarSonido(bool habilitado) {
+    final controladorPerfil = _obtenerControladorPerfil();
+    if (controladorPerfil != null) {
+      controladorPerfil.actualizarSonidoHabilitado(habilitado);
+    } else {
+      MotorFeedback.sonidoHabilitado = habilitado;
+    }
+    setState(() {});
+    MotorFeedback.vibracionLigera();
+    if (habilitado) {
+      MotorFeedback.reproducirBeep();
+    }
+  }
+
+  void _alternarVibracion(bool habilitada) {
+    final controladorPerfil = _obtenerControladorPerfil();
+    if (controladorPerfil != null) {
+      controladorPerfil.actualizarVibracionHabilitada(habilitada);
+    } else {
+      MotorFeedback.vibracionHabilitada = habilitada;
+    }
+    setState(() {});
+    if (habilitada) {
+      MotorFeedback.vibracionLigera();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cAuth = context.watch<ControladorAutenticacion>();
     final cBiometrico = context.watch<ControladorBiometrico>();
+    final controladorPerfil = _obtenerControladorPerfil();
 
     return AnimatedBuilder(
-      animation: ThemeManager.instance,
+      animation: Listenable.merge([
+        ThemeManager.instance,
+        MotorFeedback.preferenciasNotifier,
+      ]),
       builder: (context, _) {
         final usuario = cAuth.usuarioActual;
         final nombreUsuario = usuario?.nombre ?? 'Administrador';
         final rolUsuario = usuario?.rol.etiqueta ?? 'Administrador';
+        final bool sonidoActivo =
+            controladorPerfil?.sonidoHabilitado ??
+            MotorFeedback.sonidoHabilitado;
+        final bool vibracionActiva =
+            controladorPerfil?.vibracionHabilitada ??
+            MotorFeedback.vibracionHabilitada;
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -199,6 +245,26 @@ class _PerfilVistaState extends State<PerfilVista> {
                 iconBgColor: AppColors.subtleTurquoise,
                 iconColor: AppColors.turquoise,
                 onTap: _mostrarDialogoTema,
+              ),
+              _buildSwitchTile(
+                icon: sonidoActivo
+                    ? Icons.volume_up_outlined
+                    : Icons.volume_off_outlined,
+                title: 'Efectos de Sonido',
+                subtitle: 'Alertas sonoras al añadir productos o cobrar',
+                value: sonidoActivo,
+                onChanged: _alternarSonido,
+                iconBgColor: AppColors.subtleGreen,
+                iconColor: AppColors.brightGreen,
+              ),
+              _buildSwitchTile(
+                icon: Icons.vibration_outlined,
+                title: 'Vibración del Sistema',
+                subtitle: 'Retroalimentación háptica al interactuar',
+                value: vibracionActiva,
+                onChanged: _alternarVibracion,
+                iconBgColor: AppColors.subtleAmber,
+                iconColor: AppColors.amber,
               ),
               // [SOLICITUD TÉCNICA]: Apartado de Alertas y Notificaciones ocultado/desactivado
               // _buildListTile(
@@ -521,6 +587,63 @@ class _PerfilVistaState extends State<PerfilVista> {
             size: 20,
           ),
           onTap: onTap,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    Color? iconBgColor,
+    Color? iconColor,
+  }) {
+    final bg = iconBgColor ?? AppColors.primaryContainer;
+    final fg = iconColor ?? AppColors.primary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border, width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: SwitchListTile(
+          dense: true,
+          activeThumbColor: AppColors.primary,
+          activeTrackColor: AppColors.primary.withValues(alpha: 0.35),
+          secondary: Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: bg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: fg, size: 20),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          value: value,
+          onChanged: onChanged,
         ),
       ),
     );

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../Tema/app_theme.dart';
 import '../Modelos/producto.dart';
@@ -11,6 +10,7 @@ import 'Widgets/articulo_ticket_item.dart';
 import 'Widgets/venta_footer.dart';
 import 'impresion_ticket.dart';
 import '../Servicios/servicio_ticket_pdf.dart';
+import '../Servicios/motor_feedback.dart';
 import '../Utilidades/formateador.dart';
 import '../Utilidades/debouncer.dart';
 import '../Constantes/limites.dart';
@@ -86,14 +86,16 @@ class _VentaVistaState extends State<VentaVista> {
 
   void _agregarAlCarrito(Producto producto) {
     if (producto.cantidadEnInventario == 0) {
+      MotorFeedback.feedbackError();
       _mostrarAviso(context, 'Este producto no tiene unidades disponibles.');
       return;
     }
     try {
       widget.controladorVentas.agregarProductoAVentaActual(producto.id, 1);
       setState(() {});
-      HapticFeedback.lightImpact();
+      MotorFeedback.feedbackExito();
     } catch (e) {
+      MotorFeedback.feedbackError();
       _mostrarAviso(context, e.toString().replaceAll('Exception: ', ''));
     }
   }
@@ -558,7 +560,7 @@ class _VentaVistaState extends State<VentaVista> {
 
     widget.controladorVentas.eliminarArticulo(index);
 
-    HapticFeedback.mediumImpact();
+    MotorFeedback.vibracionMedia();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

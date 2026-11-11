@@ -37,11 +37,13 @@ class FormularioEmpleadoSheet extends StatefulWidget {
   }
 
   @override
-  State<FormularioEmpleadoSheet> createState() => _FormularioEmpleadoSheetState();
+  State<FormularioEmpleadoSheet> createState() =>
+      _FormularioEmpleadoSheetState();
 }
 
 class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _idCtrl;
   late final TextEditingController _nombreCtrl;
   late final TextEditingController _claveCtrl;
   late RolUsuario _rolSeleccionado;
@@ -49,10 +51,12 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
   bool _guardando = false;
 
   bool get esEdicion => widget.empleadoExistente != null;
+  bool get editandoDueno => esEdicion && widget.empleadoExistente!.rol.esDueno;
 
   @override
   void initState() {
     super.initState();
+    _idCtrl = TextEditingController(text: widget.empleadoExistente?.id ?? '');
     _nombreCtrl = TextEditingController(
       text: widget.empleadoExistente?.nombre ?? '',
     );
@@ -62,6 +66,7 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
 
   @override
   void dispose() {
+    _idCtrl.dispose();
     _nombreCtrl.dispose();
     _claveCtrl.dispose();
     super.dispose();
@@ -85,7 +90,8 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
         }
       }();
 
-      final bool esMismoUsuarioActivo = esEdicion &&
+      final bool esMismoUsuarioActivo =
+          esEdicion &&
           usuarioActual != null &&
           widget.empleadoExistente!.id == usuarioActual.id;
 
@@ -103,7 +109,7 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
 
         await widget.controladorAutenticacion.actualizarColaborador(
           empActualizado,
-          nuevaClave: clave.isNotEmpty ? clave : null,
+          nuevaClave: (!editandoDueno && clave.isNotEmpty) ? clave : null,
         );
       } else {
         // Generar un ID único corto para el nuevo empleado (ej. EMP-1823)
@@ -150,7 +156,8 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
       }
     }();
 
-    final bool esMismoUsuarioActivo = esEdicion &&
+    final bool esMismoUsuarioActivo =
+        esEdicion &&
         usuarioActual != null &&
         widget.empleadoExistente!.id == usuarioActual.id;
 
@@ -162,293 +169,422 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
           child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: AppColors.border, width: 1),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Asa de arrastre
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
-              const SizedBox(height: 16),
-
-              // Encabezado
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryContainer,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            esEdicion ? Icons.edit_note : Icons.person_add_alt_1,
-                            color: AppColors.primary,
-                            size: 22,
-                          ),
+              border: Border.all(color: AppColors.border, width: 1),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Asa de arrastre
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        const SizedBox(width: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Encabezado
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              Text(
-                                esEdicion ? 'Editar Empleado' : 'Nuevo Empleado',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryContainer,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  esEdicion
+                                      ? Icons.edit_note
+                                      : Icons.person_add_alt_1,
+                                  color: AppColors.primary,
+                                  size: 22,
                                 ),
                               ),
-                              Text(
-                                esEdicion
-                                    ? 'ID: ${widget.empleadoExistente!.id}'
-                                    : 'Ingresa los datos del nuevo colaborador',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      esEdicion
+                                          ? 'Editar Empleado'
+                                          : 'Nuevo Empleado',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      esEdicion
+                                          ? 'Actualiza los datos del colaborador'
+                                          : 'Ingresa los datos del nuevo colaborador',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.of(context).pop(false),
+                          color: AppColors.textSecondary,
+                        ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(context).pop(false),
-                    color: AppColors.textSecondary,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
+                    const SizedBox(height: 18),
 
-              // Campo: Nombre
-              TextFormField(
-                controller: _nombreCtrl,
-                textCapitalization: TextCapitalization.words,
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: 'Nombre completo *',
-                  labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  prefixIcon: Icon(Icons.badge_outlined, color: AppColors.primary, size: 20),
-                  filled: true,
-                  fillColor: AppColors.secondarySurface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-                  ),
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'El nombre es obligatorio';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
+                    // Campo: ID de usuario (visible y de solo lectura al editar)
+                    if (esEdicion) ...[
+                      TextFormField(
+                        controller: _idCtrl,
+                        readOnly: true,
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'ID de usuario',
+                          helperText:
+                              'El identificador único no puede modificarse',
+                          helperStyle: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                          labelStyle: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.fingerprint,
+                            color: AppColors.textSecondary,
+                            size: 20,
+                          ),
+                          suffixIcon: Icon(
+                            Icons.lock_outline,
+                            color: AppColors.textSecondary,
+                            size: 18,
+                          ),
+                          filled: true,
+                          fillColor: AppColors.secondarySurface.withValues(
+                            alpha: 0.6,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
-              // Campo: Rol con Protección Anti-Degradación
-              if (esMismoUsuarioActivo)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.secondarySurface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.shield_rounded, color: AppColors.amber, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    // Campo: Nombre
+                    TextFormField(
+                      controller: _nombreCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Nombre completo *',
+                        labelStyle: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.badge_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.secondarySurface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: AppColors.primary,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'El nombre es obligatorio';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Campo: Rol con Protección Anti-Degradación
+                    if (esMismoUsuarioActivo)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondarySurface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              'Rol: Dueño (No modificable)',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                            Icon(
+                              Icons.shield_rounded,
+                              color: AppColors.amber,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Rol: Dueño (No modificable)',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Protección Anti-Degradación: No puedes revocar tu propio acceso administrativo.',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Protección Anti-Degradación: No puedes revocar tu propio acceso administrativo.',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.subtleAmber,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'TÚ',
+                                style: TextStyle(
+                                  color: AppColors.amber,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.subtleAmber,
-                          borderRadius: BorderRadius.circular(6),
+                      )
+                    else
+                      DropdownButtonFormField<RolUsuario>(
+                        value: _rolSeleccionado,
+                        isExpanded: true,
+                        dropdownColor: AppColors.card,
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
                         ),
-                        child: Text(
-                          'TÚ',
-                          style: TextStyle(
-                            color: AppColors.amber,
+                        decoration: InputDecoration(
+                          labelText: 'Rol en Planteapp *',
+                          labelStyle: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.shield_outlined,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: AppColors.secondarySurface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: RolUsuario.duena,
+                            child: Text('Dueño (Acceso Total y Seguridad)'),
+                          ),
+                          DropdownMenuItem(
+                            value: RolUsuario.empleado,
+                            child: Text('Empleado (Punto de Venta / POS)'),
+                          ),
+                        ],
+                        onChanged: (RolUsuario? nuevoRol) {
+                          if (nuevoRol != null) {
+                            setState(() => _rolSeleccionado = nuevoRol);
+                          }
+                        },
+                      ),
+                    const SizedBox(height: 14),
+
+                    // Campo: Contraseña (oculto cuando el usuario editado tiene rol 'dueño', gestionado en Seguridad)
+                    if (!editandoDueno) ...[
+                      TextFormField(
+                        controller: _claveCtrl,
+                        obscureText: _ocultarClave,
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: esEdicion
+                              ? 'Nueva contraseña (opcional)'
+                              : 'Contraseña de acceso *',
+                          helperText: esEdicion
+                              ? 'Déjalo en blanco para mantener la actual • Mínimo 6 caracteres para el acceso'
+                              : 'Mínimo 6 caracteres para el acceso',
+                          helperMaxLines: 2,
+                          helperStyle: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                          labelStyle: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.key_outlined,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _ocultarClave
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            onPressed: () =>
+                                setState(() => _ocultarClave = !_ocultarClave),
+                          ),
+                          filled: true,
+                          fillColor: AppColors.secondarySurface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          final claveLimpia = v?.trim() ?? '';
+                          if (!esEdicion && claveLimpia.isEmpty) {
+                            return 'La contraseña es obligatoria para nuevos empleados';
+                          }
+                          if (claveLimpia.isNotEmpty &&
+                              claveLimpia.length < 6) {
+                            return 'La contraseña debe tener al menos 6 caracteres';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 22),
+                    ] else
+                      const SizedBox(height: 8),
+
+                    // Botón de Guardar
+                    SizedBox(
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: _guardando ? null : _guardarEmpleado,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: _guardando
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                esEdicion ? Icons.save : Icons.person_add,
+                                size: 20,
+                              ),
+                        label: Text(
+                          esEdicion
+                              ? 'Actualizar Empleado'
+                              : 'Registrar Empleado',
+                          style: const TextStyle(
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            fontSize: 10,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                )
-              else
-                DropdownButtonFormField<RolUsuario>(
-                  value: _rolSeleccionado,
-                  isExpanded: true,
-                  dropdownColor: AppColors.card,
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: 'Rol en Planteapp *',
-                    labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                    prefixIcon: Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
-                    filled: true,
-                    fillColor: AppColors.secondarySurface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: RolUsuario.duena,
-                      child: Text('Dueño (Acceso Total y Seguridad)'),
-                    ),
-                    DropdownMenuItem(
-                      value: RolUsuario.empleado,
-                      child: Text('Empleado (Punto de Venta / POS)'),
                     ),
                   ],
-                  onChanged: (RolUsuario? nuevoRol) {
-                    if (nuevoRol != null) {
-                      setState(() => _rolSeleccionado = nuevoRol);
-                    }
-                  },
-                ),
-              const SizedBox(height: 14),
-
-              // Campo: Contraseña
-              TextFormField(
-                controller: _claveCtrl,
-                obscureText: _ocultarClave,
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                decoration: InputDecoration(
-                  labelText: esEdicion
-                      ? 'Nueva contraseña (opcional)'
-                      : 'Contraseña de acceso *',
-                  helperText: esEdicion
-                      ? 'Déjalo en blanco para mantener la contraseña actual'
-                      : 'Se encriptará con PBKDF2 y salt único',
-                  helperStyle: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                  labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  prefixIcon: Icon(Icons.key_outlined, color: AppColors.primary, size: 20),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _ocultarClave ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      color: AppColors.textSecondary,
-                      size: 20,
-                    ),
-                    onPressed: () => setState(() => _ocultarClave = !_ocultarClave),
-                  ),
-                  filled: true,
-                  fillColor: AppColors.secondarySurface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-                  ),
-                ),
-                validator: (v) {
-                  if (!esEdicion && (v == null || v.trim().isEmpty)) {
-                    return 'La contraseña es obligatoria para nuevos empleados';
-                  }
-                  if (v != null && v.trim().isNotEmpty && v.trim().length < 4) {
-                    return 'La contraseña debe tener al menos 4 caracteres';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 22),
-
-              // Botón de Guardar
-              SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: _guardando ? null : _guardarEmpleado,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: _guardando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(esEdicion ? Icons.save : Icons.person_add, size: 20),
-                  label: Text(
-                    esEdicion ? 'Actualizar Empleado' : 'Registrar Empleado',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
         ),
       ),
     );
   }
 }
-

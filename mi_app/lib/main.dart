@@ -149,10 +149,12 @@ class ViverApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeManager.instance.themeMode,
           builder: (context, child) {
-            final Widget contenido = child ?? const SizedBox.shrink();
-            return Container(
-              color: AppColors.appBackground,
-              child: contenido,
+            return MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.1,
+              child: Container(
+                color: AppColors.appBackground,
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
           },
           home: const SplashVista(),
