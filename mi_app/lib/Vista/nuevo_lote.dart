@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../Controladores/controlador_inventario.dart';
@@ -397,6 +398,11 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
                     // 2. Nombre de la planta / producto
                     TextFormField(
                       maxLength: LimitesApp.maxLongitudNombreProducto,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z0-9\sñÑáéíóúÁÉÍÓÚ\-_]'),
+                        ),
+                      ],
                       decoration: InputDecoration(
                         labelText: 'Nombre de la planta / producto',
                         labelStyle: TextStyle(color: AppColors.textSecondary),
@@ -437,6 +443,9 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
                               decimal: true,
                             ),
                             inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d+\.?\d*'),
+                              ),
                               FormateadorMonetario(
                                 max: LimitesApp.maxMontoMonetario,
                               ),
@@ -469,6 +478,9 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
                               decimal: true,
                             ),
                             inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d+\.?\d*'),
+                              ),
                               FormateadorMonetario(
                                 max: LimitesApp.maxMontoMonetario,
                               ),

@@ -507,9 +507,8 @@ class ControladorHardware extends ChangeNotifier {
   }
 
   /// Solicita y valida en tiempo de ejecución los permisos necesarios para Bluetooth:
-  /// - En Android 12+ (API 31+): BLUETOOTH_CONNECT (Dispositivos Cercanos) y BLUETOOTH_SCAN.
-  /// - En Android 11 y menores (API <= 30): ACCESS_FINE_LOCATION y ACCESS_COARSE_LOCATION.
-  /// Si el usuario deniega los permisos requeridos, retorna false.
+  /// - En Android 12+ (API 31+): BLUETOOTH_CONNECT (Dispositivos Cercanos) y BLUETOOTH_SCAN (neverForLocation).
+  /// Al usar neverForLocation en el Manifest, NO se requiere ni se solicita permiso de Ubicación física.
   Future<bool> solicitarPermisosBluetooth() async {
     if (_esEntornoPrueba || kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       return true;
@@ -518,24 +517,19 @@ class ControladorHardware extends ChangeNotifier {
     try {
       final scanStatus = await Permission.bluetoothScan.status;
       final connectStatus = await Permission.bluetoothConnect.status;
-      final locStatus = await Permission.location.status;
 
-      if (!scanStatus.isGranted || !connectStatus.isGranted || !locStatus.isGranted) {
+      if (!scanStatus.isGranted || !connectStatus.isGranted) {
         final Map<Permission, PermissionStatus> statuses = await [
           Permission.bluetoothScan,
           Permission.bluetoothConnect,
-          Permission.location,
-          Permission.locationWhenInUse,
         ].request();
 
         final bool scanOk = statuses[Permission.bluetoothScan]?.isGranted ?? false;
         final bool connectOk = statuses[Permission.bluetoothConnect]?.isGranted ?? false;
-        final bool locOk = (statuses[Permission.location]?.isGranted ?? false) ||
-            (statuses[Permission.locationWhenInUse]?.isGranted ?? false);
 
-        final bool concedidos = (connectOk && scanOk) || locOk;
+        final bool concedidos = connectOk && scanOk;
         if (!concedidos) {
-          debugPrint('Permisos de Bluetooth o Ubicación denegados por el usuario.');
+          debugPrint('Permisos de Bluetooth denegados por el usuario.');
           return false;
         }
       }
@@ -574,7 +568,7 @@ class ControladorHardware extends ChangeNotifier {
         'encendido': false,
         'listo': false,
         'mensaje':
-            'Permiso de "Dispositivos Cercanos" (Bluetooth Connect) o "Ubicación" denegado. Concédelo en Ajustes para detectar impresoras.',
+            'Permiso de "Dispositivos Cercanos" (Bluetooth Connect) denegado. Concédelo en Ajustes para detectar impresoras.',
       };
     }
 

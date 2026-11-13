@@ -14,17 +14,20 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
-    <!-- Permisos Legados de Bluetooth y Ubicación para Android 11 y menores (API <= 30) -->
+    <!-- Permisos Legados de Bluetooth para Android 11 y menores (API <= 30) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <!-- Permisos Modernos de Bluetooth en Tiempo de Ejecución para Android 12+ (API 31+) -->
+    <!-- neverForLocation garantiza que el escaneo Bluetooth NO deriva ni solicita ubicación física -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+
+    <!-- Supresión estricta de permisos de Ubicación (Privacidad POS) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove"/>
 
     <!-- Declaración de Soporte de Hardware para Impresión USB OTG y Bluetooth -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>

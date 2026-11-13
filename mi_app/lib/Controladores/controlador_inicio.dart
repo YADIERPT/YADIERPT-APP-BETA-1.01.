@@ -202,73 +202,82 @@ class ControladorInicio extends ChangeNotifier {
       ..sort((a, b) => b.fecha.compareTo(a.fecha));
     final deudoresRecientes = deudoresOrdenados.take(4).toList();
 
-    final List<Map<String, dynamic>> puntosGrafico = [
-      {'hora': '8:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '10:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '12:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '14:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '16:00', 'monto': 0.0, 'conteo': 0},
-      {'hora': '18:00', 'monto': 0.0, 'conteo': 0},
-    ];
+    // Agrupación dinámica real de ventas del día por hora (venta.fecha.hour)
+    final Map<int, Map<String, dynamic>> ventasPorHoraMap = {};
 
     if (usarTransacciones) {
       for (var t in transaccionesPeriodo) {
-        int hr = t.fecha.hour;
-        int idx = -1;
-        if (hr < 9) {
-          idx = 0;
-        } else if (hr < 11) {
-          idx = 1;
-        } else if (hr < 13) {
-          idx = 2;
-        } else if (hr < 15) {
-          idx = 3;
-        } else if (hr < 17) {
-          idx = 4;
-        } else {
-          idx = 5;
-        }
-
-        if (idx != -1) {
-          puntosGrafico[idx]['monto'] += t.monto;
-          puntosGrafico[idx]['conteo'] += 1;
-        }
+        final int hr = t.fecha.hour;
+        ventasPorHoraMap.putIfAbsent(
+          hr,
+          () => {'hora': '$hr:00', 'monto': 0.0, 'conteo': 0},
+        );
+        ventasPorHoraMap[hr]!['monto'] =
+            (ventasPorHoraMap[hr]!['monto'] as double) + t.monto;
+        ventasPorHoraMap[hr]!['conteo'] =
+            (ventasPorHoraMap[hr]!['conteo'] as int) + 1;
       }
     } else {
       for (var v in ventasPeriodo) {
-        int hr = v.fecha.hour;
-        int idx = -1;
-        if (hr < 9) {
-          idx = 0;
-        } else if (hr < 11) {
-          idx = 1;
-        } else if (hr < 13) {
-          idx = 2;
-        } else if (hr < 15) {
-          idx = 3;
-        } else if (hr < 17) {
-          idx = 4;
-        } else {
-          idx = 5;
-        }
+        final int hr = v.fecha.hour;
+        ventasPorHoraMap.putIfAbsent(
+          hr,
+          () => {'hora': '$hr:00', 'monto': 0.0, 'conteo': 0},
+        );
+        ventasPorHoraMap[hr]!['monto'] =
+            (ventasPorHoraMap[hr]!['monto'] as double) + v.total;
+        ventasPorHoraMap[hr]!['conteo'] =
+            (ventasPorHoraMap[hr]!['conteo'] as int) + 1;
+      }
+    }
 
-        if (idx != -1) {
-          puntosGrafico[idx]['monto'] += v.total;
-          puntosGrafico[idx]['conteo'] += 1;
+    final List<Map<String, dynamic>> puntosGrafico = [];
+
+    if (ventasPorHoraMap.isEmpty) {
+      final int horaActual = DateTime.now().hour;
+      final int inicio = (horaActual - 4).clamp(8, 14);
+      for (int i = 0; i < 6; i++) {
+        final int h = (inicio + (i * 2)).clamp(0, 23);
+        puntosGrafico.add({
+          'hora': '$h:00',
+          'monto': 0.0,
+          'conteo': 0,
+        });
+      }
+    } else {
+      final horas = ventasPorHoraMap.keys.toList()..sort();
+      final int minHora = horas.first;
+      final int maxHora = horas.last;
+
+      if (maxHora - minHora <= 7) {
+        final int rangoInicio = (minHora - 1).clamp(0, 23);
+        final int rangoFin = (maxHora + 1).clamp(0, 23);
+        for (int h = rangoInicio; h <= rangoFin; h++) {
+          if (ventasPorHoraMap.containsKey(h)) {
+            puntosGrafico.add(ventasPorHoraMap[h]!);
+          } else {
+            puntosGrafico.add({'hora': '$h:00', 'monto': 0.0, 'conteo': 0});
+          }
+        }
+      } else {
+        for (final h in horas) {
+          puntosGrafico.add(ventasPorHoraMap[h]!);
         }
       }
     }
 
     double maxMonto = 0;
-    int idxDestacado = 3;
+    int idxDestacado = puntosGrafico.isNotEmpty ? 0 : 0;
     for (int i = 0; i < puntosGrafico.length; i++) {
-      if (puntosGrafico[i]['monto'] > maxMonto) {
-        maxMonto = puntosGrafico[i]['monto'];
+      if ((puntosGrafico[i]['monto'] as double) > maxMonto) {
+        maxMonto = puntosGrafico[i]['monto'] as double;
         idxDestacado = i;
       }
     }
 
-    final pDestacado = puntosGrafico[idxDestacado];
+    final pDestacado = puntosGrafico.isNotEmpty
+        ? puntosGrafico[idxDestacado]
+        : {'hora': '0:00', 'monto': 0.0, 'conteo': 0};
 
     _metricasDashboard = MetricasDashboard(
       periodo: _periodoSeleccionado,

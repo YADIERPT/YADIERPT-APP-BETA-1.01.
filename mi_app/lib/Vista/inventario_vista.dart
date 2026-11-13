@@ -40,14 +40,16 @@ class _InventarioVistaState extends State<InventarioVista> {
       Debouncer(delay: const Duration(milliseconds: 300));
   late final ScrollController _scrollController;
   final Map<String, GlobalKey> _cardKeys = {};
+  String? _highlightId;
 
   @override
   void initState() {
     super.initState();
+    _highlightId = widget.highlightProductId;
     _scrollController = ScrollController();
     _cargarInventario().then((_) {
-      if (widget.highlightProductId != null && mounted) {
-        _iniciarAutoScrollHaciaProducto(widget.highlightProductId!);
+      if (_highlightId != null && mounted) {
+        _iniciarAutoScrollHaciaProducto(_highlightId!);
       }
     });
   }
@@ -57,7 +59,16 @@ class _InventarioVistaState extends State<InventarioVista> {
     super.didUpdateWidget(oldWidget);
     if (widget.highlightProductId != null &&
         widget.highlightProductId != oldWidget.highlightProductId) {
-      _iniciarAutoScrollHaciaProducto(widget.highlightProductId!);
+      _highlightId = widget.highlightProductId;
+      _iniciarAutoScrollHaciaProducto(_highlightId!);
+    }
+  }
+
+  void _limpiarHighlight() {
+    if (mounted && _highlightId != null) {
+      setState(() {
+        _highlightId = null;
+      });
     }
   }
 
@@ -686,8 +697,9 @@ class _InventarioVistaState extends State<InventarioVista> {
                               prod: prod,
                               rolActual: rolActual,
                               puedeModificar: puedeModificar,
-                              resaltado: prod.id == widget.highlightProductId,
-                              highlightProductId: widget.highlightProductId,
+                              resaltado: prod.id == _highlightId,
+                              highlightProductId: _highlightId,
+                              onResplandorTerminado: _limpiarHighlight,
                               onEditar: () => _abrirEditarProducto(prod),
                               onAjustar: () => _abrirAjuste(prod),
                               onBorrar: () => _abrirDeshabilitarProducto(prod),

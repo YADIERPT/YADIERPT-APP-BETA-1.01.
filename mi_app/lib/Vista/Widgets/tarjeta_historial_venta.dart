@@ -22,7 +22,10 @@ class TarjetaHistorialVenta extends StatelessWidget {
       (sum, a) => sum + a.cantidad,
     );
     final String nombresProductos = venta.articulos.isNotEmpty
-        ? venta.articulos.map((a) => a.producto.nombre).join(', ')
+        ? venta.articulos
+            .map((e) => e.nombre.trim())
+            .where((n) => n.isNotEmpty)
+            .join(', ')
         : 'Venta General';
     final String hora =
         '${venta.fecha.hour.toString().padLeft(2, '0')}:${venta.fecha.minute.toString().padLeft(2, '0')} hrs';

@@ -7,6 +7,8 @@ class ArticuloVenta {
   int cantidad;
   double precioUnitario;
 
+  String get nombre => producto.nombre;
+
   ArticuloVenta({
     required this.producto,
     required this.cantidad,

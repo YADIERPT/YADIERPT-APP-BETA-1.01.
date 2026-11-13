@@ -28,6 +28,8 @@ class DashboardVista extends StatefulWidget {
 }
 
 class _DashboardVistaState extends State<DashboardVista> {
+  bool _expandirStockBajo = false;
+
   @override
   void initState() {
     super.initState();
@@ -629,83 +631,132 @@ class _DashboardVistaState extends State<DashboardVista> {
                           ],
                         ),
                       ),
-                      ...productosBajoStock.take(3).map((prod) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: AppColors.border,
-                                width: 0.5,
-                              ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _expandirStockBajo
+                            ? productosBajoStock.length
+                            : math.min(productosBajoStock.length, 3),
+                        itemBuilder: (context, index) {
+                          final prod = productosBajoStock[index];
+                          final bool esUltimo = index ==
+                              (_expandirStockBajo
+                                  ? productosBajoStock.length - 1
+                                  : math.min(productosBajoStock.length, 3) - 1);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              border: esUltimo && productosBajoStock.length <= 3
+                                  ? null
+                                  : Border(
+                                      bottom: BorderSide(
+                                        color: AppColors.border,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.spa_outlined,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        prod.nombre,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '${prod.cantidadEnInventario} u. disponibles',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.warning,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    MotorFeedback.vibracionLigera();
+                                    _navegarA(2, highlightProductId: prod.id);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.warning,
+                                    foregroundColor: AppColors.onWarning,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: const Size(60, 28),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Reponer',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      if (productosBajoStock.length > 3)
+                        InkWell(
+                          onTap: () {
+                            MotorFeedback.vibracionLigera();
+                            setState(() {
+                              _expandirStockBajo = !_expandirStockBajo;
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _expandirStockBajo
+                                      ? 'Mostrar menos'
+                                      : 'Ver todos (${productosBajoStock.length})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _expandirStockBajo
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
+                                  size: 18,
+                                  color: AppColors.primary,
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.spa_outlined,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      prod.nombre,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      '${prod.cantidadEnInventario} u. disponibles',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.warning,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ElevatedButton(
-                                onPressed: () {
-                                  MotorFeedback.vibracionLigera();
-                                  _navegarA(2, highlightProductId: prod.id);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.warning,
-                                  foregroundColor: AppColors.onWarning,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  minimumSize: const Size(60, 28),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Reponer',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                        ),
                     ],
                   ),
                 ),

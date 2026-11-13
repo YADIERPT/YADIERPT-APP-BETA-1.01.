@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../Controladores/controlador_inventario.dart';
 import '../../Modelos/colaborador.dart';
@@ -466,6 +467,11 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                 TextFormField(
                   controller: _nombreCtrl,
                   maxLength: LimitesApp.maxLongitudNombreProducto,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[a-zA-Z0-9\sñÑáéíóúÁÉÍÓÚ\-_]'),
+                    ),
+                  ],
                   style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     labelText: 'Nombre del producto',
@@ -501,6 +507,9 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                           decimal: true,
                         ),
                         inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d*'),
+                          ),
                           FormateadorMonetario(
                             max: LimitesApp.maxMontoMonetario,
                           ),
@@ -536,6 +545,9 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                           decimal: true,
                         ),
                         inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d*'),
+                          ),
                           FormateadorMonetario(
                             max: LimitesApp.maxMontoMonetario,
                           ),

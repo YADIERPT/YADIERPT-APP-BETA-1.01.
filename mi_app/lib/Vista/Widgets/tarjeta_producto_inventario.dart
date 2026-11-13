@@ -20,6 +20,7 @@ class TarjetaProductoInventario extends StatelessWidget {
   final RolUsuario? rolActual;
   final bool resaltado;
   final String? highlightProductId;
+  final VoidCallback? onResplandorTerminado;
 
   const TarjetaProductoInventario({
     super.key,
@@ -34,6 +35,7 @@ class TarjetaProductoInventario extends StatelessWidget {
     this.rolActual,
     this.resaltado = false,
     this.highlightProductId,
+    this.onResplandorTerminado,
   });
 
   RolUsuario _obtenerRol(BuildContext context) {
@@ -77,6 +79,11 @@ class TarjetaProductoInventario extends StatelessWidget {
             ),
             duration: const Duration(milliseconds: 2500),
             curve: Curves.easeOutCubic,
+            onEnd: () {
+              if (esResaltado) {
+                onResplandorTerminado?.call();
+              }
+            },
             builder: (context, colorAnimado, child) {
               final bool tieneResplandor =
                   esResaltado && (colorAnimado != colorNormal);
