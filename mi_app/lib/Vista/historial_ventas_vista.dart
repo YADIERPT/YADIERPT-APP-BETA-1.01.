@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Modelos/venta.dart';
+import '../Utilidades/formateador.dart';
 import 'Widgets/tarjeta_historial_venta.dart';
 
 class HistorialVentasVista extends StatefulWidget {
@@ -252,7 +253,7 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
                       runSpacing: 4,
                       children: [
                         Text(
-                          '\$${ventaAcumulada.toStringAsFixed(2)}',
+                          formatoMoneda(ventaAcumulada),
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w900,
@@ -346,7 +347,7 @@ class _HistorialVentasVistaState extends State<HistorialVentasVista> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '\$${ticketPromedio.toStringAsFixed(2)}',
+                                formatoMoneda(ticketPromedio),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,

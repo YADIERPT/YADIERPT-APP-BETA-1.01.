@@ -21,10 +21,12 @@ import '../Utilidades/debouncer.dart';
 
 class InventarioVista extends StatefulWidget {
   final String? highlightProductId;
+  final VoidCallback? onHighlightConsumido;
 
   const InventarioVista({
     super.key,
     this.highlightProductId,
+    this.onHighlightConsumido,
   });
 
   @override
@@ -40,16 +42,18 @@ class _InventarioVistaState extends State<InventarioVista> {
       Debouncer(delay: const Duration(milliseconds: 300));
   late final ScrollController _scrollController;
   final Map<String, GlobalKey> _cardKeys = {};
-  String? _highlightId;
+  
+  // 1. Variable mutable dentro del State para controlar el ID a resaltar
+  String? highlightProductId;
 
   @override
   void initState() {
     super.initState();
-    _highlightId = widget.highlightProductId;
+    highlightProductId = widget.highlightProductId;
     _scrollController = ScrollController();
     _cargarInventario().then((_) {
-      if (_highlightId != null && mounted) {
-        _iniciarAutoScrollHaciaProducto(_highlightId!);
+      if (highlightProductId != null && mounted) {
+        _iniciarAutoScrollHaciaProducto(highlightProductId!);
       }
     });
   }
@@ -59,16 +63,17 @@ class _InventarioVistaState extends State<InventarioVista> {
     super.didUpdateWidget(oldWidget);
     if (widget.highlightProductId != null &&
         widget.highlightProductId != oldWidget.highlightProductId) {
-      _highlightId = widget.highlightProductId;
-      _iniciarAutoScrollHaciaProducto(_highlightId!);
+      highlightProductId = widget.highlightProductId;
+      _iniciarAutoScrollHaciaProducto(highlightProductId!);
     }
   }
 
   void _limpiarHighlight() {
-    if (mounted && _highlightId != null) {
+    if (mounted && highlightProductId != null) {
       setState(() {
-        _highlightId = null;
+        highlightProductId = null;
       });
+      widget.onHighlightConsumido?.call();
     }
   }
 
@@ -697,9 +702,16 @@ class _InventarioVistaState extends State<InventarioVista> {
                               prod: prod,
                               rolActual: rolActual,
                               puedeModificar: puedeModificar,
-                              resaltado: prod.id == _highlightId,
-                              highlightProductId: _highlightId,
-                              onResplandorTerminado: _limpiarHighlight,
+                              resaltado: prod.id == highlightProductId,
+                              highlightProductId: highlightProductId,
+                              onResplandorTerminado: () {
+                                if (mounted) {
+                                  setState(() {
+                                    highlightProductId = null;
+                                  });
+                                  widget.onHighlightConsumido?.call();
+                                }
+                              },
                               onEditar: () => _abrirEditarProducto(prod),
                               onAjustar: () => _abrirAjuste(prod),
                               onBorrar: () => _abrirDeshabilitarProducto(prod),

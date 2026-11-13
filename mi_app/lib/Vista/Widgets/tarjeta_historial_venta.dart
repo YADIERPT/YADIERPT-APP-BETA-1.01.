@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
 import '../../Servicios/servicio_ticket_pdf.dart';
+import '../../Utilidades/formateador.dart';
 
 class TarjetaHistorialVenta extends StatelessWidget {
   final Venta venta;
@@ -59,7 +60,7 @@ class TarjetaHistorialVenta extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                '+\$${venta.total.toStringAsFixed(2)}',
+                '+${formatoMoneda(venta.total)}',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w900,

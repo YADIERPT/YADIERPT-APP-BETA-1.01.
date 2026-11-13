@@ -9,6 +9,7 @@ import '../../Tema/app_theme.dart';
 import '../../Constantes/limites.dart';
 import '../../Servicios/servicio_imagen.dart';
 import '../../Servicios/motor_feedback.dart';
+import '../../Utilidades/formateador.dart';
 
 class EditarProductoSheet extends StatefulWidget {
   final Producto producto;
@@ -535,6 +536,7 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                        onChanged: (_) => setState(() {}),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -573,10 +575,57 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                        onChanged: (_) => setState(() {}),
                       ),
                     ),
                   ],
                 ),
+                if ((double.tryParse(_costoCtrl.text) ?? 0.0) > 0 ||
+                    (double.tryParse(_precioVentaCtrl.text) ?? 0.0) > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondarySurface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.border,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Preview Costo: ${formatoMoneda(double.tryParse(_costoCtrl.text) ?? 0.0)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Preview Venta: ${formatoMoneda(double.tryParse(_precioVentaCtrl.text) ?? 0.0)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.brightGreen,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
 
                 // Descripción / Notas

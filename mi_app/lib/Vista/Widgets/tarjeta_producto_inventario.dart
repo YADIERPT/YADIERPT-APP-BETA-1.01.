@@ -7,6 +7,7 @@ import '../../Modelos/producto.dart';
 import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import '../../Utilidades/formateador.dart';
 
 class TarjetaProductoInventario extends StatelessWidget {
   final Producto prod;
@@ -72,12 +73,12 @@ class TarjetaProductoInventario extends StatelessWidget {
           final Color colorNormal = AppColors.card;
 
           return TweenAnimationBuilder<Color?>(
-            key: ValueKey('resplandor_${prod.id}_$esResaltado'),
+            key: ValueKey('resplandor_${prod.id}'),
             tween: ColorTween(
               begin: esResaltado ? colorDestacado : colorNormal,
               end: colorNormal,
             ),
-            duration: const Duration(milliseconds: 2500),
+            duration: const Duration(seconds: 2),
             curve: Curves.easeOutCubic,
             onEnd: () {
               if (esResaltado) {
@@ -333,7 +334,7 @@ class TarjetaProductoInventario extends StatelessWidget {
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
                                       child: Text(
-                                        '\$${prod.precioVenta.toStringAsFixed(2)}',
+                                        formatoMoneda(prod.precioVenta),
                                         maxLines: 1,
                                         style: TextStyle(
                                           fontSize: 13,
@@ -365,7 +366,7 @@ class TarjetaProductoInventario extends StatelessWidget {
                                         fit: BoxFit.scaleDown,
                                         alignment: Alignment.centerRight,
                                         child: Text(
-                                          '\$${prod.costo.toStringAsFixed(2)}',
+                                          formatoMoneda(prod.costo),
                                           maxLines: 1,
                                           style: TextStyle(
                                             fontSize: 13,

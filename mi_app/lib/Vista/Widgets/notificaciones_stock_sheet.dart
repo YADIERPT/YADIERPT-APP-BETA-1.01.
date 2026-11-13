@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
+import '../../Servicios/motor_feedback.dart';
+import '../inventario_vista.dart';
 
 /// Modal Bottom Sheet adaptativo para notificaciones y alertas de inventario.
 ///
@@ -175,14 +177,24 @@ class NotificacionesStockSheet extends StatelessWidget {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
                         onTap: () {
-                          // 1. Cerrar el modal actual
+                          // 1. Cerrar el modal primero
                           Navigator.of(context).pop();
 
-                          // 2. Redirigir al usuario al Inventario
+                          // 2. Feedback háptico consistente con el botón Reponer
+                          MotorFeedback.vibracionLigera();
+
+                          // 3. Redirigir hacia InventarioVista pasando el ID del producto
                           if (onSeleccionarProducto != null) {
                             onSeleccionarProducto!(p);
                           } else if (onNavegarAInventario != null) {
                             onNavegarAInventario!();
+                          } else {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    InventarioVista(highlightProductId: p.id),
+                              ),
+                            );
                           }
                         },
                         child: Container(
@@ -233,7 +245,7 @@ class NotificacionesStockSheet extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      'Quedan ${p.cantidadEnInventario} ${p.cantidadEnInventario == 1 ? "unidad" : "unidades"} · Toca para gestionar',
+                                      'Quedan ${p.cantidadEnInventario} ${p.cantidadEnInventario == 1 ? "unidad" : "unidades"} · Toca para reponer',
                                       style: TextStyle(
                                         color: colorTextoSecundario,
                                         fontSize: 12,
@@ -243,11 +255,46 @@ class NotificacionesStockSheet extends StatelessWidget {
                                 ),
                               ),
 
-                              // Flecha de navegación interactiva
-                              Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 14,
-                                color: colorTextoSecundario,
+                              const SizedBox(width: 8),
+
+                              // Botón "Reponer" con la misma estética y comportamiento que en el Dashboard
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  MotorFeedback.vibracionLigera();
+                                  if (onSeleccionarProducto != null) {
+                                    onSeleccionarProducto!(p);
+                                  } else if (onNavegarAInventario != null) {
+                                    onNavegarAInventario!();
+                                  } else {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => InventarioVista(
+                                            highlightProductId: p.id),
+                                      ),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.warning,
+                                  foregroundColor: AppColors.onWarning,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: const Size(60, 28),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Reponer',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ],
                           ),

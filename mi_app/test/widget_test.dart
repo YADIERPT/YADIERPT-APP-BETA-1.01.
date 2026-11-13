@@ -48,6 +48,7 @@ import 'package:mi_app/Vista/empleados_vista.dart';
 import 'package:mi_app/Vista/historial_ventas_vista.dart';
 import 'package:mi_app/Vista/Widgets/dialogo_seguridad_admin.dart';
 import 'package:mi_app/Vista/Widgets/formulario_empleado_sheet.dart';
+import 'package:mi_app/Vista/Widgets/notificaciones_stock_sheet.dart';
 import 'package:mi_app/Utilidades/formateador.dart';
 import 'package:mi_app/Utilidades/debouncer.dart';
 import 'package:mi_app/Controladores/controlador_hardware.dart';
@@ -1297,6 +1298,9 @@ void main() {
       expect(Formateador.moneda(1000000.99), r'$1,000,000.99');
       expect(Formateador.moneda(0), r'$0.00');
       expect(Formateador.moneda(null), r'$0.00');
+      expect(formatoMoneda(2500.0), r'$2,500.00');
+      expect(formatoMoneda(1500.5), r'$1,500.50');
+      expect(formatoMoneda(0.0), r'$0.00');
     });
 
     test('Extensiones numéricas .aMoneda() y .aNumero() funcionan con fluidez', () {
@@ -1699,6 +1703,103 @@ void main() {
       );
 
       expect(find.byType(Selector<ControladorInventario, List<Producto>>), findsOneWidget);
+    });
+
+    testWidgets('InventarioVista almacena highlightProductId mutable en State y lo anula tras 2s de resplandor', (tester) async {
+      final cInv = ControladorInventario();
+      final cFinanzas = ControladorFinanzas();
+      final cPerfil = ControladorPerfil();
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFinanzas,
+        controladorPerfil: cPerfil,
+      );
+      final cAuth = ControladorAutenticacion();
+      final cIA = ControladorIACompras(controladorInventario: cInv);
+      final p1 = Producto(
+        id: 'P_GLOW',
+        nombre: 'Pothos Golden',
+        precioVenta: 100,
+        costo: 50,
+        cantidadEnInventario: 5,
+      );
+      cInv.productos.add(p1);
+
+      bool callbackLlamado = false;
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: cInv),
+            ChangeNotifierProvider.value(value: cVentas),
+            ChangeNotifierProvider.value(value: cAuth),
+            ChangeNotifierProvider.value(value: cIA),
+            ChangeNotifierProvider.value(value: cFinanzas),
+            Provider<ControladorPerfil>.value(value: cPerfil),
+          ],
+          child: MaterialApp(
+            home: InventarioVista(
+              highlightProductId: 'P_GLOW',
+              onHighlightConsumido: () {
+                callbackLlamado = true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(TweenAnimationBuilder<Color?>), findsWidgets);
+
+      // Avanzar el tiempo más allá de los 2 segundos de resplandor para activar onEnd
+      await tester.pump(const Duration(milliseconds: 2100));
+      await tester.pump();
+
+      expect(callbackLlamado, isTrue);
+    });
+
+    testWidgets('NotificacionesStockSheet onTap cierra el modal y redirige con highlightProductId', (tester) async {
+      final p1 = Producto(
+        id: 'PROD_CRITICO_123',
+        nombre: 'Cactus San Pedro',
+        precioVenta: 150.0,
+        costo: 60.0,
+        cantidadEnInventario: 1,
+      );
+
+      Producto? productoSeleccionado;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () {
+                  NotificacionesStockSheet.mostrar(
+                    context: ctx,
+                    productosBajoStock: [p1],
+                    onSeleccionarProducto: (prod) {
+                      productoSeleccionado = prod;
+                    },
+                  );
+                },
+                child: const Text('Abrir Notificaciones'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Abrir Notificaciones'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stock Crítico: Cactus San Pedro'), findsOneWidget);
+
+      // Tocar el botón Reponer dentro del modal
+      await tester.tap(find.text('Reponer'));
+      await tester.pumpAndSettle();
+
+      expect(productoSeleccionado?.id, 'PROD_CRITICO_123');
+      expect(find.byType(NotificacionesStockSheet), findsNothing);
     });
 
     testWidgets('PosVista utiliza Selector para aislar la cuadrícula del catálogo', (tester) async {

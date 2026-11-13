@@ -231,53 +231,77 @@ class ControladorInicio extends ChangeNotifier {
       }
     }
 
-    final List<Map<String, dynamic>> puntosGrafico = [];
+    // 1. Eje X Estático: Horario operativo estándar de 08:00 a 20:00 (12 espacios, uno por hora)
+    const int horaApertura = 8;
+    const int totalEspacios = 12; // 8:00 a 19:00 (12 franjas horarias operativas)
 
-    if (ventasPorHoraMap.isEmpty) {
-      final int horaActual = DateTime.now().hour;
-      final int inicio = (horaActual - 4).clamp(8, 14);
-      for (int i = 0; i < 6; i++) {
-        final int h = (inicio + (i * 2)).clamp(0, 23);
-        puntosGrafico.add({
-          'hora': '$h:00',
-          'monto': 0.0,
-          'conteo': 0,
-        });
+    // 2. Mapeo de Datos: Lista base con 12 espacios. Si no hay ventas, monto = 0.0 explícito
+    final List<Map<String, dynamic>> puntosGrafico = List.generate(totalEspacios, (index) {
+      final int hora = horaApertura + index;
+      double monto = 0.0;
+      int conteo = 0;
+
+      // Sumar ventas directas de esa hora
+      final datosDirectos = ventasPorHoraMap[hora];
+      if (datosDirectos != null) {
+        monto += (datosDirectos['monto'] as double);
+        conteo += (datosDirectos['conteo'] as int);
       }
-    } else {
-      final horas = ventasPorHoraMap.keys.toList()..sort();
-      final int minHora = horas.first;
-      final int maxHora = horas.last;
 
-      if (maxHora - minHora <= 7) {
-        final int rangoInicio = (minHora - 1).clamp(0, 23);
-        final int rangoFin = (maxHora + 1).clamp(0, 23);
-        for (int h = rangoInicio; h <= rangoFin; h++) {
-          if (ventasPorHoraMap.containsKey(h)) {
-            puntosGrafico.add(ventasPorHoraMap[h]!);
-          } else {
-            puntosGrafico.add({'hora': '$h:00', 'monto': 0.0, 'conteo': 0});
+      // Si hubo operaciones tempranas (< 8:00), sumarlas al primer espacio de apertura
+      if (index == 0) {
+        for (final entry in ventasPorHoraMap.entries) {
+          if (entry.key < horaApertura) {
+            monto += (entry.value['monto'] as double);
+            conteo += (entry.value['conteo'] as int);
           }
         }
-      } else {
-        for (final h in horas) {
-          puntosGrafico.add(ventasPorHoraMap[h]!);
+      }
+
+      // Si hubo operaciones tardías (>= 20:00), sumarlas al último espacio operativo de cierre
+      if (index == totalEspacios - 1) {
+        for (final entry in ventasPorHoraMap.entries) {
+          if (entry.key >= horaApertura + totalEspacios) {
+            monto += (entry.value['monto'] as double);
+            conteo += (entry.value['conteo'] as int);
+          }
         }
       }
-    }
+
+      // 3. Etiquetas inferiores fijas saltando cada 2 horas (8:00, 10:00, 12:00, etc.) independientemente de si hubo ventas
+      final bool mostrarEtiqueta = (hora % 2 == 0);
+      final String etiqueta = mostrarEtiqueta ? '$hora:00' : '';
+
+      return {
+        'hora': '$hora:00',
+        'horaInt': hora,
+        'etiqueta': etiqueta,
+        'monto': monto,
+        'conteo': conteo,
+      };
+    });
 
     double maxMonto = 0;
-    int idxDestacado = puntosGrafico.isNotEmpty ? 0 : 0;
+    int idxDestacado = -1;
     for (int i = 0; i < puntosGrafico.length; i++) {
-      if ((puntosGrafico[i]['monto'] as double) > maxMonto) {
-        maxMonto = puntosGrafico[i]['monto'] as double;
+      final double m = (puntosGrafico[i]['monto'] as num).toDouble();
+      if (m > maxMonto) {
+        maxMonto = m;
         idxDestacado = i;
       }
     }
 
-    final pDestacado = puntosGrafico.isNotEmpty
-        ? puntosGrafico[idxDestacado]
-        : {'hora': '0:00', 'monto': 0.0, 'conteo': 0};
+    // Si no hubo ventas en ninguna hora, destacar por defecto la hora actual si está dentro del horario operativo
+    if (idxDestacado == -1) {
+      final int horaActual = DateTime.now().hour;
+      if (horaActual >= horaApertura && horaActual < horaApertura + totalEspacios) {
+        idxDestacado = horaActual - horaApertura;
+      } else {
+        idxDestacado = 0;
+      }
+    }
+
+    final pDestacado = puntosGrafico[idxDestacado];
 
     _metricasDashboard = MetricasDashboard(
       periodo: _periodoSeleccionado,

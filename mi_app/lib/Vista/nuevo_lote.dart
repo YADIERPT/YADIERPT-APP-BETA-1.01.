@@ -10,6 +10,7 @@ import '../Tema/app_theme.dart';
 import '../Constantes/limites.dart';
 import '../Servicios/servicio_imagen.dart';
 import '../Servicios/motor_feedback.dart';
+import '../Utilidades/formateador.dart';
 
 class NuevoLoteVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -452,6 +453,11 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
                             ],
                             validator: (v) =>
                                 v == null || v.isEmpty ? 'Requerido' : null,
+                            onChanged: (v) {
+                              setState(() {
+                                costo = double.tryParse(v) ?? 0.0;
+                              });
+                            },
                             onSaved: (v) =>
                                 costo = double.tryParse(v ?? '') ?? 0.0,
                           ),
@@ -487,12 +493,62 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
                             ],
                             validator: (v) =>
                                 v == null || v.isEmpty ? 'Requerido' : null,
+                            onChanged: (v) {
+                              setState(() {
+                                precioVenta = double.tryParse(v) ?? 0.0;
+                              });
+                            },
                             onSaved: (v) =>
                                 precioVenta = double.tryParse(v ?? '') ?? 0.0,
                           ),
                         ),
                       ],
                     ),
+                    if (costo > 0 || precioVenta > 0) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondarySurface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Preview Costo: ${formatoMoneda(costo)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Preview Venta: ${formatoMoneda(precioVenta)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.brightGreen,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     // 4. Cantidad inicial - Ancho completo

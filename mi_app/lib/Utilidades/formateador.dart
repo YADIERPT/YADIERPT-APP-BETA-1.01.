@@ -3,6 +3,23 @@ import 'package:intl/intl.dart';
 
 import '../Constantes/limites.dart';
 
+final NumberFormat _formatoMonedaMx = NumberFormat.currency(
+  symbol: r'$',
+  decimalDigits: 2,
+  locale: 'es_MX',
+);
+
+/// Función de utilidad global para formatear cantidades monetarias
+/// con separador de miles (coma) y dos decimales (punto) utilizando locale 'es_MX'.
+///
+/// Ejemplo:
+/// ```dart
+/// formatoMoneda(2500.0); // "$2,500.00"
+/// ```
+String formatoMoneda(double valor) {
+  return _formatoMonedaMx.format(valor);
+}
+
 /// Helper centralizado y extensiones para estandarizar el formato numérico y monetario en Planteapp.
 ///
 /// Garantiza que en cualquier dispositivo y sin importar el idioma del sistema operativo:

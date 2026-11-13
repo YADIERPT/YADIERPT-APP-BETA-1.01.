@@ -14,6 +14,7 @@ import '../deudores_vista.dart';
 import '../inventario_vista.dart';
 import '../../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../../Servicios/motor_feedback.dart';
+import '../../Utilidades/formateador.dart';
 
 class DashboardVista extends StatefulWidget {
   final Function? alNavegar;
@@ -29,6 +30,7 @@ class DashboardVista extends StatefulWidget {
 
 class _DashboardVistaState extends State<DashboardVista> {
   bool _expandirStockBajo = false;
+  int? _indiceHoraSeleccionada;
 
   @override
   void initState() {
@@ -266,110 +268,163 @@ class _DashboardVistaState extends State<DashboardVista> {
 
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Column(
-                          children: [
-                            Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E2421),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: AppColors.brightGreen.withOpacity(0.5),
-                                    width: 1,
+                      child: Builder(
+                        builder: (context) {
+                          final int idxFinal = (_indiceHoraSeleccionada != null &&
+                                  _indiceHoraSeleccionada! >= 0 &&
+                                  _indiceHoraSeleccionada! < puntosGrafico.length)
+                              ? _indiceHoraSeleccionada!
+                              : idxDestacado;
+
+                          final pSel = (idxFinal >= 0 && idxFinal < puntosGrafico.length)
+                              ? puntosGrafico[idxFinal]
+                              : null;
+                          final String dHora = pSel?['hora'] ?? horaTooltip;
+                          final double dMonto =
+                              (pSel?['monto'] as num?)?.toDouble() ?? montoTooltip;
+                          final int dVentas =
+                              (pSel?['conteo'] as num?)?.toInt() ?? ventasTooltip;
+
+                          return Column(
+                            children: [
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.25),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E2421),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color:
+                                          AppColors.brightGreen.withOpacity(0.5),
+                                      width: 1,
                                     ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '$horaTooltip • \$${montoTooltip.toStringAsFixed(2)} ($ventasTooltip ventas)',
-                                  style: const TextStyle(
-                                    color: Color(0xFFF0F4F1),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.2,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.25),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    '$dHora • ${formatoMoneda(dMonto)} ($dVentas ventas)',
+                                    style: const TextStyle(
+                                      color: Color(0xFFF0F4F1),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 72,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children:
-                                    puntosGrafico.asMap().entries.map((entry) {
-                                  final idx = entry.key;
-                                  final p = entry.value;
-                                  final bool isDestacado = idx == idxDestacado;
-                                  double factor = maxMonto > 0
-                                      ? (p['monto'] / maxMonto)
-                                      : 0.0;
-                                  double factorAltura = math.max(0.12, factor);
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                height: 72,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children:
+                                      puntosGrafico.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final p = entry.value;
+                                    final bool isDestacado = idx == idxFinal;
+                                    final double monto =
+                                        (p['monto'] as num).toDouble();
+                                    double factor = maxMonto > 0
+                                        ? (monto / maxMonto)
+                                        : 0.0;
+                                    double factorAltura = monto > 0
+                                        ? math.max(0.15, factor)
+                                        : 0.06;
+                                    final String etiqueta = p['etiqueta'] ?? '';
 
-                                  return Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 5),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          Expanded(
-                                            child: Align(
-                                              alignment: Alignment.bottomCenter,
-                                              child: FractionallySizedBox(
-                                                heightFactor: factorAltura,
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    color: isDestacado
-                                                        ? AppColors.brightGreen
-                                                        : (ThemeManager.instance.isDarkMode
-                                                            ? const Color(0xFF2C2C2E)
-                                                            : AppColors.secondarySurface),
-                                                    borderRadius:
-                                                        const BorderRadius
-                                                            .vertical(
-                                                      top: Radius.circular(4),
+                                    return Expanded(
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () {
+                                          setState(() {
+                                            _indiceHoraSeleccionada = idx;
+                                          });
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 2.0),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              Expanded(
+                                                child: Align(
+                                                  alignment:
+                                                      Alignment.bottomCenter,
+                                                  child: FractionallySizedBox(
+                                                    heightFactor: factorAltura,
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        color: isDestacado && monto > 0
+                                                            ? AppColors.brightGreen
+                                                            : (monto > 0
+                                                                ? AppColors.brightGreen
+                                                                    .withOpacity(0.6)
+                                                                : (ThemeManager.instance.isDarkMode
+                                                                    ? const Color(
+                                                                        0xFF2C2C2E)
+                                                                    : AppColors
+                                                                        .secondarySurface)),
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .vertical(
+                                                          top: Radius.circular(3),
+                                                        ),
+                                                        border: isDestacado
+                                                            ? Border.all(
+                                                                color: Colors.white
+                                                                    .withOpacity(
+                                                                        0.5),
+                                                                width: 1,
+                                                              )
+                                                            : null,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
+                                              const SizedBox(height: 4),
+                                              SizedBox(
+                                                height: 12,
+                                                child: Text(
+                                                  etiqueta,
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.visible,
+                                                  style: TextStyle(
+                                                    color: isDestacado && monto > 0
+                                                        ? AppColors.brightGreen
+                                                        : AppColors.textSecondary,
+                                                    fontSize: 8.5,
+                                                    fontWeight: isDestacado && monto > 0
+                                                        ? FontWeight.bold
+                                                        : FontWeight.normal,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            p['hora'],
-                                            style: TextStyle(
-                                              color: isDestacado
-                                                  ? AppColors.brightGreen
-                                                  : AppColors.textSecondary,
-                                              fontSize: 9,
-                                              fontWeight: isDestacado
-                                                  ? FontWeight.bold
-                                                  : FontWeight.normal,
-                                            ),
-                                          ),
-                                        ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                }).toList(),
+                                    );
+                                  }).toList(),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          );
+                        },
                       ),
+                    ),
 
                     const SizedBox(height: 8),
 

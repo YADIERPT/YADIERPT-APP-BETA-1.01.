@@ -91,7 +91,12 @@ class _InicioVistaState extends State<InicioVista> {
 
   void _navegarA(int indice, {String? highlightProductId}) {
     if (indice == 2 && highlightProductId != null) {
-      _paginas[2] = InventarioVista(highlightProductId: highlightProductId);
+      _paginas[2] = InventarioVista(
+        highlightProductId: highlightProductId,
+        onHighlightConsumido: () {
+          _paginas[2] = const InventarioVista();
+        },
+      );
     }
     if (_indiceActual != indice || highlightProductId != null) {
       _historialTabs.add(indice);
@@ -364,6 +369,9 @@ class _InicioVistaState extends State<InicioVista> {
                                 NotificacionesStockSheet.mostrar(
                                   context: context,
                                   productosBajoStock: productosBajoStock,
+                                  onSeleccionarProducto: (prod) {
+                                    _navegarA(2, highlightProductId: prod.id);
+                                  },
                                   onNavegarAInventario: () {
                                     _navegarA(2);
                                   },
