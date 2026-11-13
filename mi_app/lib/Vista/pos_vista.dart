@@ -99,9 +99,10 @@ class _PosVistaState extends State<PosVista> {
   void _intentarAgregarAlCarrito(Producto producto) {
     try {
       context.read<ControladorVentas>().agregarArticulo(producto, 1);
-      MotorFeedback.feedbackExito();
+      MotorFeedback.vibracionMedia();
     } catch (e) {
-      MotorFeedback.feedbackError();
+      MotorFeedback.vibracionError();
+      MotorFeedback.reproducirError();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),

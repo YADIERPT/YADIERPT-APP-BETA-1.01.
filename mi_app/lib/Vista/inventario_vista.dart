@@ -15,11 +15,17 @@ import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Modelos/producto.dart';
+import '../Servicios/motor_feedback.dart';
 import '../Tema/app_theme.dart';
 import '../Utilidades/debouncer.dart';
 
 class InventarioVista extends StatefulWidget {
-  const InventarioVista({super.key});
+  final String? highlightProductId;
+
+  const InventarioVista({
+    super.key,
+    this.highlightProductId,
+  });
 
   @override
   State<InventarioVista> createState() => _InventarioVistaState();
@@ -32,18 +38,83 @@ class _InventarioVistaState extends State<InventarioVista> {
   final TextEditingController _busquedaController = TextEditingController();
   final Debouncer _busquedaDebouncer =
       Debouncer(delay: const Duration(milliseconds: 300));
+  late final ScrollController _scrollController;
+  final Map<String, GlobalKey> _cardKeys = {};
 
   @override
   void initState() {
     super.initState();
-    _cargarInventario();
+    _scrollController = ScrollController();
+    _cargarInventario().then((_) {
+      if (widget.highlightProductId != null && mounted) {
+        _iniciarAutoScrollHaciaProducto(widget.highlightProductId!);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant InventarioVista oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.highlightProductId != null &&
+        widget.highlightProductId != oldWidget.highlightProductId) {
+      _iniciarAutoScrollHaciaProducto(widget.highlightProductId!);
+    }
   }
 
   @override
   void dispose() {
     _busquedaDebouncer.dispose();
     _busquedaController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Ejecuta un auto-scroll suave hacia la tarjeta del producto especificado
+  /// y garantiza su visibilidad usando Scrollable.ensureVisible o cálculo de offset aproximado.
+  void _iniciarAutoScrollHaciaProducto(String prodId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
+
+      final key = _cardKeys[prodId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeInOutCubic,
+          alignment: 0.25,
+        );
+        return;
+      }
+
+      // Si la tarjeta está fuera del viewport inicial de SliverGrid (carga perezosa):
+      final cInv = context.read<ControladorInventario>();
+      final int index = cInv.productos.indexWhere((p) => p.id == prodId);
+      if (index != -1 && _scrollController.hasClients) {
+        final double estimatedRow = (index / 2).floorToDouble();
+        final double estimatedOffset = (estimatedRow * 254.0) + 180.0;
+        final double targetOffset = estimatedOffset.clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        );
+
+        await _scrollController.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOutCubic,
+        );
+
+        if (mounted && _cardKeys[prodId]?.currentContext != null) {
+          Scrollable.ensureVisible(
+            _cardKeys[prodId]!.currentContext!,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            alignment: 0.25,
+          );
+        }
+      }
+    });
   }
 
   /// Efecto Debounce de 300 ms: cancela temporizadores previos y solo filtra
@@ -171,6 +242,8 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   void _abrirSugerenciasIA() {
+    MotorFeedback.dobleVibracion();
+    MotorFeedback.reproducirAiBoot();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -410,6 +483,7 @@ class _InventarioVistaState extends State<InventarioVista> {
               displacement: 40.0,
               onRefresh: _handleRefresh,
               child: CustomScrollView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
@@ -519,6 +593,7 @@ class _InventarioVistaState extends State<InventarioVista> {
                                   value: _verDeshabilitados,
                                   activeColor: AppColors.amber,
                                   onChanged: (val) async {
+                                    MotorFeedback.vibracionLigera();
                                     setState(() => _verDeshabilitados = val);
                                     await context.read<ControladorInventario>().cargarProductos(
                                       soloActivos: !val,
@@ -601,11 +676,18 @@ class _InventarioVistaState extends State<InventarioVista> {
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           final prod = productos[index];
+                          final cardKey = _cardKeys.putIfAbsent(
+                            prod.id,
+                            () => GlobalKey(),
+                          );
                           return RepaintBoundary(
+                            key: cardKey,
                             child: TarjetaProductoInventario(
                               prod: prod,
                               rolActual: rolActual,
                               puedeModificar: puedeModificar,
+                              resaltado: prod.id == widget.highlightProductId,
+                              highlightProductId: widget.highlightProductId,
                               onEditar: () => _abrirEditarProducto(prod),
                               onAjustar: () => _abrirAjuste(prod),
                               onBorrar: () => _abrirDeshabilitarProducto(prod),

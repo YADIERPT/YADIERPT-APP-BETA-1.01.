@@ -8,6 +8,7 @@ import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
 import '../Constantes/limites.dart';
 import '../Servicios/servicio_imagen.dart';
+import '../Servicios/motor_feedback.dart';
 
 class NuevoLoteVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -143,6 +144,7 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
           notas: notas,
         );
         await widget.controladorInventario.agregarProducto(nuevo);
+        MotorFeedback.feedbackGuardar();
         if (mounted) {
           Navigator.pop(context);
           _mostrarToast('Producto agregado exitosamente');

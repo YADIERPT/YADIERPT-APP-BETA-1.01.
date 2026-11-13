@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../IA/Controladores/controlador_ia_compras.dart';
+import '../../Servicios/motor_feedback.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
 
@@ -266,7 +267,10 @@ class ResumenInventarioHeader extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => onFiltroSeleccionado(clave),
+        onTap: () {
+          MotorFeedback.vibracionLigera();
+          onFiltroSeleccionado(clave);
+        },
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),

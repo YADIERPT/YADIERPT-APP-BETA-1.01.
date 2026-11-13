@@ -117,14 +117,24 @@ class _VentaVistaState extends State<VentaVista> {
     if (_cobrando) return;
 
     final venta = widget.controladorVentas.ventaActual;
-    if (venta == null || venta.articulos.isEmpty) return;
+    if (venta == null || venta.articulos.isEmpty) {
+      MotorFeedback.vibracionError();
+      MotorFeedback.reproducirError();
+      _mostrarAviso(context, 'El ticket está vacío. Agrega al menos un producto.');
+      return;
+    }
 
     final double total = venta.total;
     // Sanitización rigurosa de comas antes de convertir a double
     final String textoLimpio =
         _montoRecibidoController.text.replaceAll(',', '').trim();
     final double recibido = double.tryParse(textoLimpio) ?? 0.0;
-    if (recibido < total) return;
+    if (recibido < total) {
+      MotorFeedback.vibracionError();
+      MotorFeedback.reproducirError();
+      _mostrarAviso(context, 'El monto recibido debe ser mayor o igual al total.');
+      return;
+    }
     final double cambio = recibido - total;
 
     setState(() {
@@ -134,6 +144,9 @@ class _VentaVistaState extends State<VentaVista> {
     try {
       // Completamos la venta en el controlador
       await widget.controladorVentas.completarVentaActual();
+
+      MotorFeedback.vibracionFuerte();
+      MotorFeedback.reproducirCash();
 
       if (!mounted) return;
 
@@ -274,6 +287,8 @@ class _VentaVistaState extends State<VentaVista> {
         ),
       );
     } catch (e) {
+      MotorFeedback.vibracionError();
+      MotorFeedback.reproducirError();
       if (mounted) {
         _mostrarAviso(context, 'Error al procesar la venta: $e');
       }

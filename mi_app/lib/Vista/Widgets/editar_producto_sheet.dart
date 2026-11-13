@@ -7,6 +7,7 @@ import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
 import '../../Constantes/limites.dart';
 import '../../Servicios/servicio_imagen.dart';
+import '../../Servicios/motor_feedback.dart';
 
 class EditarProductoSheet extends StatefulWidget {
   final Producto producto;
@@ -233,6 +234,7 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
       await widget.controladorInventario.actualizarProductoCompleto(
         productoActualizado,
       );
+      MotorFeedback.feedbackGuardar();
       widget.onActualizado();
       if (mounted) {
         Navigator.pop(context);

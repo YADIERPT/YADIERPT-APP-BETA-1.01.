@@ -53,7 +53,8 @@ class _InicioVistaState extends State<InicioVista> {
       switch (indice) {
         case 0:
           _paginas[0] = DashboardVista(
-            alNavegar: (idx) => _navegarA(idx),
+            alNavegar: (idx, {highlightProductId}) =>
+                _navegarA(idx, highlightProductId: highlightProductId),
           );
           break;
         case 1:
@@ -88,8 +89,11 @@ class _InicioVistaState extends State<InicioVista> {
     );
   }
 
-  void _navegarA(int indice) {
-    if (_indiceActual != indice) {
+  void _navegarA(int indice, {String? highlightProductId}) {
+    if (indice == 2 && highlightProductId != null) {
+      _paginas[2] = InventarioVista(highlightProductId: highlightProductId);
+    }
+    if (_indiceActual != indice || highlightProductId != null) {
       _historialTabs.add(indice);
       setState(() {
         _indiceActual = indice;

@@ -11,10 +11,12 @@ import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../historial_ventas_vista.dart';
 import '../deudores_vista.dart';
+import '../inventario_vista.dart';
 import '../../Controladores/controlador_cuentas_por_cobrar.dart';
+import '../../Servicios/motor_feedback.dart';
 
 class DashboardVista extends StatefulWidget {
-  final Function(int)? alNavegar;
+  final Function? alNavegar;
 
   const DashboardVista({
     super.key,
@@ -26,6 +28,37 @@ class DashboardVista extends StatefulWidget {
 }
 
 class _DashboardVistaState extends State<DashboardVista> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MotorFeedback.reproducirStartupUnaVez();
+    });
+  }
+
+  void _navegarA(int indice, {String? highlightProductId}) {
+    if (widget.alNavegar != null) {
+      if (highlightProductId != null) {
+        try {
+          Function.apply(widget.alNavegar!, [indice], {#highlightProductId: highlightProductId});
+          return;
+        } catch (_) {}
+      }
+      try {
+        Function.apply(widget.alNavegar!, [indice]);
+        return;
+      } catch (_) {}
+    }
+    if (indice == 2 && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => InventarioVista(highlightProductId: highlightProductId),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleRefresh() async {
     await context.read<ControladorInicio>().inicializarDatosOffline();
     await Future.delayed(const Duration(milliseconds: 300));
@@ -107,6 +140,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         highlightColor: AppColors.primary.withValues(alpha: 0.06),
                         onTap: tienePermisoFinanzas
                             ? () {
+                                MotorFeedback.feedbackIngresos();
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -495,7 +529,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => widget.alNavegar?.call(1),
+                            onPressed: () => _navegarA(1),
                             icon: const Icon(Icons.point_of_sale_rounded, size: 18),
                             label: const Text('Ir al POS'),
                             style: ElevatedButton.styleFrom(
@@ -512,7 +546,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => widget.alNavegar?.call(2),
+                            onPressed: () => _navegarA(2),
                             icon: const Icon(Icons.spa_outlined, size: 18),
                             label: const Text('Inventario'),
                             style: OutlinedButton.styleFrom(
@@ -643,7 +677,10 @@ class _DashboardVistaState extends State<DashboardVista> {
                                 ),
                               ),
                               ElevatedButton(
-                                onPressed: () => widget.alNavegar?.call(2),
+                                onPressed: () {
+                                  MotorFeedback.vibracionLigera();
+                                  _navegarA(2, highlightProductId: prod.id);
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.warning,
                                   foregroundColor: AppColors.onWarning,

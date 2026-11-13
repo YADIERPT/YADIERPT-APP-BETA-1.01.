@@ -59,6 +59,7 @@ import 'package:mi_app/IA/Controladores/controlador_ia_compras.dart';
 import 'package:mi_app/main.dart' show ViverApp;
 import 'package:mi_app/Modelos/configuracion.dart';
 import 'package:mi_app/Servicios/motor_feedback.dart';
+import 'package:mi_app/Vista/sugerencias_ia_vista.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 void main() {
@@ -1538,7 +1539,7 @@ void main() {
           rol: RolUsuario.duena,
         ),
       );
-      final ctrlHw = ControladorHardware();
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
       final ctrlIA = ControladorIACompras(controladorInventario: ctrlInv);
 
       await tester.pumpWidget(
@@ -2360,7 +2361,7 @@ void main() {
 
     testWidgets('HardwareVista muestra estado Conectada en verde y habilita Ticket Prueba', (tester) async {
       final ctrlBio = ControladorBiometrico();
-      final ctrlHw = ControladorHardware();
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
 
       // Forzamos conexión activa
       ctrlHw.config.impresoraConectada = true;
@@ -2392,7 +2393,7 @@ void main() {
 
     testWidgets('HardwareVista deshabilita Ticket Prueba cuando la impresora está desconectada', (tester) async {
       final ctrlBio = ControladorBiometrico();
-      final ctrlHw = ControladorHardware();
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
 
       // Estado desconectado
       ctrlHw.config.impresoraConectada = false;
@@ -2421,8 +2422,8 @@ void main() {
       expect(botonPrueba.onPressed, isNull);
     });
 
-    testWidgets('HardwareVista (KISS) oculta lector biométrico/TCP/Serial y muestra solo tarjeta ESC/POS esencial', (tester) async {
-      final ctrlHw = ControladorHardware();
+    testWidgets('HardwareVista usa SegmentedButton y AnimatedSwitcher en tarjeta ESC/POS (KISS) y oculta biométrico/Serial', (tester) async {
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
 
       tester.view.physicalSize = const Size(800, 400);
       tester.view.devicePixelRatio = 1.0;
@@ -2440,8 +2441,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      // Única tarjeta requerida
+      // Tarjeta única ESC/POS con selector modular por pestañas y AnimatedSwitcher
       expect(find.text('IMPRESORA TÉRMICA DE TICKETS (ESC/POS)'), findsOneWidget);
+      expect(find.byType(SegmentedButton<String>), findsOneWidget);
+      expect(find.byType(AnimatedSwitcher), findsOneWidget);
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('WiFi / Red'), findsOneWidget);
+      expect(find.text('Cable USB'), findsOneWidget);
+
+      // En pestaña por defecto (Bluetooth): diseño actual visible y demás sub-vistas ocultas
       expect(find.text('Desconectada'), findsOneWidget);
       expect(find.text('Ancho de Rollo'), findsOneWidget);
       expect(find.text('58 mm'), findsOneWidget);
@@ -2449,13 +2457,95 @@ void main() {
       expect(find.text('Buscar Impresora'), findsOneWidget);
       expect(find.text('Ticket Prueba'), findsOneWidget);
 
-      // Eliminado por completo: lector de huellas y sus pestañas TCP/USB/Serial
       expect(find.text('LECTOR DE HUELLAS DACTILARES'), findsNothing);
-      expect(find.text('WiFi / Red'), findsNothing);
-      expect(find.text('Cable USB'), findsNothing);
       expect(find.textContaining('Puerto Serial'), findsNothing);
       expect(find.textContaining('Dirección IP'), findsNothing);
       expect(find.byType(TextField), findsNothing);
+      expect(find.text('Detectar Impresora'), findsNothing);
+    });
+
+    testWidgets('HardwareVista cambia dinámicamente entre Bluetooth, WiFi / Red y Cable USB sin desbordamientos', (tester) async {
+      await MotorFeedback.restablecerParaPruebas();
+      final List<String> sonidos = [];
+      MotorFeedback.reproductorPruebas = (ruta) async => sonidos.add(ruta);
+      addTearDown(() async {
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
+      ctrlHw.inyectarDispositivosPrueba([
+        const DispositivoImpresora(
+          nombre: 'Epson TM-T20 USB',
+          macOUrl: 'usb://001',
+          tipo: 'usb',
+        ),
+      ]);
+
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.1)),
+            child: HardwareVista(controladorHardware: ctrlHw),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // 1. Cambiar a WiFi / Red -> Únicamente Dirección IP + Ancho de rollo + Guardar / Ticket Prueba
+      await tester.tap(find.text('WiFi / Red'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Dirección IP'), findsOneWidget);
+      expect(find.text('Ancho de Rollo'), findsOneWidget);
+      expect(find.text('Guardar'), findsOneWidget);
+      expect(find.text('Ticket Prueba'), findsOneWidget);
+      expect(find.text('Buscar Impresora'), findsNothing);
+      expect(find.text('Desconectada'), findsNothing);
+      expect(find.text('Detectar Impresora'), findsNothing);
+
+      // Validación de IP inválida y luego guardado válido
+      await tester.enterText(find.byType(TextField), '999.999.1.1');
+      await tester.tap(find.text('Guardar'));
+      await tester.pumpAndSettle();
+      expect(ctrlHw.config.impresoraTipo, isNot('wifi'));
+
+      await tester.enterText(find.byType(TextField), '192.168.1.55');
+      await tester.tap(find.text('58 mm'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Guardar'));
+      await tester.pumpAndSettle();
+      expect(ctrlHw.config.impresoraTipo, 'wifi');
+      expect(ctrlHw.config.wifiHost, '192.168.1.55');
+      expect(ctrlHw.config.impresoraAnchoPapel, '58mm');
+      expect(ctrlHw.config.impresoraConectada, isTrue);
+
+      // 2. Cambiar a Cable USB -> Texto OTG/USB y botón Detectar Impresora únicamente
+      await tester.tap(find.text('Cable USB'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('Conecta el cable OTG/USB de la impresora'), findsOneWidget);
+      expect(find.text('Detectar Impresora'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('Dirección IP'), findsNothing);
+      expect(find.text('Buscar Impresora'), findsNothing);
+      expect(find.text('Ancho de Rollo'), findsNothing);
+
+      await tester.tap(find.text('Detectar Impresora'));
+      await tester.pumpAndSettle();
+      expect(ctrlHw.config.impresoraTipo, 'usb');
+      expect(ctrlHw.config.impresoraNombre, 'Epson TM-T20 USB');
+      expect(ctrlHw.config.impresoraConectada, isTrue);
     });
   });
 
@@ -3671,7 +3761,7 @@ void main() {
       );
       final ctrlAuth = ControladorAutenticacion();
       final ctrlBio = ControladorBiometrico();
-      final ctrlHw = ControladorHardware();
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
 
       // 1. Iniciar sesión simulada como Empleado
       ctrlAuth.establecerUsuarioParaPruebas(
@@ -4204,7 +4294,7 @@ void main() {
         ),
       );
       final ctrlBio = ControladorBiometrico();
-      final ctrlHw = ControladorHardware();
+      final ctrlHw = ControladorHardware(persistirEnBd: false);
 
       await tester.pumpWidget(
         MultiProvider(
@@ -4283,5 +4373,400 @@ void main() {
       expect(haptics, ['HapticFeedbackType.lightImpact']);
     });
   });
+
+  group('MotorFeedback Precarga, Pool Concurrente e Inyección Estratégica', () {
+    test('precargar() registra los 4 sonidos, arma pool concurrente (3 por sonido) y dobleVibracion respeta preferencia', () async {
+      final List<String> precargados = [];
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.precargadorPruebas = (rutas) async {
+        precargados.addAll(rutas);
+      };
+
+      expect(MotorFeedback.estaPrecargado, isFalse);
+      await MotorFeedback.precargar();
+      await MotorFeedback.precargar(); // Idempotente: no recarga dos veces
+
+      expect(MotorFeedback.estaPrecargado, isTrue);
+      expect(precargados, [
+        'sounds/beep.mp3',
+        'sounds/cash.mp3',
+        'sounds/error.mp3',
+        'sounds/ai_boot.mp3',
+        'sounds/startup.mp3',
+        'sounds/save.mp3',
+        'sounds/coins.mp3',
+      ]);
+
+      for (final ruta in MotorFeedback.sonidosPrecargados) {
+        expect(
+          MotorFeedback.tamanoPoolParaPruebas(ruta),
+          MotorFeedback.tamanoPoolPorSonido,
+        );
+      }
+
+      // Verificar rotación round-robin en disparos rápidos cuando usa el pool
+      await MotorFeedback.reproducirBeep();
+      await MotorFeedback.reproducirBeep();
+      await MotorFeedback.reproducirBeep();
+      expect(MotorFeedback.cursorPoolParaPruebas(MotorFeedback.rutaBeep), 0);
+      await MotorFeedback.reproducirBeep();
+      expect(MotorFeedback.cursorPoolParaPruebas(MotorFeedback.rutaBeep), 1);
+
+      // Verificar hook de reproducción de los 4 sonidos y dobleVibracion
+      MotorFeedback.reproductorPruebas = (ruta) async {
+        sonidos.add(ruta);
+      };
+      await MotorFeedback.reproducirCash();
+      await MotorFeedback.reproducirAiBoot();
+      await MotorFeedback.dobleVibracion(intervalo: Duration.zero);
+
+      expect(sonidos, ['sounds/cash.mp3', 'sounds/ai_boot.mp3']);
+      expect(haptics, [
+        'HapticFeedbackType.mediumImpact',
+        'HapticFeedbackType.lightImpact',
+      ]);
+
+      // Si se desactiva vibración, dobleVibracion no emite pulsos
+      haptics.clear();
+      MotorFeedback.vibracionHabilitada = false;
+      await MotorFeedback.dobleVibracion(intervalo: Duration.zero);
+      expect(haptics, isEmpty);
+    });
+
+    testWidgets('PosVista emite vibracionMedia (HapticFeedback.mediumImpact) sin sonido al agregar al ticket y error al intentar exceder stock', (WidgetTester tester) async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async => sonidos.add(ruta);
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil(persistirEnBd: false);
+      cPerf.configuracion.aplicarIva = false;
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+
+      final prod = Producto(
+        id: 'POS_FB_01',
+        nombre: 'Suculenta Jade',
+        precioVenta: 95.0,
+        costo: 40.0,
+        cantidadEnInventario: 1,
+        tipo: 'planta',
+      );
+      cInv.establecerProductosParaPruebas([prod]);
+      cVentas.iniciarVenta();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+          ],
+          child: const MaterialApp(home: PosVista()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Agregar artículo desde TarjetaPosProducto -> únicamente mediumImpact (sin sonido)
+      await tester.tap(find.byType(TarjetaPosProducto).first);
+      await tester.pumpAndSettle();
+      expect(cVentas.totalArticulosEnCarrito, 1);
+      expect(find.text('Ver Ticket y Cobrar'), findsOneWidget);
+      expect(haptics, ['HapticFeedbackType.mediumImpact']);
+      expect(sonidos, isEmpty);
+
+      // 2. Intentar agregar más unidades sin stock disponible -> vibracionError + error.mp3
+      haptics.clear();
+      sonidos.clear();
+      await tester.tap(find.byType(TarjetaPosProducto).first);
+      await tester.pumpAndSettle();
+      expect(cVentas.totalArticulosEnCarrito, 1);
+      expect(haptics, ['HapticFeedbackType.heavyImpact']);
+      expect(sonidos, ['sounds/error.mp3']);
+    });
+
+    testWidgets('Modal de Cobro (VentaVista) emite vibracionFuerte + cash.mp3 solo si completarVentaActual retorna éxito, y error si falla', (WidgetTester tester) async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async => sonidos.add(ruta);
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil(persistirEnBd: false);
+      cPerf.configuracion.aplicarIva = false;
+      final prod = Producto(
+        id: 'COB_FB_01',
+        nombre: 'Ficus Lyrata',
+        precioVenta: 200.0,
+        costo: 90.0,
+        cantidadEnInventario: 5,
+        tipo: 'planta',
+      );
+      cInv.establecerProductosParaPruebas([prod]);
+
+      // Caso A: completarVentaActual falla lanzando excepción -> error (sin cash.mp3)
+      final cVentasFallo = _TestControladorVentasCobro(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+        debeFallarCobro: true,
+      );
+      cVentasFallo.iniciarVenta();
+      cVentasFallo.agregarArticulo(prod, 1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentasFallo),
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+          ],
+          child: MaterialApp(
+            home: VentaVista(
+              controladorVentas: cVentasFallo,
+              controladorInventario: cInv,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '200');
+      await tester.pumpAndSettle();
+
+      final cobrarBtnFallo = find.textContaining('Cobrar \$200');
+      await tester.ensureVisible(cobrarBtnFallo);
+      await tester.tap(cobrarBtnFallo);
+      await tester.pumpAndSettle();
+
+      expect(haptics, ['HapticFeedbackType.heavyImpact']);
+      expect(sonidos, ['sounds/error.mp3']);
+      expect(find.text('¡Venta Exitosa!'), findsNothing);
+
+      // Caso B: completarVentaActual retorna éxito -> vibracionFuerte + cash.mp3
+      haptics.clear();
+      sonidos.clear();
+      final cVentasExito = _TestControladorVentasCobro(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+        debeFallarCobro: false,
+      );
+      cVentasExito.iniciarVenta();
+      cVentasExito.agregarArticulo(prod, 1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentasExito),
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+          ],
+          child: MaterialApp(
+            home: VentaVista(
+              controladorVentas: cVentasExito,
+              controladorInventario: cInv,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '200');
+      await tester.pumpAndSettle();
+
+      final cobrarBtnExito = find.textContaining('Cobrar \$200');
+      await tester.ensureVisible(cobrarBtnExito);
+      await tester.tap(cobrarBtnExito);
+      await tester.pumpAndSettle();
+
+      expect(haptics, ['HapticFeedbackType.heavyImpact']);
+      expect(sonidos, ['sounds/cash.mp3']);
+      expect(find.text('¡Venta Exitosa!'), findsOneWidget);
+    });
+
+    testWidgets('Botón de Sugerencias IA en InventarioVista emite dobleVibracion + ai_boot.mp3 al presionarlo', (WidgetTester tester) async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async => sonidos.add(ruta);
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      final cInv = ControladorInventario();
+      final cFin = ControladorFinanzas();
+      final cPerf = ControladorPerfil(persistirEnBd: false);
+      final cVentas = ControladorVentas(
+        controladorInventario: cInv,
+        controladorFinanzas: cFin,
+        controladorPerfil: cPerf,
+      );
+      final cAuth = ControladorAutenticacion();
+      cAuth.establecerUsuarioParaPruebas(
+        Colaborador(
+          id: 'VO-8002',
+          nombre: 'Admin IA',
+          clave: 'hash',
+          rol: RolUsuario.duena,
+        ),
+      );
+      final cIA = ControladorIACompras(controladorInventario: cInv);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ControladorInventario>.value(value: cInv),
+            ChangeNotifierProvider<ControladorFinanzas>.value(value: cFin),
+            ChangeNotifierProvider<ControladorVentas>.value(value: cVentas),
+            ChangeNotifierProvider<ControladorAutenticacion>.value(value: cAuth),
+            ChangeNotifierProvider<ControladorIACompras>.value(value: cIA),
+          ],
+          child: const MaterialApp(home: InventarioVista()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final btnIA = find.text('Ver análisis IA');
+      expect(btnIA, findsOneWidget);
+      await tester.ensureVisible(btnIA);
+      await tester.tap(btnIA);
+      await tester.pumpAndSettle();
+
+      expect(sonidos, ['sounds/ai_boot.mp3']);
+      expect(haptics, [
+        'HapticFeedbackType.mediumImpact',
+        'HapticFeedbackType.lightImpact',
+      ]);
+      expect(find.byType(SugerenciasIAVista), findsOneWidget);
+    });
+
+    test('MotorFeedback mapeos específicos reproducen sus correspondientes pares de audio y háptica', () async {
+      final List<String> haptics = [];
+      final List<String> sonidos = [];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments.toString());
+        }
+        return null;
+      });
+      await MotorFeedback.restablecerParaPruebas();
+      MotorFeedback.reproductorPruebas = (ruta) async => sonidos.add(ruta);
+
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+        await MotorFeedback.restablecerParaPruebas();
+      });
+
+      // 1. Sonido de inicio (Boot) y reproducirStartupUnaVez
+      await MotorFeedback.reproducirStartupUnaVez();
+      await MotorFeedback.reproducirStartupUnaVez();
+      expect(sonidos, ['sounds/startup.mp3']);
+
+      // 2. Guardar / Editar Producto
+      haptics.clear();
+      sonidos.clear();
+      await MotorFeedback.feedbackGuardar();
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(sonidos, ['sounds/save.mp3']);
+
+      // 3. Navegar a Ingresos Totales
+      haptics.clear();
+      sonidos.clear();
+      await MotorFeedback.feedbackIngresos();
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(sonidos, ['sounds/coins.mp3']);
+
+      // 4. Cobrar Venta o Registrar Abono
+      haptics.clear();
+      sonidos.clear();
+      await MotorFeedback.feedbackCobro();
+      expect(haptics, ['HapticFeedbackType.heavyImpact']);
+      expect(sonidos, ['sounds/cash.mp3']);
+    });
+  });
+}
+
+class _TestControladorVentasCobro extends ControladorVentas {
+  final bool debeFallarCobro;
+
+  _TestControladorVentasCobro({
+    required super.controladorInventario,
+    required super.controladorFinanzas,
+    required super.controladorPerfil,
+    required this.debeFallarCobro,
+  });
+
+  @override
+  Future<void> completarVentaActual() async {
+    if (debeFallarCobro) {
+      throw Exception('Error simulado en cobro');
+    }
+  }
 }
 

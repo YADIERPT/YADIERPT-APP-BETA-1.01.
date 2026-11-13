@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../Tema/app_theme.dart';
 import '../Controladores/controlador_perfil.dart';
 import '../Constantes/limites.dart';
+import '../Servicios/motor_feedback.dart';
 
 class ConfiguracionFinancieraVista extends StatefulWidget {
   final ControladorPerfil controladorPerfil;
@@ -216,6 +217,7 @@ class _ConfiguracionFinancieraVistaState
                       value: _aplicarIva,
                       activeThumbColor: AppColors.primary,
                       onChanged: (val) async {
+                        MotorFeedback.vibracionLigera();
                         await widget.controladorPerfil.alternarAplicarIva(val);
                         setState(() => _aplicarIva = val);
                       },

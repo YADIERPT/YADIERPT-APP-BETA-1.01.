@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,7 @@ import 'Tema/app_theme.dart';
 import 'Vista/splash_vista.dart';
 
 import 'BaseDatos/base_datos.dart';
+import 'Servicios/motor_feedback.dart';
 import 'Servicios/secure_storage_service.dart';
 import 'Controladores/controlador_inicio.dart';
 import 'Controladores/controlador_inventario.dart';
@@ -79,6 +82,8 @@ void main() async {
   try {
     await controladorInicio.inicializarDatosOffline();
     await ThemeManager.instance.inicializar();
+    await MotorFeedback.precargar();
+    unawaited(MotorFeedback.reproducirStartupUnaVez());
     if (controladorInventario.productos.isEmpty) {
       final monstera = Producto(
         id: 'BOT-012',

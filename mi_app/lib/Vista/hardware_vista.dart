@@ -4,10 +4,11 @@ import '../Tema/app_theme.dart';
 import '../Controladores/controlador_biometrico.dart';
 import '../Controladores/controlador_hardware.dart';
 import '../Modelos/configuracion_hardware.dart';
+import '../Servicios/motor_feedback.dart';
 
-/// Vista minimalista de Hardware POS (KISS):
-/// Enfocada exclusivamente en la impresora térmica de tickets Bluetooth ESC/POS
-/// (estado de conexión, ancho de rollo 58mm/80mm, escaneo y ticket de prueba).
+/// Vista modular de Hardware POS (KISS):
+/// Tarjeta unificada de impresora térmica ESC/POS con selector por pestañas
+/// ("Bluetooth", "WiFi / Red", "Cable USB") y transición animada entre modos.
 class HardwareVista extends StatefulWidget {
   final ControladorBiometrico? controladorBiometrico;
   final ControladorHardware? controladorHardware;
@@ -23,20 +24,53 @@ class HardwareVista extends StatefulWidget {
 }
 
 class _HardwareVistaState extends State<HardwareVista> {
-  late final ControladorHardware _hardwareCtrl;
+  static final RegExp _regexIpv4 = RegExp(
+    r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$',
+  );
 
+  late final ControladorHardware _hardwareCtrl;
+  late final TextEditingController _ipController;
+
+  String _tipoConexion = 'bluetooth';
   String _anchoPapelImpresora = '80mm';
   String _impresoraNombre = '';
   String _impresoraMac = '';
   bool _imprimiendoPrueba = false;
+  bool _detectandoUsb = false;
+  bool _ipEditadaManualmente = false;
+
+  String _normalizarTipo(String tipo) {
+    switch (tipo) {
+      case 'wifi':
+      case 'red':
+        return 'wifi';
+      case 'usb':
+        return 'usb';
+      default:
+        return 'bluetooth';
+    }
+  }
+
+  bool _esDireccionIpValida(String valor) {
+    final coincidencia = _regexIpv4.firstMatch(valor.trim());
+    if (coincidencia == null) return false;
+    for (int i = 1; i <= 4; i++) {
+      final octeto = int.tryParse(coincidencia.group(i) ?? '');
+      if (octeto == null || octeto < 0 || octeto > 255) return false;
+    }
+    return true;
+  }
 
   @override
   void initState() {
     super.initState();
     _hardwareCtrl = widget.controladorHardware ?? ControladorHardware();
-    _anchoPapelImpresora = _hardwareCtrl.config.impresoraAnchoPapel;
-    _impresoraNombre = _hardwareCtrl.config.impresoraNombre;
-    _impresoraMac = _hardwareCtrl.config.impresoraMac;
+    final hw = _hardwareCtrl.config;
+    _tipoConexion = _normalizarTipo(hw.impresoraTipo);
+    _anchoPapelImpresora = hw.impresoraAnchoPapel;
+    _impresoraNombre = hw.impresoraNombre;
+    _impresoraMac = hw.impresoraMac;
+    _ipController = TextEditingController(text: hw.wifiHost);
 
     _hardwareCtrl.addListener(_sincronizarEstadoHardware);
     _cargarConfiguracionHardware();
@@ -44,10 +78,14 @@ class _HardwareVistaState extends State<HardwareVista> {
 
   void _sincronizarEstadoHardware() {
     if (!mounted) return;
+    final hw = _hardwareCtrl.config;
     setState(() {
-      _impresoraNombre = _hardwareCtrl.config.impresoraNombre;
-      _impresoraMac = _hardwareCtrl.config.impresoraMac;
-      _anchoPapelImpresora = _hardwareCtrl.config.impresoraAnchoPapel;
+      _impresoraNombre = hw.impresoraNombre;
+      _impresoraMac = hw.impresoraMac;
+      _anchoPapelImpresora = hw.impresoraAnchoPapel;
+      if (!_ipEditadaManualmente && hw.wifiHost.isNotEmpty) {
+        _ipController.text = hw.wifiHost;
+      }
     });
   }
 
@@ -57,20 +95,26 @@ class _HardwareVistaState extends State<HardwareVista> {
 
     final hw = _hardwareCtrl.config;
     setState(() {
+      _tipoConexion = _normalizarTipo(hw.impresoraTipo);
       _anchoPapelImpresora = hw.impresoraAnchoPapel;
       _impresoraNombre = hw.impresoraNombre;
       _impresoraMac = hw.impresoraMac;
+      if (!_ipEditadaManualmente) {
+        _ipController.text = hw.wifiHost;
+      }
     });
   }
 
   @override
   void dispose() {
     _hardwareCtrl.removeListener(_sincronizarEstadoHardware);
+    _ipController.dispose();
     super.dispose();
   }
 
   void _mostrarToast(String mensaje, {bool esError = false}) {
     if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -96,24 +140,75 @@ class _HardwareVistaState extends State<HardwareVista> {
     );
   }
 
-  Future<void> _guardarConfiguracionImpresora() async {
+  Future<void> _actualizarAnchoPapel(String valor) async {
+    setState(() => _anchoPapelImpresora = valor);
+    final nuevaConfigHw = _hardwareCtrl.config.copyWith(
+      impresoraAnchoPapel: valor,
+    );
+    await _hardwareCtrl.guardarConfiguracion(nuevaConfigHw);
+  }
+
+  Future<void> _guardarConfiguracionBluetooth() async {
     final nuevaConfigHw = _hardwareCtrl.config.copyWith(
       impresoraTipo: 'bluetooth',
       impresoraAnchoPapel: _anchoPapelImpresora,
       impresoraNombre: _impresoraNombre,
       impresoraMac: _impresoraMac,
     );
-
     await _hardwareCtrl.guardarConfiguracion(nuevaConfigHw);
+  }
+
+  Future<bool> _guardarConfiguracionWifi({bool mostrarToast = true}) async {
+    final ip = _ipController.text.trim();
+    if (!_esDireccionIpValida(ip)) {
+      MotorFeedback.feedbackError();
+      _mostrarToast(
+        'Ingresa una dirección IP válida (ej. 192.168.1.100).',
+        esError: true,
+      );
+      return false;
+    }
+
+    final nuevaConfigHw = _hardwareCtrl.config.copyWith(
+      impresoraTipo: 'wifi',
+      wifiHost: ip,
+      impresoraAnchoPapel: _anchoPapelImpresora,
+      impresoraNombre: 'Impresora WiFi ($ip)',
+      impresoraMac: ip,
+      impresoraConectada: true,
+    );
+    await _hardwareCtrl.guardarConfiguracion(nuevaConfigHw);
+    _ipEditadaManualmente = false;
+
+    if (mostrarToast) {
+      MotorFeedback.feedbackExito();
+      _mostrarToast(
+        'Impresora WiFi ($ip · $_anchoPapelImpresora) guardada con éxito.',
+      );
+    }
+    return true;
   }
 
   Future<void> _iniciarBusquedaImpresora() async {
     if (_hardwareCtrl.escaneandoImpresoras) return;
 
-    final diagnosticoBt = await _hardwareCtrl
-        .verificarPermisosYEstadoBluetooth();
+    final diagnosticoBt =
+        await _hardwareCtrl.verificarPermisosYEstadoBluetooth();
+    if (!diagnosticoBt['permisos']) {
+      if (mounted) {
+        MotorFeedback.feedbackError();
+        _mostrarToast(
+          diagnosticoBt['mensaje'] ??
+              'Permiso de "Dispositivos Cercanos" o "Ubicación" denegado. Concédelo en Ajustes para detectar impresoras.',
+          esError: true,
+        );
+      }
+      return;
+    }
+
     if (!diagnosticoBt['encendido']) {
       if (mounted) {
+        MotorFeedback.feedbackError();
         _mostrarToast(
           'El adaptador Bluetooth está apagado en este dispositivo. Por favor actívalo para buscar impresoras.',
           esError: true,
@@ -135,34 +230,110 @@ class _HardwareVistaState extends State<HardwareVista> {
 
     final DispositivoImpresora? seleccionada =
         await showModalBottomSheet<DispositivoImpresora>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (modalCtx) => ModalSeleccionImpresoraBluetooth(
-            controladorHardware: _hardwareCtrl,
-            impresoras: impresoras,
-          ),
-        );
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) => ModalSeleccionImpresoraBluetooth(
+        controladorHardware: _hardwareCtrl,
+        impresoras: impresoras,
+      ),
+    );
 
     if (seleccionada != null && mounted) {
       setState(() {
         _impresoraNombre = seleccionada.nombre;
         _impresoraMac = seleccionada.macOUrl;
       });
-      await _guardarConfiguracionImpresora();
+      await _guardarConfiguracionBluetooth();
       _mostrarToast(
         'Impresora "${seleccionada.nombre}" conectada y guardada con éxito.',
       );
     }
   }
 
+  Future<void> _ejecutarTicketPrueba({
+    required String mensajeExito,
+    String? mensajeError,
+  }) async {
+    if (!mounted) return;
+    setState(() => _imprimiendoPrueba = true);
+    final exito = await _hardwareCtrl.imprimirTicketPrueba(context: context);
+    if (!mounted) return;
+    setState(() => _imprimiendoPrueba = false);
+
+    if (exito) {
+      MotorFeedback.feedbackExito();
+      _mostrarToast(mensajeExito);
+    } else if (mensajeError != null) {
+      MotorFeedback.feedbackError();
+      _mostrarToast(mensajeError, esError: true);
+    }
+  }
+
+  Future<void> _probarImpresionBluetooth() async {
+    final bool btConectada = _hardwareCtrl.config.impresoraConectada &&
+        _normalizarTipo(_hardwareCtrl.config.impresoraTipo) == 'bluetooth';
+    if (!btConectada) {
+      _mostrarToast(
+        'Debes conectar una impresora térmica Bluetooth antes de imprimir la prueba.',
+        esError: true,
+      );
+      return;
+    }
+
+    await _guardarConfiguracionBluetooth();
+    await _ejecutarTicketPrueba(
+      mensajeExito:
+          'Ticket de prueba enviado a la impresora térmica ($_anchoPapelImpresora).',
+    );
+  }
+
+  Future<void> _probarImpresionWifi() async {
+    final guardada = await _guardarConfiguracionWifi(mostrarToast: false);
+    if (!guardada) return;
+
+    final ip = _ipController.text.trim();
+    await _ejecutarTicketPrueba(
+      mensajeExito:
+          'Ticket de prueba enviado por WiFi ($ip · $_anchoPapelImpresora).',
+      mensajeError:
+          'No se pudo conectar con la impresora WiFi ($ip:9100). Verifica la IP y que esté encendida.',
+    );
+  }
+
+  Future<void> _detectarImpresoraUsb() async {
+    if (_detectandoUsb) return;
+    setState(() => _detectandoUsb = true);
+
+    final detectadas = await _hardwareCtrl.escanearImpresorasUsb();
+    if (!mounted) return;
+    setState(() => _detectandoUsb = false);
+
+    if (detectadas.isEmpty) {
+      MotorFeedback.feedbackError();
+      _mostrarToast(
+        'No se detectó ninguna impresora conectada por cable OTG/USB.',
+        esError: true,
+      );
+      return;
+    }
+
+    final imp = detectadas.firstWhere(
+      (d) => d.esPredeterminada,
+      orElse: () => detectadas.first,
+    );
+    await _hardwareCtrl.vincularImpresora(imp);
+    if (!mounted) return;
+    MotorFeedback.feedbackExito();
+    _mostrarToast(
+      'Impresora USB "${imp.nombre}" detectada y conectada.',
+    );
+  }
+
   Widget _buildAnchoChip(String valor, String label) {
     final bool seleccionado = _anchoPapelImpresora == valor;
     return InkWell(
-      onTap: () {
-        setState(() => _anchoPapelImpresora = valor);
-        _guardarConfiguracionImpresora();
-      },
+      onTap: () => _actualizarAnchoPapel(valor),
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -187,33 +358,443 @@ class _HardwareVistaState extends State<HardwareVista> {
     );
   }
 
-  Future<void> _probarImpresionTicket() async {
-    if (!_hardwareCtrl.config.impresoraConectada) {
-      _mostrarToast(
-        'Debes conectar una impresora térmica Bluetooth antes de imprimir la prueba.',
-        esError: true,
-      );
-      return;
-    }
+  Widget _buildSelectorAnchoRollo() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.secondarySurface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  Icons.straighten_rounded,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Ancho de Rollo',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAnchoChip('58mm', '58 mm'),
+              const SizedBox(width: 8),
+              _buildAnchoChip('80mm', '80 mm'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-    setState(() => _imprimiendoPrueba = true);
+  Widget _buildBotonAccion({
+    required String etiqueta,
+    required IconData icono,
+    required VoidCallback? onPressed,
+    bool cargando = false,
+    double alto = 46,
+    bool secundario = false,
+  }) {
+    final bool habilitado = onPressed != null;
+    final Color fondo = secundario
+        ? AppColors.secondarySurface
+        : (habilitado ? AppColors.primary : AppColors.secondarySurface);
+    final Color primerPlano = secundario
+        ? AppColors.textPrimary
+        : (habilitado ? Colors.white : AppColors.textSecondary);
 
-    await _guardarConfiguracionImpresora();
-    final exito = await _hardwareCtrl.imprimirTicketPrueba(context: context);
+    return SizedBox(
+      height: alto,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: cargando
+            ? SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: primerPlano,
+                ),
+              )
+            : Icon(icono, size: 17),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            etiqueta,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: primerPlano,
+            ),
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: fondo,
+          foregroundColor: primerPlano,
+          disabledBackgroundColor: AppColors.secondarySurface,
+          disabledForegroundColor: AppColors.textSecondary,
+          elevation: 0,
+          side: secundario ? BorderSide(color: AppColors.border) : null,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
 
-    if (mounted) {
-      setState(() => _imprimiendoPrueba = false);
-      if (exito) {
-        _mostrarToast(
-          'Ticket de prueba enviado a la impresora térmica ($_anchoPapelImpresora).',
+  Widget _buildSelectorModoImpresora() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment<String>(
+                  value: 'bluetooth',
+                  icon: Icon(Icons.bluetooth, size: 15),
+                  label: Text('Bluetooth', maxLines: 1, softWrap: false),
+                ),
+                ButtonSegment<String>(
+                  value: 'wifi',
+                  icon: Icon(Icons.wifi, size: 15),
+                  label: Text('WiFi / Red', maxLines: 1, softWrap: false),
+                ),
+                ButtonSegment<String>(
+                  value: 'usb',
+                  icon: Icon(Icons.usb_rounded, size: 15),
+                  label: Text('Cable USB', maxLines: 1, softWrap: false),
+                ),
+              ],
+              selected: <String>{_tipoConexion},
+              onSelectionChanged: (seleccion) {
+                if (seleccion.isEmpty) return;
+                final nuevoModo = seleccion.first;
+                if (nuevoModo != _tipoConexion) {
+                  MotorFeedback.seleccion();
+                  setState(() => _tipoConexion = nuevoModo);
+                }
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: WidgetStateProperty.all(
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+                textStyle: WidgetStateProperty.all(
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return AppColors.primary;
+                  }
+                  return AppColors.secondarySurface;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return Colors.white;
+                  }
+                  return AppColors.textPrimary;
+                }),
+                side: WidgetStateProperty.all(
+                  BorderSide(color: AppColors.border, width: 1),
+                ),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ),
         );
-      }
+      },
+    );
+  }
+
+  Widget _buildVistaBluetooth(bool conectada) {
+    final bool tieneBtVinculada =
+        _normalizarTipo(_hardwareCtrl.config.impresoraTipo) == 'bluetooth' &&
+            _impresoraMac.isNotEmpty;
+
+    return Column(
+      key: const ValueKey<String>('vista_bluetooth'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Estado de conexión
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: conectada
+                    ? AppColors.subtleGreen
+                    : (tieneBtVinculada
+                        ? AppColors.primaryContainer
+                        : AppColors.secondarySurface),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.print_outlined,
+                color: conectada
+                    ? AppColors.brightGreen
+                    : (tieneBtVinculada
+                        ? AppColors.primary
+                        : AppColors.textSecondary),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tieneBtVinculada && _impresoraNombre.isNotEmpty
+                        ? _impresoraNombre
+                        : 'Sin Impresora Vinculada',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tieneBtVinculada
+                        ? 'MAC: $_impresoraMac · Bluetooth'
+                        : 'Empareja tu impresora Bluetooth para emitir tickets.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: conectada
+                    ? AppColors.subtleGreen
+                    : AppColors.secondarySurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: conectada ? AppColors.brightGreen : AppColors.border,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: conectada
+                          ? AppColors.brightGreen
+                          : AppColors.textSecondary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    conectada ? 'Conectada' : 'Desconectada',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: conectada
+                          ? AppColors.brightGreen
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 2. Ancho de rollo
+        _buildSelectorAnchoRollo(),
+        const SizedBox(height: 16),
+
+        // 3. Botón Buscar Impresora
+        _buildBotonAccion(
+          etiqueta: _hardwareCtrl.escaneandoImpresoras
+              ? 'Buscando...'
+              : 'Buscar Impresora',
+          icono: Icons.bluetooth_searching,
+          cargando: _hardwareCtrl.escaneandoImpresoras,
+          alto: 48,
+          onPressed: _hardwareCtrl.escaneandoImpresoras
+              ? null
+              : _iniciarBusquedaImpresora,
+        ),
+        const SizedBox(height: 10),
+
+        // 4. Botón Ticket Prueba
+        _buildBotonAccion(
+          etiqueta: _imprimiendoPrueba ? 'Imprimiendo...' : 'Ticket Prueba',
+          icono: Icons.receipt_long,
+          cargando: _imprimiendoPrueba,
+          alto: 44,
+          onPressed:
+              (conectada && !_imprimiendoPrueba) ? _probarImpresionBluetooth : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVistaWifi() {
+    return Column(
+      key: const ValueKey<String>('vista_wifi'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Campo único: Dirección IP
+        TextField(
+          controller: _ipController,
+          onChanged: (_) => _ipEditadaManualmente = true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+          decoration: InputDecoration(
+            labelText: 'Dirección IP',
+            hintText: 'Ej. 192.168.1.100',
+            labelStyle: TextStyle(color: AppColors.textSecondary),
+            prefixIcon: Icon(Icons.wifi, color: AppColors.primary, size: 20),
+            filled: true,
+            fillColor: AppColors.secondarySurface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 2. Ancho de rollo
+        _buildSelectorAnchoRollo(),
+        const SizedBox(height: 16),
+
+        // 3. Botones de Guardar y Ticket Prueba
+        Row(
+          children: [
+            Expanded(
+              child: _buildBotonAccion(
+                etiqueta: 'Guardar',
+                icono: Icons.save_outlined,
+                secundario: true,
+                onPressed:
+                    _imprimiendoPrueba ? null : () => _guardarConfiguracionWifi(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildBotonAccion(
+                etiqueta:
+                    _imprimiendoPrueba ? 'Probando...' : 'Ticket Prueba',
+                icono: Icons.receipt_long,
+                cargando: _imprimiendoPrueba,
+                onPressed: _imprimiendoPrueba ? null : _probarImpresionWifi,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVistaUsb() {
+    return Column(
+      key: const ValueKey<String>('vista_usb'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
+            color: AppColors.secondarySurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.usb_rounded,
+                size: 32,
+                color: AppColors.primary,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Conecta el cable OTG/USB de la impresora',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildBotonAccion(
+          etiqueta: _detectandoUsb ? 'Detectando...' : 'Detectar Impresora',
+          icono: Icons.usb_rounded,
+          cargando: _detectandoUsb,
+          alto: 48,
+          onPressed: _detectandoUsb ? null : _detectarImpresoraUsb,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubVistaActiva(bool conectadaModoActual) {
+    switch (_tipoConexion) {
+      case 'wifi':
+        return _buildVistaWifi();
+      case 'usb':
+        return _buildVistaUsb();
+      case 'bluetooth':
+      default:
+        return _buildVistaBluetooth(conectadaModoActual);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool conectada = _hardwareCtrl.config.impresoraConectada;
+    final bool conectadaModoActual = _hardwareCtrl.config.impresoraConectada &&
+        _normalizarTipo(_hardwareCtrl.config.impresoraTipo) == _tipoConexion;
 
     return AnimatedBuilder(
       animation: ThemeManager.instance,
@@ -239,286 +820,53 @@ class _HardwareVistaState extends State<HardwareVista> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 600),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'IMPRESORA TÉRMICA DE TICKETS (ESC/POS)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                          color: AppColors.textSecondary,
-                        ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: conectadaModoActual
+                          ? AppColors.subtleGreen.withValues(alpha: 0.22)
+                          : AppColors.card,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: conectadaModoActual
+                            ? AppColors.brightGreen.withValues(alpha: 0.6)
+                            : AppColors.border,
+                        width: conectadaModoActual ? 1.5 : 1.0,
                       ),
-                      const SizedBox(height: 10),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: conectada
-                              ? AppColors.subtleGreen.withValues(alpha: 0.22)
-                              : AppColors.card,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: conectada
-                                ? AppColors.brightGreen.withValues(alpha: 0.6)
-                                : AppColors.border,
-                            width: conectada ? 1.5 : 1.0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'IMPRESORA TÉRMICA DE TICKETS (ESC/POS)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: AppColors.textSecondary,
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // 1. Estado de conexión
-                            Row(
+                        const SizedBox(height: 12),
+                        _buildSelectorModoImpresora(),
+                        const SizedBox(height: 16),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.topCenter,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: conectada
-                                        ? AppColors.subtleGreen
-                                        : (_impresoraMac.isNotEmpty
-                                              ? AppColors.primaryContainer
-                                              : AppColors.secondarySurface),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.print_outlined,
-                                    color: conectada
-                                        ? AppColors.brightGreen
-                                        : (_impresoraMac.isNotEmpty
-                                              ? AppColors.primary
-                                              : AppColors.textSecondary),
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _impresoraNombre.isNotEmpty
-                                            ? _impresoraNombre
-                                            : 'Sin Impresora Vinculada',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _impresoraMac.isNotEmpty
-                                            ? 'MAC: $_impresoraMac · Bluetooth'
-                                            : 'Empareja tu impresora Bluetooth para emitir tickets.',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: conectada
-                                        ? AppColors.subtleGreen
-                                        : AppColors.secondarySurface,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: conectada
-                                          ? AppColors.brightGreen
-                                          : AppColors.border,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: conectada
-                                              ? AppColors.brightGreen
-                                              : AppColors.textSecondary,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        conectada
-                                            ? 'Conectada'
-                                            : 'Desconectada',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: conectada
-                                              ? AppColors.brightGreen
-                                              : AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                ...previousChildren,
+                                ?currentChild,
                               ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 2. Selector de Ancho de Rollo (58mm / 80mm)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondarySurface,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.straighten_rounded,
-                                          size: 18,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Flexible(
-                                          child: Text(
-                                            'Ancho de Rollo',
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildAnchoChip('58mm', '58 mm'),
-                                      const SizedBox(width: 8),
-                                      _buildAnchoChip('80mm', '80 mm'),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 3. Botón prominente: Buscar Impresora (Bluetooth)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton.icon(
-                                onPressed: _hardwareCtrl.escaneandoImpresoras
-                                    ? null
-                                    : _iniciarBusquedaImpresora,
-                                icon: _hardwareCtrl.escaneandoImpresoras
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.bluetooth_searching,
-                                        size: 18,
-                                      ),
-                                label: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    _hardwareCtrl.escaneandoImpresoras
-                                        ? 'Buscando...'
-                                        : 'Buscar Impresora',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // 4. Botón: Ticket Prueba
-                            SizedBox(
-                              width: double.infinity,
-                              height: 44,
-                              child: ElevatedButton.icon(
-                                onPressed: (conectada && !_imprimiendoPrueba)
-                                    ? _probarImpresionTicket
-                                    : null,
-                                icon: _imprimiendoPrueba
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Icon(Icons.receipt_long, size: 16),
-                                label: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    _imprimiendoPrueba
-                                        ? 'Imprimiendo...'
-                                        : 'Ticket Prueba',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: conectada
-                                          ? Colors.white
-                                          : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: conectada
-                                      ? AppColors.primary
-                                      : AppColors.secondarySurface,
-                                  foregroundColor: conectada
-                                      ? Colors.white
-                                      : AppColors.textSecondary,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                            );
+                          },
+                          child: _buildSubVistaActiva(conectadaModoActual),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -18,6 +18,8 @@ class TarjetaProductoInventario extends StatelessWidget {
   final VoidCallback? onEliminarDefinitivamente;
   final bool puedeModificar;
   final RolUsuario? rolActual;
+  final bool resaltado;
+  final String? highlightProductId;
 
   const TarjetaProductoInventario({
     super.key,
@@ -30,6 +32,8 @@ class TarjetaProductoInventario extends StatelessWidget {
     this.onEliminarDefinitivamente,
     this.puedeModificar = true,
     this.rolActual,
+    this.resaltado = false,
+    this.highlightProductId,
   });
 
   RolUsuario _obtenerRol(BuildContext context) {
@@ -58,19 +62,54 @@ class TarjetaProductoInventario extends StatelessWidget {
           final double gapHorizontal = esTarjetaCompacta ? 8 : 12;
           final double btnEditSize = esTarjetaCompacta ? 40 : 42;
 
-          return Container(
-            margin: EdgeInsets.zero,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: estaActivo
-                    ? AppColors.border
-                    : AppColors.amber.withValues(alpha: 0.4),
-                width: 1,
-              ),
+          final bool esResaltado =
+              resaltado || (highlightProductId != null && prod.id == highlightProductId);
+          final Color colorDestacado = isCritical
+              ? AppColors.amber.withValues(alpha: 0.35)
+              : AppColors.brightGreen.withValues(alpha: 0.30);
+          final Color colorNormal = AppColors.card;
+
+          return TweenAnimationBuilder<Color?>(
+            key: ValueKey('resplandor_${prod.id}_$esResaltado'),
+            tween: ColorTween(
+              begin: esResaltado ? colorDestacado : colorNormal,
+              end: colorNormal,
             ),
+            duration: const Duration(milliseconds: 2500),
+            curve: Curves.easeOutCubic,
+            builder: (context, colorAnimado, child) {
+              final bool tieneResplandor =
+                  esResaltado && (colorAnimado != colorNormal);
+              return Container(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorAnimado ?? colorNormal,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: tieneResplandor
+                        ? (isCritical ? AppColors.amber : AppColors.brightGreen)
+                        : (estaActivo
+                            ? AppColors.border
+                            : AppColors.amber.withValues(alpha: 0.4)),
+                    width: tieneResplandor ? 2.0 : 1.0,
+                  ),
+                  boxShadow: tieneResplandor
+                      ? [
+                          BoxShadow(
+                            color: (isCritical
+                                    ? AppColors.amber
+                                    : AppColors.brightGreen)
+                                .withValues(alpha: 0.28),
+                            blurRadius: 14,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: child,
+              );
+            },
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

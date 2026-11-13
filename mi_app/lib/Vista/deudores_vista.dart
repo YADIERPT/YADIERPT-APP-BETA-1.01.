@@ -8,6 +8,7 @@ import '../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../Modelos/venta.dart';
 import '../Modelos/abono.dart';
 import '../Servicios/servicio_ticket_pdf.dart';
+import '../Servicios/motor_feedback.dart';
 import '../Utilidades/formateador.dart';
 import '../Utilidades/debouncer.dart';
 
@@ -170,6 +171,7 @@ class _DeudoresVistaState extends State<DeudoresVista> {
               metodoPago: metodoPago,
             );
             await _cargarCuentas();
+            MotorFeedback.feedbackCobro();
             _mostrarToast(
               'Abono de \$${monto.toStringAsFixed(2)} registrado correctamente',
             );
