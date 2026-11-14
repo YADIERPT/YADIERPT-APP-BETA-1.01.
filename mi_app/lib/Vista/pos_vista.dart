@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import '../Utilidades/debouncer.dart';
 import '../Utilidades/formateador.dart';
 import '../Constantes/limites.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
+import 'venta.dart';
 
 class PosVista extends StatefulWidget {
   const PosVista({super.key});
@@ -47,6 +49,42 @@ class _PosVistaState extends State<PosVista> {
     super.dispose();
   }
 
+  Widget _buildMiniImagenProducto(Producto prod) {
+    if (prod.imagenes.isNotEmpty) {
+      final ruta = prod.imagenes.first;
+      if (ruta.startsWith('assets/')) {
+        return Image.asset(
+          ruta,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(
+            prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
+            color: AppColors.textSecondary,
+            size: 20,
+          ),
+        );
+      }
+      final file = File(ruta);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(
+            prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
+            color: AppColors.textSecondary,
+            size: 20,
+          ),
+        );
+      }
+    }
+    return Center(
+      child: Icon(
+        prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
+        color: AppColors.textSecondary,
+        size: 20,
+      ),
+    );
+  }
+
   void _abrirCobroModal() {
     final cVentas = context.read<ControladorVentas>();
     final venta = cVentas.ventaActual;
@@ -64,370 +102,560 @@ class _PosVistaState extends State<PosVista> {
 
     final TextEditingController montoRecibidoController =
         TextEditingController();
-    final bool isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
+      isScrollControlled: true, // Regla 3: Scroll controlado
       backgroundColor: Colors.transparent,
       builder: (modalContext) {
+        // Regla 3: Margen dinámico exacto de teclado
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(modalContext).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
           ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border.all(color: AppColors.border, width: 1),
+          child: ConstrainedBox(
+            // Regla 3: No sobrepasar el 85% de la pantalla para proteger la barra de estado
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(modalContext).size.height * 0.85,
             ),
-            child: StatefulBuilder(
-              builder: (ctx, setModalState) {
-                final double total = venta?.total ?? 0.0;
-                final String textoLimpio =
-                    montoRecibidoController.text.replaceAll(',', '').trim();
-                final double recibido = double.tryParse(textoLimpio) ?? 0.0;
-                final double cambio =
-                    recibido >= total ? recibido - total : 0.0;
-                final bool montoSuficiente = recibido >= total && total > 0;
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border.all(color: AppColors.border, width: 1),
+              ),
+              child: StatefulBuilder(
+                builder: (ctx, setModalState) {
+                  final double total = venta?.total ?? 0.0;
+                  final String textoLimpio =
+                      montoRecibidoController.text.replaceAll(',', '').trim();
+                  final double recibido = double.tryParse(textoLimpio) ?? 0.0;
+                  final double cambio =
+                      recibido >= total ? recibido - total : 0.0;
+                  final bool montoSuficiente = recibido >= total && total > 0;
 
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Asa de arrastre superior
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12, bottom: 8),
-                      child: Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.border,
-                            borderRadius: BorderRadius.circular(2),
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Asa de arrastre superior
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10, bottom: 6),
+                          child: Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: AppColors.border,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
 
-                    // Encabezado: Resumen del Ticket y Total
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Resumen del Ticket',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              Text(
-                                '${articulos.length} ${articulos.length == 1 ? "producto" : "productos"} (${cVentas.totalArticulosEnCarrito} uds.)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Text(
-                            formatoMoneda(total),
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 12),
-
-                    // Resumen visual de Artículos en el Ticket
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: isLandscape ? 100 : 150,
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 2),
-                        itemCount: articulos.length,
-                        separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          color: AppColors.border.withValues(alpha: 0.5),
-                        ),
-                        itemBuilder: (context, i) {
-                          final art = articulos[i];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        AppColors.primary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    '${art.cantidad}x',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    art.nombre,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  formatoMoneda(art.subtotal),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    // Desglose de Totales e Impuestos (si aplica IVA)
-                    if (venta != null && venta.aplicarIva) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Subtotal',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              formatoMoneda(venta.subtotalVenta),
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'IVA (${(venta.porcentajeIva * 100).toInt()}%)',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              formatoMoneda(venta.totalIva),
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Total neto',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              formatoMoneda(total),
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const Divider(height: 12),
-
-                    // Campo de entrada: Monto recibido (con autofocus)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 6),
-                      child: TextField(
-                        controller: montoRecibidoController,
-                        autofocus: true,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        inputFormatters: [
-                          FormateadorMilesMonetario(
-                              max: LimitesApp.maxMontoMonetario),
-                        ],
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                        onChanged: (_) => setModalState(() {}),
-                        decoration: InputDecoration(
-                          labelText: 'Monto recibido',
-                          labelStyle:
-                              TextStyle(color: AppColors.textSecondary),
-                          prefixIcon: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '\$',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          prefixIconConstraints:
-                              const BoxConstraints(minWidth: 0, minHeight: 0),
-                          filled: true,
-                          fillColor: AppColors.secondarySurface,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primary, width: 2),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Franja informativa de cambio
-                    if (montoSuficiente) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                        // 1. Encabezado: "Artículos (X uds.)" a la izquierda y botón verde "Añadir ítem" a la derecha
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 6, 16, 10),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Cambio a entregar:',
+                                'Artículos (${cVentas.totalArticulosEnCarrito} uds.)',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.onSecondary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
-                              Text(
-                                formatoMoneda(cambio),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.onSecondary,
+                              ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(modalContext),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text(
+                                  'Añadir ítem',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                        const Divider(height: 1),
 
-                    // Botón único de Confirmar Cobro directo
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                          onPressed: montoSuficiente
-                              ? () async {
-                                  Navigator.pop(ctx);
-                                  await cVentas.completarVentaActual();
-                                  MotorFeedback.vibracionFuerte();
-                                  MotorFeedback.reproducirCash();
-                                  if (mounted) setState(() {});
-                                }
-                              : null,
-                          icon: const Icon(Icons.check_circle_outline,
-                              size: 20),
-                          label: Text(
-                            'Confirmar Cobro (${formatoMoneda(total)})',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        // 1. Lista de productos del ticket interactiva
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: articulos.length,
+                            itemBuilder: (context, i) {
+                              final art = articulos[i];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: AppColors.border, width: 1),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Imagen
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondarySurface,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: _buildMiniImagenProducto(
+                                          art.producto),
+                                    ),
+                                    const SizedBox(width: 12),
+
+                                    // Nombre y Precio unitario
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            art.producto.nombre,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${formatoMoneda(art.precioUnitario)} c/u',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+
+                                    // Botones interactivos [ - ] [ cant ] [ + ]
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondarySurface,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: AppColors.border, width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            onTap: () {
+                                              cVentas.decrementarArticulo(
+                                                  art.producto.id);
+                                              MotorFeedback.vibracionLigera();
+                                              setModalState(() {});
+                                              if (cVentas.totalArticulosEnCarrito ==
+                                                  0) {
+                                                Navigator.pop(modalContext);
+                                              }
+                                            },
+                                            borderRadius:
+                                                const BorderRadius.horizontal(
+                                              left: Radius.circular(8),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 7,
+                                                      vertical: 5),
+                                              child: Icon(Icons.remove,
+                                                  size: 14,
+                                                  color: AppColors.textPrimary),
+                                            ),
+                                          ),
+                                          Container(
+                                            constraints: const BoxConstraints(
+                                                minWidth: 26),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              '${art.cantidad}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              try {
+                                                cVentas.agregarArticulo(
+                                                    art.producto, 1);
+                                                MotorFeedback.vibracionMedia();
+                                                setModalState(() {});
+                                              } catch (e) {
+                                                MotorFeedback.vibracionError();
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(e
+                                                        .toString()
+                                                        .replaceAll(
+                                                            'Exception: ',
+                                                            '')),
+                                                    backgroundColor:
+                                                        AppColors.error,
+                                                    duration: const Duration(
+                                                        seconds: 2),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            borderRadius:
+                                                const BorderRadius.horizontal(
+                                              right: Radius.circular(8),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 7,
+                                                      vertical: 5),
+                                              child: Icon(Icons.add,
+                                                  size: 14,
+                                                  color: AppColors.textPrimary),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+
+                                    // Subtotal
+                                    Text(
+                                      formatoMoneda(art.subtotal),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: AppColors.border,
-                            disabledForegroundColor:
-                                AppColors.textSecondary,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        ),
+                        const Divider(height: 1),
+                        const SizedBox(height: 8),
+
+                        // 2. Desglose de Totales: Subtotal, IVA y Total neto con formatoMoneda
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 2),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    venta?.aplicarIva == true
+                                        ? 'Subtotal'
+                                        : 'Total a Cobrar',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    formatoMoneda(
+                                        venta?.subtotalVenta ?? total),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (venta != null && venta.aplicarIva) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'IVA (${(venta.porcentajeIva * 100).toInt()}%)',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    Text(
+                                      formatoMoneda(venta.totalIva),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Total neto',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    formatoMoneda(total),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.primary,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // 2. Campo de entrada: "Monto recibido"
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: TextField(
+                            controller: montoRecibidoController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FormateadorMilesMonetario(
+                                  max: LimitesApp.maxMontoMonetario),
+                            ],
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                            onChanged: (_) => setModalState(() {}),
+                            decoration: InputDecoration(
+                              labelText: 'Monto recibido',
+                              labelStyle: TextStyle(
+                                  color: AppColors.textSecondary, fontSize: 13),
+                              prefixIcon: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  '\$',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 0, minHeight: 0),
+                              filled: true,
+                              fillColor: AppColors.secondarySurface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                    color: AppColors.primary, width: 2),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
                             ),
                           ),
                         ),
-                      ),
+
+                        // Franja informativa de Cambio a entregar
+                        if (montoSuficiente) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.secondary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Cambio a entregar:',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.onSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    formatoMoneda(cambio),
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.onSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+
+                        // 2. Botones: Principal ("Cobrar $Total") y Secundario ("Apartar / Cuenta por Cobrar")
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Botón Principal: Cobrar $Total
+                              SizedBox(
+                                height: 48,
+                                child: ElevatedButton.icon(
+                                  onPressed: montoSuficiente
+                                      ? () async {
+                                          Navigator.pop(modalContext);
+                                          await cVentas.completarVentaActual();
+                                          MotorFeedback.vibracionFuerte();
+                                          MotorFeedback.reproducirCash();
+                                          if (mounted) setState(() {});
+                                        }
+                                      : null,
+                                  icon: const Icon(Icons.check_circle_outline,
+                                      size: 20),
+                                  label: Text(
+                                    'Cobrar ${formatoMoneda(total)}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: AppColors.border,
+                                    disabledForegroundColor:
+                                        AppColors.textSecondary,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Botón Secundario: Apartar / Cuenta por Cobrar
+                              SizedBox(
+                                height: 44,
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final resultado = await showDialog<
+                                        Map<String, dynamic>>(
+                                      context: context,
+                                      builder: (ctx) =>
+                                          const DialogoApartadoVenta(),
+                                    );
+                                    if (resultado != null) {
+                                      final nombre =
+                                          resultado['cliente'] as String;
+                                      final anticipo =
+                                          resultado['anticipo'] as double;
+                                      final ventaApartada = await cVentas
+                                          .apartarVentaActual(
+                                        cliente: nombre,
+                                        montoAbonoInicial: anticipo,
+                                      );
+                                      if (ventaApartada != null && mounted) {
+                                        Navigator.pop(modalContext);
+                                        MotorFeedback.vibracionMedia();
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Venta apartada para $nombre por ${formatoMoneda(ventaApartada.total)}',
+                                            ),
+                                            backgroundColor: AppColors.primary,
+                                            behavior:
+                                                SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        setState(() {});
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(
+                                      Icons.bookmark_add_outlined,
+                                      size: 18),
+                                  label: const Text(
+                                    'Apartar / Cuenta por Cobrar',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.textPrimary,
+                                    side: BorderSide(color: AppColors.border),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         );
