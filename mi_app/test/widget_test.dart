@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:mi_app/BaseDatos/base_datos.dart';
@@ -3546,7 +3545,7 @@ void main() {
   });
 
   group('Diseño Responsivo con Slivers y Adaptación a Tablets en InventarioVista', () {
-    testWidgets('InventarioVista utiliza ScrollablePositionedList, ResumenInventarioHeader y adapta productos', (WidgetTester tester) async {
+    testWidgets('InventarioVista utiliza SingleChildScrollView unificado, ResumenInventarioHeader y adapta productos', (WidgetTester tester) async {
       final cInv = ControladorInventario();
       final cFin = ControladorFinanzas();
       final cPerf = ControladorPerfil();
@@ -3601,8 +3600,9 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // 1. Debe existir un ScrollablePositionedList principal
-      expect(find.byType(ScrollablePositionedList), findsOneWidget);
+      // 1. Debe existir un SingleChildScrollView y ListView principal
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(ListView), findsOneWidget);
 
       // 2. Contadores superiores y buscador
       expect(find.byType(ResumenInventarioHeader), findsOneWidget);
@@ -4037,7 +4037,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      expect(find.byType(ScrollablePositionedList), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(ListView), findsOneWidget);
       expect(find.byType(TarjetaProductoInventario), findsOneWidget);
     });
 

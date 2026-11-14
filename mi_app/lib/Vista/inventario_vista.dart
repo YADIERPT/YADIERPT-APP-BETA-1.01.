@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'nuevo_lote.dart';
 import 'sugerencias_ia_vista.dart';
@@ -41,9 +40,8 @@ class _InventarioVistaState extends State<InventarioVista> {
   final TextEditingController _busquedaController = TextEditingController();
   final Debouncer _busquedaDebouncer =
       Debouncer(delay: const Duration(milliseconds: 300));
-  final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener =
-      ItemPositionsListener.create();
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _cardKeys = {};
   bool _autoScrollEjecutado = false;
 
   // 1. Variable mutable dentro del State para controlar el ID a resaltar
@@ -53,7 +51,11 @@ class _InventarioVistaState extends State<InventarioVista> {
   void initState() {
     super.initState();
     highlightProductId = widget.highlightProductId;
-    _cargarInventario();
+    _cargarInventario().then((_) {
+      if (highlightProductId != null && mounted) {
+        _iniciarAutoScrollHaciaProducto(highlightProductId!);
+      }
+    });
   }
 
   @override
@@ -63,6 +65,7 @@ class _InventarioVistaState extends State<InventarioVista> {
         widget.highlightProductId != oldWidget.highlightProductId) {
       highlightProductId = widget.highlightProductId;
       _autoScrollEjecutado = false;
+      _iniciarAutoScrollHaciaProducto(highlightProductId!);
     }
   }
 
@@ -80,23 +83,24 @@ class _InventarioVistaState extends State<InventarioVista> {
   void dispose() {
     _busquedaDebouncer.dispose();
     _busquedaController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  /// Navega de forma precisa y fluida al elemento especificado mediante ItemScrollController
-  void _iniciarAutoScrollHaciaProducto(String prodId, List<Producto> lista) {
+  /// Auto-Scroll suave y nativo hacia la tarjeta del producto usando GlobalKey y Scrollable.ensureVisible
+  void _iniciarAutoScrollHaciaProducto(String prodId) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
 
-      final int index = lista.indexWhere((p) => p.id == prodId);
-      if (index != -1 && _itemScrollController.isAttached) {
-        await _itemScrollController.scrollTo(
-          index: index,
+      final key = _cardKeys[prodId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
           duration: const Duration(milliseconds: 500),
+          alignment: 0.5,
           curve: Curves.easeInOutCubic,
-          alignment: 0.15,
         );
       }
     });
@@ -426,7 +430,7 @@ class _InventarioVistaState extends State<InventarioVista> {
 
             if (highlightProductId != null && !_autoScrollEjecutado) {
               _autoScrollEjecutado = true;
-              _iniciarAutoScrollHaciaProducto(highlightProductId!, productos);
+              _iniciarAutoScrollHaciaProducto(highlightProductId!);
             }
 
             String tituloLista =
@@ -472,254 +476,253 @@ class _InventarioVistaState extends State<InventarioVista> {
                 )
               : null,
           body: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                    padding: EdgeInsets.fromLTRB(16, isLandscape ? 4 : 12, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // 1. Buscador con Debounce de 300 ms y aislamiento RepaintBoundary
-                        RepaintBoundary(
-                          child: TextField(
-                            controller: _busquedaController,
-                            onChanged: _onBusquedaChanged,
-                            style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: 'Buscar planta o artículo...',
-                              hintStyle:
-                                  TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                              prefixIcon: Icon(
-                                Icons.search,
-                                color: AppColors.textSecondary,
-                                size: 20,
-                              ),
-                              suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: Icon(Icons.clear,
-                                          color: AppColors.textSecondary, size: 18),
-                                      onPressed: _limpiarBusqueda,
-                                    )
-                                  : null,
-                              filled: true,
-                              fillColor: AppColors.secondarySurface,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: isLandscape ? 6 : 12,
-                                horizontal: 14,
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: AppColors.card,
+              strokeWidth: 2.5,
+              displacement: 40.0,
+              onRefresh: _handleRefresh,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.only(bottom: 110),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, isLandscape ? 4 : 12, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 1. Buscador con Debounce de 300 ms y aislamiento RepaintBoundary
+                          RepaintBoundary(
+                            child: TextField(
+                              controller: _busquedaController,
+                              onChanged: _onBusquedaChanged,
+                              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Buscar planta o artículo...',
+                                hintStyle:
+                                    TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  color: AppColors.textSecondary,
+                                  size: 20,
+                                ),
+                                suffixIcon: _busqueda.isNotEmpty || _busquedaController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear,
+                                            color: AppColors.textSecondary, size: 18),
+                                        onPressed: _limpiarBusqueda,
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: AppColors.secondarySurface,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: isLandscape ? 6 : 12,
+                                  horizontal: 14,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        SizedBox(height: isLandscape ? 4 : 12),
+                          SizedBox(height: isLandscape ? 4 : 12),
 
-                        // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
-                        RepaintBoundary(
-                          child: ResumenInventarioHeader(
-                            totalPlantas: totalPlantas,
-                            stockCritico: stockCritico,
-                            totalSkus: totalArticulos,
-                            filtroActivo: _filtroActivo,
-                            onFiltroSeleccionado: _cambiarFiltro,
-                            controladorIA: cIA,
-                            onVerSugerencias: _abrirSugerenciasIA,
+                          // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
+                          RepaintBoundary(
+                            child: ResumenInventarioHeader(
+                              totalPlantas: totalPlantas,
+                              stockCritico: stockCritico,
+                              totalSkus: totalArticulos,
+                              filtroActivo: _filtroActivo,
+                              onFiltroSeleccionado: _cambiarFiltro,
+                              controladorIA: cIA,
+                              onVerSugerencias: _abrirSugerenciasIA,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: isLandscape ? 4 : 16),
+                          SizedBox(height: isLandscape ? 4 : 16),
 
-                        // 2.5. Escudo del Catálogo: Switch para ver productos deshabilitados (Solo Dueño)
-                        if (rolActual != null && (rolActual.esDuena || rolActual.esDueno)) ...[
-                          Container(
-                            margin: EdgeInsets.only(bottom: isLandscape ? 4 : 12),
-                            padding: EdgeInsets.symmetric(horizontal: 14, vertical: isLandscape ? 2 : 4),
-                            decoration: BoxDecoration(
-                              color: _verDeshabilitados
-                                  ? AppColors.subtleAmber
-                                  : AppColors.secondarySurface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
+                          // 2.5. Escudo del Catálogo: Switch para ver productos deshabilitados (Solo Dueño)
+                          if (rolActual != null && (rolActual.esDuena || rolActual.esDueno)) ...[
+                            Container(
+                              margin: EdgeInsets.only(bottom: isLandscape ? 4 : 12),
+                              padding: EdgeInsets.symmetric(horizontal: 14, vertical: isLandscape ? 2 : 4),
+                              decoration: BoxDecoration(
                                 color: _verDeshabilitados
-                                    ? AppColors.amber
-                                    : AppColors.border,
-                                width: 1,
+                                    ? AppColors.subtleAmber
+                                    : AppColors.secondarySurface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _verDeshabilitados
+                                      ? AppColors.amber
+                                      : AppColors.border,
+                                  width: 1,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      _verDeshabilitados
-                                          ? Icons.visibility_off
-                                          : Icons.visibility_outlined,
-                                      size: 18,
-                                      color: _verDeshabilitados
-                                          ? AppColors.amber
-                                          : AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      'Ver productos deshabilitados',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _verDeshabilitados
+                                            ? Icons.visibility_off
+                                            : Icons.visibility_outlined,
+                                        size: 18,
                                         color: _verDeshabilitados
                                             ? AppColors.amber
-                                            : AppColors.textPrimary,
+                                            : AppColors.textSecondary,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                Switch(
-                                  value: _verDeshabilitados,
-                                  activeColor: AppColors.amber,
-                                  onChanged: (val) async {
-                                    MotorFeedback.vibracionLigera();
-                                    setState(() => _verDeshabilitados = val);
-                                    await context.read<ControladorInventario>().cargarProductos(
-                                      soloActivos: !val,
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-
-                        // 3. Encabezado de la lista con indicador de filtro
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              tituloLista,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            if (_filtroActivo != 'todos')
-                              GestureDetector(
-                                onTap: () => _cambiarFiltro('todos'),
-                                child: Text(
-                                  'Ver todos',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        SizedBox(height: isLandscape ? 4 : 8),
-                      ],
-                    ),
-                  ),
-
-                  // 4. Catálogo de productos con ScrollablePositionedList.builder
-                  Expanded(
-                    child: RefreshIndicator(
-                      color: AppColors.primary,
-                      backgroundColor: AppColors.card,
-                      strokeWidth: 2.5,
-                      displacement: 40.0,
-                      onRefresh: _handleRefresh,
-                      child: productos.isEmpty
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
-                              ),
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.card,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                          color: AppColors.border, width: 1),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        'No se encontraron productos para el filtro seleccionado.',
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        'Ver productos deshabilitados',
                                         style: TextStyle(
-                                          color: AppColors.textSecondary,
                                           fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: _verDeshabilitados
+                                              ? AppColors.amber
+                                              : AppColors.textPrimary,
                                         ),
                                       ),
+                                    ],
+                                  ),
+                                  Switch(
+                                    value: _verDeshabilitados,
+                                    activeColor: AppColors.amber,
+                                    onChanged: (val) async {
+                                      MotorFeedback.vibracionLigera();
+                                      setState(() => _verDeshabilitados = val);
+                                      await context.read<ControladorInventario>().cargarProductos(
+                                        soloActivos: !val,
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // 3. Encabezado de la lista con indicador de filtro
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                tituloLista,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              if (_filtroActivo != 'todos')
+                                GestureDetector(
+                                  onTap: () => _cambiarFiltro('todos'),
+                                  child: Text(
+                                    'Ver todos',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
                                     ),
                                   ),
                                 ),
-                              ],
-                            )
-                          : ScrollablePositionedList.builder(
-                              itemScrollController: _itemScrollController,
-                              itemPositionsListener: _itemPositionsListener,
-                              physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
-                              ),
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 4, 16, 110),
-                              itemCount: productos.length,
-                              itemBuilder: (context, index) {
-                                final prod = productos[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Center(
-                                    child: ConstrainedBox(
-                                      constraints:
-                                          const BoxConstraints(maxWidth: 800),
-                                      child: TarjetaProductoInventario(
-                                        prod: prod,
-                                        rolActual: rolActual,
-                                        puedeModificar: puedeModificar,
-                                        resaltado:
-                                            prod.id == highlightProductId,
-                                        highlightProductId: highlightProductId,
-                                        onResplandorTerminado: () {
-                                          if (mounted) {
-                                            setState(() {
-                                              highlightProductId = null;
-                                              _autoScrollEjecutado = false;
-                                            });
-                                            widget.onHighlightConsumido?.call();
-                                          }
-                                        },
-                                        onEditar: () =>
-                                            _abrirEditarProducto(prod),
-                                        onAjustar: () => _abrirAjuste(prod),
-                                        onBorrar: () =>
-                                            _abrirDeshabilitarProducto(prod),
-                                        onDeshabilitar: () =>
-                                            _abrirDeshabilitarProducto(prod),
-                                        onRestaurar: () =>
-                                            _restaurarProducto(prod),
-                                        onEliminarDefinitivamente: () =>
-                                            _abrirEliminarDefinitivamente(
-                                                prod),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                            ],
+                          ),
+                          SizedBox(height: isLandscape ? 4 : 8),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+
+                    // 4. Catálogo de productos con ListView unificado
+                    if (productos.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: AppColors.border, width: 1),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'No se encontraron productos para el filtro seleccionado.',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: productos.length,
+                        itemBuilder: (context, index) {
+                          final prod = productos[index];
+                          final cardKey = _cardKeys.putIfAbsent(
+                              prod.id, () => GlobalKey());
+                          return Padding(
+                            key: cardKey,
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 800),
+                                child: TarjetaProductoInventario(
+                                  prod: prod,
+                                  rolActual: rolActual,
+                                  puedeModificar: puedeModificar,
+                                  resaltado:
+                                      prod.id == highlightProductId,
+                                  highlightProductId: highlightProductId,
+                                  onResplandorTerminado: () {
+                                    if (mounted) {
+                                      setState(() {
+                                        highlightProductId = null;
+                                        _autoScrollEjecutado = false;
+                                      });
+                                      widget.onHighlightConsumido?.call();
+                                    }
+                                  },
+                                  onEditar: () =>
+                                      _abrirEditarProducto(prod),
+                                  onAjustar: () => _abrirAjuste(prod),
+                                  onBorrar: () =>
+                                      _abrirDeshabilitarProducto(prod),
+                                  onDeshabilitar: () =>
+                                      _abrirDeshabilitarProducto(prod),
+                                  onRestaurar: () =>
+                                      _restaurarProducto(prod),
+                                  onEliminarDefinitivamente: () =>
+                                      _abrirEliminarDefinitivamente(
+                                          prod),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
               ),
             ),
-          );
-        },
-      );
-    },
-  );
+          ),
+        );
+      },
+    );
+  },
+);
   }
 }
