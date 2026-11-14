@@ -15,6 +15,8 @@ import '../Utilidades/formateador.dart';
 import '../Constantes/limites.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
 import 'venta.dart';
+import 'impresion_ticket.dart';
+import '../Servicios/servicio_ticket_pdf.dart';
 
 class PosVista extends StatefulWidget {
   const PosVista({super.key});
@@ -81,6 +83,82 @@ class _PosVistaState extends State<PosVista> {
         prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
         color: AppColors.textSecondary,
         size: 20,
+      ),
+    );
+  }
+
+  Future<bool?> _mostrarDialogoPreguntaImpresion({
+    required BuildContext context,
+    required String titulo,
+    required String mensaje,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          icon: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.receipt_long,
+              color: AppColors.primary,
+              size: 28,
+            ),
+          ),
+          title: Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          content: Text(
+            mensaje,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: Text(
+                'No',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              icon: const Icon(Icons.print, size: 16),
+              label: const Text('Sí, imprimir'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -559,11 +637,64 @@ class _PosVistaState extends State<PosVista> {
                                 child: ElevatedButton.icon(
                                   onPressed: montoSuficiente
                                       ? () async {
+                                          final ventaACobrar =
+                                              cVentas.ventaActual;
+                                          if (ventaACobrar == null) return;
+
+                                          // 1. Cerrar BottomSheet de cobro
                                           Navigator.pop(modalContext);
-                                          await cVentas.completarVentaActual();
-                                          MotorFeedback.vibracionFuerte();
-                                          MotorFeedback.reproducirCash();
-                                          if (mounted) setState(() {});
+
+                                          // 2. Registrar en base de datos SQLite
+                                          try {
+                                            await cVentas.completarVentaActual();
+                                            MotorFeedback.vibracionFuerte();
+                                            MotorFeedback.reproducirCash();
+                                          } catch (e) {
+                                            MotorFeedback.vibracionError();
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                      'Error al procesar la venta: $e'),
+                                                  backgroundColor:
+                                                      AppColors.error,
+                                                ),
+                                              );
+                                            }
+                                            return;
+                                          }
+
+                                          if (!mounted) return;
+
+                                          // 3. Diálogo de confirmación de impresión idéntico al de abonos
+                                          final bool? deseaImprimir =
+                                              await _mostrarDialogoPreguntaImpresion(
+                                            context: context,
+                                            titulo: 'Venta Registrada',
+                                            mensaje:
+                                                'El registro se guardó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?',
+                                          );
+
+                                          // 4. Si el usuario confirma, llamar a la función de impresión
+                                          if (deseaImprimir == true && mounted) {
+                                            try {
+                                              await ImpresionTicket
+                                                  .imprimirTicket(
+                                                ventaACobrar,
+                                                recibido: recibido,
+                                              );
+                                            } catch (e) {
+                                              debugPrint(
+                                                  'Aviso al imprimir ticket de venta: $e');
+                                            }
+                                          }
+
+                                          // 5. Iniciar nueva venta limpia en el carrito
+                                          if (mounted) {
+                                            cVentas.iniciarVenta();
+                                            setState(() {});
+                                          }
                                         }
                                       : null,
                                   icon: const Icon(Icons.check_circle_outline,
@@ -595,6 +726,7 @@ class _PosVistaState extends State<PosVista> {
                                 height: 44,
                                 child: OutlinedButton.icon(
                                   onPressed: () async {
+                                    // 1. Diálogo para capturar nombre de cliente y anticipo
                                     final resultado = await showDialog<
                                         Map<String, dynamic>>(
                                       context: context,
@@ -606,26 +738,60 @@ class _PosVistaState extends State<PosVista> {
                                           resultado['cliente'] as String;
                                       final anticipo =
                                           resultado['anticipo'] as double;
+
+                                      // 2. Registrar apartado en SQLite
                                       final ventaApartada = await cVentas
                                           .apartarVentaActual(
                                         cliente: nombre,
                                         montoAbonoInicial: anticipo,
                                       );
+
                                       if (ventaApartada != null && mounted) {
+                                        // 3. Cerrar el BottomSheet de cobro
                                         Navigator.pop(modalContext);
                                         MotorFeedback.vibracionMedia();
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Venta apartada para $nombre por ${formatoMoneda(ventaApartada.total)}',
-                                            ),
-                                            backgroundColor: AppColors.primary,
-                                            behavior:
-                                                SnackBarBehavior.floating,
-                                          ),
+
+                                        // 4. Diálogo de confirmación de impresión idéntico al de abonos
+                                        final bool? deseaImprimir =
+                                            await _mostrarDialogoPreguntaImpresion(
+                                          context: context,
+                                          titulo: 'Apartado Registrado',
+                                          mensaje:
+                                              'El registro se guardó correctamente. ¿Desea imprimir el ticket de comprobante para el cliente?',
                                         );
-                                        setState(() {});
+
+                                        // 5. Si el usuario confirma, generar e imprimir ticket
+                                        if (deseaImprimir == true && mounted) {
+                                          try {
+                                            await ServicioTicketPdf.instancia
+                                                .descargarYAbrirTicket(
+                                              context,
+                                              ventaApartada,
+                                              esCredito: true,
+                                            );
+                                          } catch (e) {
+                                            debugPrint(
+                                                'Aviso al imprimir ticket de apartado: $e');
+                                          }
+                                        }
+
+                                        // 6. Iniciar nueva venta limpia en el carrito y mostrar confirmación
+                                        if (mounted) {
+                                          cVentas.iniciarVenta();
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Venta apartada para $nombre por ${formatoMoneda(ventaApartada.total)}',
+                                              ),
+                                              backgroundColor:
+                                                  AppColors.primary,
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                          setState(() {});
+                                        }
                                       }
                                     }
                                   },
