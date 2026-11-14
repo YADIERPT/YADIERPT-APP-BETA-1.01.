@@ -205,7 +205,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   child: Row(
                                     children: [
                                       Text(
-                                        '\$${totalVentas.toStringAsFixed(2)}',
+                                        formatoMoneda(totalVentas),
                                         style: TextStyle(
                                           fontSize: 24,
                                           fontWeight: FontWeight.w900,
@@ -465,7 +465,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                             child: Column(
                               children: [
                                 Text(
-                                  '\$${ticketPromedio.toStringAsFixed(2)}',
+                                  formatoMoneda(ticketPromedio),
                                   style: TextStyle(
                                     color: AppColors.amber,
                                     fontSize: 16,
@@ -990,7 +990,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '\$${totalPorCobrar.toStringAsFixed(2)}',
+                                      formatoMoneda(totalPorCobrar),
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w900,
@@ -1111,7 +1111,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                           CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          '\$${venta.saldoPendiente.toStringAsFixed(2)}',
+                                          formatoMoneda(venta.saldoPendiente),
                                           style: TextStyle(
                                             color: AppColors.amber,
                                             fontSize: 13,
@@ -1119,7 +1119,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                           ),
                                         ),
                                         Text(
-                                          'de \$${venta.total.toStringAsFixed(2)}',
+                                          'de ${formatoMoneda(venta.total)}',
                                           style: TextStyle(
                                             color: AppColors.textSecondary,
                                             fontSize: 10,
@@ -1310,7 +1310,7 @@ class _DashboardVistaState extends State<DashboardVista> {
                                   ),
                                 ),
                                 Text(
-                                  '\$${venta.total.toStringAsFixed(2)}',
+                                  formatoMoneda(venta.total),
                                   style: TextStyle(
                                     color: AppColors.brightGreen,
                                     fontSize: 14,

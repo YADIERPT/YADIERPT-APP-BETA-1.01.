@@ -44,6 +44,7 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
       builder: (context, _) {
         final List<Producto> filtrados =
             widget.controladorInventario.buscarProductos(_busqueda);
+        ControladorInventario.ordenarProductosJerarquico(filtrados);
         final bool isLandscape =
             MediaQuery.of(context).orientation == Orientation.landscape;
 

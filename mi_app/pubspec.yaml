@@ -52,6 +52,7 @@ dependencies:
   intl: ^0.20.3
   print_bluetooth_thermal: ^1.2.5
   audioplayers: ^6.8.1
+  scrollable_positioned_list: ^0.3.8
 dev_dependencies:
   flutter_test:
     sdk: flutter

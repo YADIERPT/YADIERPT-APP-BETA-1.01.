@@ -79,7 +79,7 @@ class ResumenInventarioHeader extends StatelessWidget {
             ),
           ],
         ),
-        SizedBox(height: isLandscape ? 8 : 12),
+        SizedBox(height: isLandscape ? 4 : 12),
 
         // Panel "Sugerencias IA"
         Builder(
@@ -111,7 +111,7 @@ class ResumenInventarioHeader extends StatelessWidget {
             }
 
             return Container(
-              padding: EdgeInsets.all(isLandscape ? 8 : 12),
+              padding: EdgeInsets.all(isLandscape ? 6 : 12),
               decoration: BoxDecoration(
                 color: AppColors.card,
                 borderRadius: BorderRadius.circular(14),
@@ -274,7 +274,7 @@ class ResumenInventarioHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: EdgeInsets.all(isLandscape ? 8 : 12),
+          padding: EdgeInsets.all(isLandscape ? 6 : 12),
           decoration: BoxDecoration(
             color: seleccionado
                 ? AppColors.primaryContainer.withValues(alpha: 0.3)
@@ -327,7 +327,7 @@ class ResumenInventarioHeader extends StatelessWidget {
                     ),
                 ],
               ),
-              SizedBox(height: isLandscape ? 4 : 6),
+              SizedBox(height: isLandscape ? 2 : 6),
               Text(
                 valor,
                 style: TextStyle(

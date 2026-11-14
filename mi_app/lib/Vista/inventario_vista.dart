@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'nuevo_lote.dart';
 import 'sugerencias_ia_vista.dart';
@@ -40,9 +41,11 @@ class _InventarioVistaState extends State<InventarioVista> {
   final TextEditingController _busquedaController = TextEditingController();
   final Debouncer _busquedaDebouncer =
       Debouncer(delay: const Duration(milliseconds: 300));
-  late final ScrollController _scrollController;
-  final Map<String, GlobalKey> _cardKeys = {};
-  
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener =
+      ItemPositionsListener.create();
+  bool _autoScrollEjecutado = false;
+
   // 1. Variable mutable dentro del State para controlar el ID a resaltar
   String? highlightProductId;
 
@@ -50,12 +53,7 @@ class _InventarioVistaState extends State<InventarioVista> {
   void initState() {
     super.initState();
     highlightProductId = widget.highlightProductId;
-    _scrollController = ScrollController();
-    _cargarInventario().then((_) {
-      if (highlightProductId != null && mounted) {
-        _iniciarAutoScrollHaciaProducto(highlightProductId!);
-      }
-    });
+    _cargarInventario();
   }
 
   @override
@@ -64,7 +62,7 @@ class _InventarioVistaState extends State<InventarioVista> {
     if (widget.highlightProductId != null &&
         widget.highlightProductId != oldWidget.highlightProductId) {
       highlightProductId = widget.highlightProductId;
-      _iniciarAutoScrollHaciaProducto(highlightProductId!);
+      _autoScrollEjecutado = false;
     }
   }
 
@@ -72,6 +70,7 @@ class _InventarioVistaState extends State<InventarioVista> {
     if (mounted && highlightProductId != null) {
       setState(() {
         highlightProductId = null;
+        _autoScrollEjecutado = false;
       });
       widget.onHighlightConsumido?.call();
     }
@@ -81,54 +80,24 @@ class _InventarioVistaState extends State<InventarioVista> {
   void dispose() {
     _busquedaDebouncer.dispose();
     _busquedaController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
-  /// Ejecuta un auto-scroll suave hacia la tarjeta del producto especificado
-  /// y garantiza su visibilidad usando Scrollable.ensureVisible o cálculo de offset aproximado.
-  void _iniciarAutoScrollHaciaProducto(String prodId) {
+  /// Navega de forma precisa y fluida al elemento especificado mediante ItemScrollController
+  void _iniciarAutoScrollHaciaProducto(String prodId, List<Producto> lista) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return;
 
-      final key = _cardKeys[prodId];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 700),
+      final int index = lista.indexWhere((p) => p.id == prodId);
+      if (index != -1 && _itemScrollController.isAttached) {
+        await _itemScrollController.scrollTo(
+          index: index,
+          duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOutCubic,
-          alignment: 0.25,
+          alignment: 0.15,
         );
-        return;
-      }
-
-      // Si la tarjeta está fuera del viewport inicial de SliverGrid (carga perezosa):
-      final cInv = context.read<ControladorInventario>();
-      final int index = cInv.productos.indexWhere((p) => p.id == prodId);
-      if (index != -1 && _scrollController.hasClients) {
-        final double estimatedRow = (index / 2).floorToDouble();
-        final double estimatedOffset = (estimatedRow * 254.0) + 180.0;
-        final double targetOffset = estimatedOffset.clamp(
-          0.0,
-          _scrollController.position.maxScrollExtent,
-        );
-
-        await _scrollController.animateTo(
-          targetOffset,
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeInOutCubic,
-        );
-
-        if (mounted && _cardKeys[prodId]?.currentContext != null) {
-          Scrollable.ensureVisible(
-            _cardKeys[prodId]!.currentContext!,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            alignment: 0.25,
-          );
-        }
       }
     });
   }
@@ -449,6 +418,17 @@ class _InventarioVistaState extends State<InventarioVista> {
               productos = productos.where((p) => p.esArticulo).toList();
             }
 
+            // Regla de ordenamiento jerárquico UX:
+            // 1. Prioridad 1: Productos con existencias disponibles (cantidad > 0) arriba
+            // 2. Prioridad 2: Productos agotados (cantidad == 0) abajo
+            // 3. Prioridad secundaria: Orden alfabético por nombre dentro de cada segmento
+            ControladorInventario.ordenarProductosJerarquico(productos);
+
+            if (highlightProductId != null && !_autoScrollEjecutado) {
+              _autoScrollEjecutado = true;
+              _iniciarAutoScrollHaciaProducto(highlightProductId!, productos);
+            }
+
             String tituloLista =
                 'Catálogo · Todos los Productos (${productos.length})';
             if (_filtroActivo == 'critico') {
@@ -492,21 +472,11 @@ class _InventarioVistaState extends State<InventarioVista> {
                 )
               : null,
           body: SafeArea(
-            child: RefreshIndicator(
-              color: AppColors.primary,
-              backgroundColor: AppColors.card,
-              strokeWidth: 2.5,
-              displacement: 40.0,
-              onRefresh: _handleRefresh,
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, isLandscape ? 8 : 12, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                    padding: EdgeInsets.fromLTRB(16, isLandscape ? 4 : 12, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -539,13 +509,13 @@ class _InventarioVistaState extends State<InventarioVista> {
                                 borderSide: BorderSide.none,
                               ),
                               contentPadding: EdgeInsets.symmetric(
-                                vertical: isLandscape ? 8 : 12,
+                                vertical: isLandscape ? 6 : 12,
                                 horizontal: 14,
                               ),
                             ),
                           ),
                         ),
-                        SizedBox(height: isLandscape ? 8 : 12),
+                        SizedBox(height: isLandscape ? 4 : 12),
 
                         // 2. Resumen Inventario & Filtros (Plantas, Stock Crítico, Artículos)
                         RepaintBoundary(
@@ -559,13 +529,13 @@ class _InventarioVistaState extends State<InventarioVista> {
                             onVerSugerencias: _abrirSugerenciasIA,
                           ),
                         ),
-                        SizedBox(height: isLandscape ? 10 : 16),
+                        SizedBox(height: isLandscape ? 4 : 16),
 
                         // 2.5. Escudo del Catálogo: Switch para ver productos deshabilitados (Solo Dueño)
                         if (rolActual != null && (rolActual.esDuena || rolActual.esDueno)) ...[
                           Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                            margin: EdgeInsets.only(bottom: isLandscape ? 4 : 12),
+                            padding: EdgeInsets.symmetric(horizontal: 14, vertical: isLandscape ? 2 : 4),
                             decoration: BoxDecoration(
                               color: _verDeshabilitados
                                   ? AppColors.subtleAmber
@@ -647,87 +617,103 @@ class _InventarioVistaState extends State<InventarioVista> {
                               ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: isLandscape ? 4 : 8),
                       ],
                     ),
                   ),
-                ),
 
-                // 4. Catálogo de productos responsivo con SliverGrid y adaptación dinámica a Tablets
-                if (productos.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.border, width: 1),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'No se encontraron productos para el filtro seleccionado.',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 350,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: isLandscape ? 1.1 : 1.4,
-                        mainAxisExtent: isLandscape ? 252 : 242,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final prod = productos[index];
-                          final cardKey = _cardKeys.putIfAbsent(
-                            prod.id,
-                            () => GlobalKey(),
-                          );
-                          return RepaintBoundary(
-                            key: cardKey,
-                            child: TarjetaProductoInventario(
-                              prod: prod,
-                              rolActual: rolActual,
-                              puedeModificar: puedeModificar,
-                              resaltado: prod.id == highlightProductId,
-                              highlightProductId: highlightProductId,
-                              onResplandorTerminado: () {
-                                if (mounted) {
-                                  setState(() {
-                                    highlightProductId = null;
-                                  });
-                                  widget.onHighlightConsumido?.call();
-                                }
+                  // 4. Catálogo de productos con ScrollablePositionedList.builder
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: AppColors.primary,
+                      backgroundColor: AppColors.card,
+                      strokeWidth: 2.5,
+                      displacement: 40.0,
+                      onRefresh: _handleRefresh,
+                      child: productos.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.card,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                          color: AppColors.border, width: 1),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'No se encontraron productos para el filtro seleccionado.',
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ScrollablePositionedList.builder(
+                              itemScrollController: _itemScrollController,
+                              itemPositionsListener: _itemPositionsListener,
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 4, 16, 110),
+                              itemCount: productos.length,
+                              itemBuilder: (context, index) {
+                                final prod = productos[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 800),
+                                      child: TarjetaProductoInventario(
+                                        prod: prod,
+                                        rolActual: rolActual,
+                                        puedeModificar: puedeModificar,
+                                        resaltado:
+                                            prod.id == highlightProductId,
+                                        highlightProductId: highlightProductId,
+                                        onResplandorTerminado: () {
+                                          if (mounted) {
+                                            setState(() {
+                                              highlightProductId = null;
+                                              _autoScrollEjecutado = false;
+                                            });
+                                            widget.onHighlightConsumido?.call();
+                                          }
+                                        },
+                                        onEditar: () =>
+                                            _abrirEditarProducto(prod),
+                                        onAjustar: () => _abrirAjuste(prod),
+                                        onBorrar: () =>
+                                            _abrirDeshabilitarProducto(prod),
+                                        onDeshabilitar: () =>
+                                            _abrirDeshabilitarProducto(prod),
+                                        onRestaurar: () =>
+                                            _restaurarProducto(prod),
+                                        onEliminarDefinitivamente: () =>
+                                            _abrirEliminarDefinitivamente(
+                                                prod),
+                                      ),
+                                    ),
+                                  ),
+                                );
                               },
-                              onEditar: () => _abrirEditarProducto(prod),
-                              onAjustar: () => _abrirAjuste(prod),
-                              onBorrar: () => _abrirDeshabilitarProducto(prod),
-                              onDeshabilitar: () => _abrirDeshabilitarProducto(prod),
-                              onRestaurar: () => _restaurarProducto(prod),
-                              onEliminarDefinitivamente: () =>
-                                  _abrirEliminarDefinitivamente(prod),
                             ),
-                          );
-                        },
-                        childCount: productos.length,
-                      ),
                     ),
                   ),
-              ],
-                ),
+                ],
               ),
             ),
           );

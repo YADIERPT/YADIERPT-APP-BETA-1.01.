@@ -15,12 +15,31 @@ class ControladorInventario extends ChangeNotifier {
 
   List<Producto> get productos => _productos;
 
+  /// Ordena una lista de productos con criterio jerárquico UX:
+  /// - Prioridad 1 (Arriba): Productos con existencias (`cantidadEnInventario > 0`).
+  /// - Prioridad 2 (Abajo): Productos agotados (`cantidadEnInventario == 0`).
+  /// - Prioridad secundaria: Orden alfabético por nombre dentro de cada grupo.
+  static void ordenarProductosJerarquico(List<Producto> lista) {
+    lista.sort((a, b) {
+      final bool aTieneStock = a.cantidadEnInventario > 0;
+      final bool bTieneStock = b.cantidadEnInventario > 0;
+
+      // 1. Prioridad por existencias: los disponibles se sitúan antes que los agotados
+      if (aTieneStock && !bTieneStock) return -1;
+      if (!aTieneStock && bTieneStock) return 1;
+
+      // 2. Prioridad secundaria: Orden alfabético por nombre (case-insensitive)
+      return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+    });
+  }
+
   /// Inyecta productos en memoria exclusivamente para pruebas unitarias y de widgets,
   /// evitando operaciones asíncronas sobre SQLite y bloqueos de temporizadores.
   @visibleForTesting
   void establecerProductosParaPruebas(List<Producto> nuevos) {
     _modoPruebas = true;
     _productos = List.of(nuevos);
+    ordenarProductosJerarquico(_productos);
     notifyListeners();
   }
 
@@ -55,11 +74,13 @@ class ControladorInventario extends ChangeNotifier {
       'productos',
       where: 'activo = ?',
       whereArgs: [soloActivos ? 1 : 0],
-      orderBy: 'nombre ASC',
+      orderBy:
+          'CASE WHEN cantidadEnInventario > 0 THEN 0 ELSE 1 END, nombre COLLATE NOCASE ASC',
       limit: limite,
       offset: offset > 0 ? offset : null,
     );
     _productos = mapas.map((mapa) => Producto.fromMap(mapa)).toList();
+    ordenarProductosJerarquico(_productos);
     notifyListeners();
   }
 
@@ -81,6 +102,7 @@ class ControladorInventario extends ChangeNotifier {
 
     // 1. Actualización inmediata del estado visual en memoria (Optimistic UI)
     _productos.add(nuevoProducto);
+    ordenarProductosJerarquico(_productos);
     notifyListeners();
 
     // 2. Microtareas: delega la inserción real en SQLite usando Future.microtask()
@@ -214,6 +236,7 @@ class ControladorInventario extends ChangeNotifier {
     final producto = obtenerProducto(productoId);
     if (producto != null) {
       producto.reducirInventario(cantidad);
+      ordenarProductosJerarquico(_productos);
       await _actualizarProducto(producto);
     } else {
       throw Exception('Producto no encontrado');
@@ -227,6 +250,7 @@ class ControladorInventario extends ChangeNotifier {
     final producto = obtenerProducto(productoId);
     if (producto != null) {
       producto.reducirInventario(cantidad);
+      ordenarProductosJerarquico(_productos);
       await _actualizarProducto(producto);
     }
   }
@@ -261,6 +285,7 @@ class ControladorInventario extends ChangeNotifier {
     final index = _productos.indexWhere((p) => p.id == productoActualizado.id);
     if (index != -1) {
       _productos[index] = productoActualizado;
+      ordenarProductosJerarquico(_productos);
       await _actualizarProducto(productoActualizado);
     } else {
       throw Exception('Producto no encontrado');
@@ -289,6 +314,7 @@ class ControladorInventario extends ChangeNotifier {
     if (producto != null) {
       producto.cantidadEnInventario = nuevaCantidad;
       producto.umbralStockCritico = nuevoUmbral;
+      ordenarProductosJerarquico(_productos);
       await _actualizarProducto(producto);
     } else {
       throw Exception('Producto no encontrado');
@@ -307,8 +333,11 @@ class ControladorInventario extends ChangeNotifier {
   }
 
   List<Producto> buscarProductos(String consulta) {
-    if (consulta.isEmpty) return _productos;
-    return _productos.where((p) => p.coincideConBusqueda(consulta)).toList();
+    final List<Producto> resultado = consulta.isEmpty
+        ? List<Producto>.from(_productos)
+        : _productos.where((p) => p.coincideConBusqueda(consulta)).toList();
+    ordenarProductosJerarquico(resultado);
+    return resultado;
   }
 
   /// Búsqueda ultrarrápida mediante el motor de indexación FTS5 (Full-Text Search) de SQLite.
@@ -350,7 +379,9 @@ class ControladorInventario extends ChangeNotifier {
         LIMIT ?
       ''', [ftsQuery, limite]);
 
-      return res.map((mapa) => Producto.fromMap(mapa)).toList();
+      final resultado = res.map((mapa) => Producto.fromMap(mapa)).toList();
+      ordenarProductosJerarquico(resultado);
+      return resultado;
     } catch (e) {
       // Fallback defensivo: Si FTS5 no está disponible temporalmente o la migración está pendiente
       final filtro = '%$termino%';
@@ -361,7 +392,9 @@ class ControladorInventario extends ChangeNotifier {
         orderBy: 'nombre ASC',
         limit: limite,
       );
-      return mapas.map((mapa) => Producto.fromMap(mapa)).toList();
+      final resultado = mapas.map((mapa) => Producto.fromMap(mapa)).toList();
+      ordenarProductosJerarquico(resultado);
+      return resultado;
     }
   }
 

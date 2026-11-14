@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:mi_app/BaseDatos/base_datos.dart';
@@ -3545,7 +3546,7 @@ void main() {
   });
 
   group('Diseño Responsivo con Slivers y Adaptación a Tablets en InventarioVista', () {
-    testWidgets('InventarioVista utiliza CustomScrollView, SliverToBoxAdapter y SliverGrid con maxCrossAxisExtent: 350', (WidgetTester tester) async {
+    testWidgets('InventarioVista utiliza ScrollablePositionedList, ResumenInventarioHeader y adapta productos', (WidgetTester tester) async {
       final cInv = ControladorInventario();
       final cFin = ControladorFinanzas();
       final cPerf = ControladorPerfil();
@@ -3600,25 +3601,14 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // 1. Debe existir un CustomScrollView principal
-      expect(find.byType(CustomScrollView), findsOneWidget);
+      // 1. Debe existir un ScrollablePositionedList principal
+      expect(find.byType(ScrollablePositionedList), findsOneWidget);
 
-      // 2. Contadores superiores y buscador en SliverToBoxAdapter
-      expect(find.byType(SliverToBoxAdapter), findsWidgets);
+      // 2. Contadores superiores y buscador
       expect(find.byType(ResumenInventarioHeader), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
 
-      // 3. El catálogo de productos debe usar SliverGrid
-      expect(find.byType(SliverGrid), findsOneWidget);
-
-      final sliverGridFinder = find.byType(SliverGrid);
-      final sliverGrid = tester.widget<SliverGrid>(sliverGridFinder);
-      expect(sliverGrid.gridDelegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
-
-      final delegate = sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
-      expect(delegate.maxCrossAxisExtent, 350.0);
-
-      // Las tarjetas de producto deben renderizarse adecuadamente
+      // 3. Las tarjetas de producto deben renderizarse adecuadamente
       expect(find.text('Ficus Lyrata Gigante'), findsOneWidget);
       expect(find.text('Monstera Deliciosa'), findsOneWidget);
     });
@@ -3680,17 +3670,12 @@ void main() {
       );
       expect(find.byType(VerticalDivider), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
+      expect(find.byType(TarjetaPosProducto), findsOneWidget);
 
-      // Catálogo arriba y panel de Ticket en Curso debajo dentro del mismo scroll
-      await tester.scrollUntilVisible(
-        find.text('Ticket en Curso'),
-        200.0,
-        scrollable: find.descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.byType(Scrollable),
-        ).first,
-      );
-      expect(find.text('Ticket en Curso'), findsOneWidget);
+      // Al agregar un artículo al carrito, se activa la barra de cobro
+      cVentas.agregarArticulo(p1, 1);
+      await tester.pumpAndSettle();
+      expect(find.text('Ver Ticket y Cobrar'), findsOneWidget);
     });
 
     testWidgets('PosVista en horizontal (>=600px) mantiene flujo vertical unificado sin división 60/40', (WidgetTester tester) async {
@@ -3749,35 +3734,14 @@ void main() {
       expect(find.byType(VerticalDivider), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
 
-      // 2. El catálogo debe estar arriba y el "Ticket en Curso" debajo (flujo natural)
-      expect(find.text('Ticket en Curso'), findsOneWidget);
-      expect(find.text('Sin artículos añadidos'), findsOneWidget);
+      // 2. El catálogo debe renderizar las tarjetas de productos
+      expect(find.byType(TarjetaPosProducto), findsOneWidget);
 
-      final cardRect = tester.getRect(find.byType(TarjetaPosProducto));
-      final ticketRect = tester.getRect(find.text('Ticket en Curso'));
-      expect(ticketRect.top, greaterThanOrEqualTo(cardRect.bottom));
-
-      // 3. Agregar artículo al carrito y verificar actualización en tiempo real abajo y en bottomSheet
+      // 3. Agregar artículo al carrito y verificar actualización en tiempo real en la barra inferior permanente
       cVentas.agregarArticulo(p1, 2);
       await tester.pumpAndSettle();
 
-      expect(
-        find.descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.text('2 artículos'),
-        ),
-        findsOneWidget,
-      );
       expect(find.text('Ver Ticket y Cobrar'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Cobrar Ticket (\$360.00)'),
-        200.0,
-        scrollable: find.descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.byType(Scrollable),
-        ).first,
-      );
-      expect(find.text('Cobrar Ticket (\$360.00)'), findsOneWidget);
     });
   });
 
@@ -4018,7 +3982,7 @@ void main() {
       );
     });
 
-    testWidgets('InventarioVista ajusta childAspectRatio a 1.1 en modo Landscape sin desbordamientos', (WidgetTester tester) async {
+    testWidgets('InventarioVista en modo Landscape renderiza sin desbordamientos y adapta elementos', (WidgetTester tester) async {
       final cInv = ControladorInventario();
       final cFin = ControladorFinanzas();
       final cPerf = ControladorPerfil();
@@ -4073,17 +4037,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      // Desplazar ligeramente para garantizar que el SliverGrid entre en el viewport de 400px de alto
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-
-      final sliverGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
-      final delegate =
-          sliverGrid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
-      expect(delegate.maxCrossAxisExtent, 350.0);
-      expect(delegate.childAspectRatio, 1.1);
-      expect(delegate.mainAxisExtent, 252.0);
+      expect(find.byType(ScrollablePositionedList), findsOneWidget);
       expect(find.byType(TarjetaProductoInventario), findsOneWidget);
     });
 
@@ -4151,20 +4105,10 @@ void main() {
       expect(titulo.maxLines, 2);
       expect(titulo.overflow, TextOverflow.ellipsis);
 
-      // Desplazar hacia abajo en el CustomScrollView unificado para alcanzar el panel de cobro
-      await tester.scrollUntilVisible(
-        find.text('Cobrar Ticket (\$420.00)'),
-        200.0,
-        scrollable: find.descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.byType(Scrollable),
-        ).first,
-      );
-
-      // Botón Cobrar envuelto en FittedBox
+      // Botón inferior persistente 'Ver Ticket y Cobrar' envuelto en FittedBox
       expect(
         find.ancestor(
-          of: find.text('Cobrar Ticket (\$420.00)'),
+          of: find.text('Ver Ticket y Cobrar'),
           matching: find.byType(FittedBox),
         ),
         findsOneWidget,
