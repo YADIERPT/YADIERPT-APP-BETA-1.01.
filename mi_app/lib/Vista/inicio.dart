@@ -91,7 +91,11 @@ class _InicioVistaState extends State<InicioVista> {
 
   void _navegarA(int indice, {String? highlightProductId}) {
     if (indice == 2 && highlightProductId != null) {
+      context
+          .read<ControladorInventario>()
+          .asignarHighlightProductId(highlightProductId);
       _paginas[2] = InventarioVista(
+        key: ValueKey('inv_${highlightProductId}_${DateTime.now().millisecondsSinceEpoch}'),
         highlightProductId: highlightProductId,
         onHighlightConsumido: () {
           _paginas[2] = const InventarioVista();
@@ -266,6 +270,10 @@ class _InicioVistaState extends State<InicioVista> {
             backgroundColor: AppColors.surface,
             floatingActionButton: _buildFloatingActionButton(),
             body: SafeArea(
+              left: false,
+              right: false,
+              top: true,
+              bottom: true,
               child: Column(
                 children: [
                   Container(
@@ -455,6 +463,9 @@ class _InicioVistaState extends State<InicioVista> {
               ),
               child: SafeArea(
                 top: false,
+                left: false,
+                right: false,
+                bottom: true,
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: isLandscape ? 2 : 8),
                   child: Row(

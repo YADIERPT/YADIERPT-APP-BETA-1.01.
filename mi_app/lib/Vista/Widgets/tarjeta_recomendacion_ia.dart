@@ -5,6 +5,7 @@ import '../../IA/Modelos/recomendacion_compra.dart';
 import '../../Controladores/controlador_inventario.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import '../../Utilidades/formateador.dart';
 
 class TarjetaRecomendacionIA extends StatelessWidget {
   final RecomendacionCompra recomendacion;
@@ -364,16 +365,16 @@ class TarjetaRecomendacionIA extends StatelessWidget {
                 _buildMetricaItem(
                   'Inversión Est.',
                   recomendacion.sugiereCompra
-                      ? '\$${recomendacion.costoTotalEstimado.toStringAsFixed(2)}'
-                      : '\$0.00',
+                      ? formatoMoneda(recomendacion.costoTotalEstimado)
+                      : formatoMoneda(0.0),
                   AppColors.textPrimary,
                 ),
                 _buildSeparador(),
                 _buildMetricaItem(
                   'Ganancia Est.',
                   recomendacion.sugiereCompra
-                      ? '\$${recomendacion.gananciaEstimada.toStringAsFixed(2)}'
-                      : '\$0.00',
+                      ? formatoMoneda(recomendacion.gananciaEstimada)
+                      : formatoMoneda(0.0),
                   recomendacion.sugiereCompra
                       ? AppColors.brightGreen
                       : AppColors.textSecondary,

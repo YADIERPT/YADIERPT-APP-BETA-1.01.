@@ -50,7 +50,8 @@ class _InventarioVistaState extends State<InventarioVista> {
   @override
   void initState() {
     super.initState();
-    highlightProductId = widget.highlightProductId;
+    final cInv = context.read<ControladorInventario>();
+    highlightProductId = widget.highlightProductId ?? cInv.highlightProductId;
     _cargarInventario().then((_) {
       if (highlightProductId != null && mounted) {
         _iniciarAutoScrollHaciaProducto(highlightProductId!);
@@ -62,19 +63,31 @@ class _InventarioVistaState extends State<InventarioVista> {
   void didUpdateWidget(covariant InventarioVista oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.highlightProductId != null &&
-        widget.highlightProductId != oldWidget.highlightProductId) {
-      highlightProductId = widget.highlightProductId;
-      _autoScrollEjecutado = false;
-      _iniciarAutoScrollHaciaProducto(highlightProductId!);
+        widget.highlightProductId != highlightProductId) {
+      setHighlightProductId(widget.highlightProductId);
     }
   }
 
+  /// 1. Asigna forzosamente el highlightProductId en el State y fuerza una reconstrucción inmediata
+  void setHighlightProductId(String? id) {
+    if (!mounted) return;
+    setState(() {
+      highlightProductId = id;
+      _autoScrollEjecutado = false;
+    });
+    if (id != null) {
+      _iniciarAutoScrollHaciaProducto(id);
+    }
+  }
+
+  /// 2. Limpieza que ocurre ÚNICAMENTE cuando TweenAnimationBuilder confirma onEnd
   void _limpiarHighlight() {
-    if (mounted && highlightProductId != null) {
+    if (mounted && (highlightProductId != null || context.read<ControladorInventario>().highlightProductId != null)) {
       setState(() {
         highlightProductId = null;
         _autoScrollEjecutado = false;
       });
+      context.read<ControladorInventario>().limpiarHighlightProductId();
       widget.onHighlightConsumido?.call();
     }
   }
@@ -384,6 +397,7 @@ class _InventarioVistaState extends State<InventarioVista> {
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
+    final cInv = context.watch<ControladorInventario>();
     final cAuth = context.watch<ControladorAutenticacion>();
     final cIA = context.watch<ControladorIACompras>();
 
@@ -398,6 +412,38 @@ class _InventarioVistaState extends State<InventarioVista> {
             return !listEquals(previous, next);
           },
           builder: (context, productosInventario, _) {
+            // 3. Validación de integridad al inicio del renderizado del catálogo:
+            // Si el ID ya no existe en la base de datos o en la lista actual de productos,
+            // limpia la variable inmediatamente para evitar errores nulos o auto-scrolls fantasma.
+            final String? idObjetivo =
+                cInv.highlightProductId ?? highlightProductId;
+            if (idObjetivo != null &&
+                !productosInventario.any((p) => p.id == idObjetivo)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _limpiarHighlight();
+              });
+              highlightProductId = null;
+            } else if (idObjetivo != null && idObjetivo != highlightProductId) {
+              highlightProductId = idObjetivo;
+              _autoScrollEjecutado = false;
+            }
+
+            // Si el producto a resaltar está oculto por filtros activos, reseteamos a 'todos'
+            if (highlightProductId != null && _filtroActivo != 'todos') {
+              final prodResaltar = productosInventario
+                  .where((p) => p.id == highlightProductId)
+                  .firstOrNull;
+              if (prodResaltar != null) {
+                if (_filtroActivo == 'critico' && !prodResaltar.esStockCritico) {
+                  _filtroActivo = 'todos';
+                } else if (_filtroActivo == 'plantas' && !prodResaltar.esPlanta) {
+                  _filtroActivo = 'todos';
+                } else if (_filtroActivo == 'articulos' && !prodResaltar.esArticulo) {
+                  _filtroActivo = 'todos';
+                }
+              }
+            }
+
             List<Producto> productos = _busqueda.isEmpty
                 ? List.of(productosInventario)
                 : productosInventario
@@ -476,6 +522,10 @@ class _InventarioVistaState extends State<InventarioVista> {
                 )
               : null,
           body: SafeArea(
+            left: false,
+            right: false,
+            top: true,
+            bottom: true,
             child: RefreshIndicator(
               color: AppColors.primary,
               backgroundColor: AppColors.card,
@@ -688,13 +738,9 @@ class _InventarioVistaState extends State<InventarioVista> {
                                       prod.id == highlightProductId,
                                   highlightProductId: highlightProductId,
                                   onResplandorTerminado: () {
-                                    if (mounted) {
-                                      setState(() {
-                                        highlightProductId = null;
-                                        _autoScrollEjecutado = false;
-                                      });
-                                      widget.onHighlightConsumido?.call();
-                                    }
+                                    // 2. Limpieza que ocurre ÚNICAMENTE cuando TweenAnimationBuilder
+                                    // en su callback onEnd confirma que el brillo ha concluido
+                                    _limpiarHighlight();
                                   },
                                   onEditar: () =>
                                       _abrirEditarProducto(prod),

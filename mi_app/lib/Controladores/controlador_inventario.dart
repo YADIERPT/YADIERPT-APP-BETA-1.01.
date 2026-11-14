@@ -12,8 +12,28 @@ class ControladorInventario extends ChangeNotifier {
   List<Producto> _productos = [];
   bool _filtroSoloActivos = true;
   bool _modoPruebas = false;
+  String? _highlightProductId;
 
   List<Producto> get productos => _productos;
+
+  /// ID del producto actualmente enfocado para auto-scroll y resplandor.
+  String? get highlightProductId => _highlightProductId;
+
+  /// Asigna el ID del producto que debe ser enfocado con auto-scroll y resplandor en InventarioVista.
+  /// Fuerza una reconstrucción de la vista INMEDIATAMENTE mediante `notifyListeners()`.
+  void asignarHighlightProductId(String? id) {
+    _highlightProductId = id;
+    notifyListeners();
+  }
+
+  /// Limpia la selección del producto enfocado una vez que el resplandor visual ha concluido exitosamente
+  /// o si el producto ya no existe en el catálogo.
+  void limpiarHighlightProductId() {
+    if (_highlightProductId != null) {
+      _highlightProductId = null;
+      notifyListeners();
+    }
+  }
 
   /// Ordena una lista de productos con criterio jerárquico UX:
   /// - Prioridad 1 (Arriba): Productos con existencias (`cantidadEnInventario > 0`).

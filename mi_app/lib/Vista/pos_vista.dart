@@ -13,7 +13,6 @@ import '../Utilidades/debouncer.dart';
 import '../Utilidades/formateador.dart';
 import '../Constantes/limites.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
-import 'venta.dart';
 
 class PosVista extends StatefulWidget {
   const PosVista({super.key});
@@ -50,9 +49,10 @@ class _PosVistaState extends State<PosVista> {
 
   void _abrirCobroModal() {
     final cVentas = context.read<ControladorVentas>();
-    final cInventario = context.read<ControladorInventario>();
     final venta = cVentas.ventaActual;
-    if (cVentas.totalArticulosEnCarrito == 0) {
+    final articulos = venta?.articulos ?? [];
+
+    if (cVentas.totalArticulosEnCarrito == 0 || articulos.isEmpty) {
       MotorFeedback.feedbackError();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -64,6 +64,8 @@ class _PosVistaState extends State<PosVista> {
 
     final TextEditingController montoRecibidoController =
         TextEditingController();
+    final bool isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     showModalBottomSheet(
       context: context,
@@ -113,7 +115,7 @@ class _PosVistaState extends State<PosVista> {
                       ),
                     ),
 
-                    // Encabezado con Total a Cobrar
+                    // Encabezado: Resumen del Ticket y Total
                     Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 8),
@@ -124,7 +126,7 @@ class _PosVistaState extends State<PosVista> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Cobro en Caja',
+                                'Resumen del Ticket',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -132,7 +134,7 @@ class _PosVistaState extends State<PosVista> {
                                 ),
                               ),
                               Text(
-                                '${cVentas.totalArticulosEnCarrito} artículos en ticket',
+                                '${articulos.length} ${articulos.length == 1 ? "producto" : "productos"} (${cVentas.totalArticulosEnCarrito} uds.)',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textSecondary,
@@ -151,12 +153,155 @@ class _PosVistaState extends State<PosVista> {
                         ],
                       ),
                     ),
-                    const Divider(height: 16),
+                    const Divider(height: 12),
 
-                    // Campo de entrada: Monto recibido
+                    // Resumen visual de Artículos en el Ticket
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: isLandscape ? 100 : 150,
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 2),
+                        itemCount: articulos.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color: AppColors.border.withValues(alpha: 0.5),
+                        ),
+                        itemBuilder: (context, i) {
+                          final art = articulos[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${art.cantidad}x',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    art.nombre,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  formatoMoneda(art.subtotal),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // Desglose de Totales e Impuestos (si aplica IVA)
+                    if (venta != null && venta.aplicarIva) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Subtotal',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              formatoMoneda(venta.subtotalVenta),
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'IVA (${(venta.porcentajeIva * 100).toInt()}%)',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              formatoMoneda(venta.totalIva),
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total neto',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              formatoMoneda(total),
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const Divider(height: 12),
+
+                    // Campo de entrada: Monto recibido (con autofocus)
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
+                          horizontal: 20, vertical: 6),
                       child: TextField(
                         controller: montoRecibidoController,
                         autofocus: true,
@@ -241,77 +386,43 @@ class _PosVistaState extends State<PosVista> {
                       ),
                     ],
 
-                    // Botones de acción
+                    // Botón único de Confirmar Cobro directo
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => VentaVista(
-                                      controladorVentas: cVentas,
-                                      controladorInventario: cInventario,
-                                    ),
-                                  ),
-                                ).then((_) {
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: montoSuficiente
+                              ? () async {
+                                  Navigator.pop(ctx);
+                                  await cVentas.completarVentaActual();
+                                  MotorFeedback.vibracionFuerte();
+                                  MotorFeedback.reproducirCash();
                                   if (mounted) setState(() {});
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.textSecondary,
-                                side: BorderSide(color: AppColors.border),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text('Ver Detalle'),
+                                }
+                              : null,
+                          icon: const Icon(Icons.check_circle_outline,
+                              size: 20),
+                          label: Text(
+                            'Confirmar Cobro (${formatoMoneda(total)})',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton.icon(
-                              onPressed: montoSuficiente
-                                  ? () async {
-                                      Navigator.pop(ctx);
-                                      await cVentas.completarVentaActual();
-                                      MotorFeedback.vibracionFuerte();
-                                      MotorFeedback.reproducirCash();
-                                      if (mounted) setState(() {});
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.check_circle_outline,
-                                  size: 20),
-                              label: const Text(
-                                'Confirmar Cobro',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                disabledBackgroundColor: AppColors.border,
-                                disabledForegroundColor:
-                                    AppColors.textSecondary,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: AppColors.border,
+                            disabledForegroundColor:
+                                AppColors.textSecondary,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
@@ -376,6 +487,10 @@ class _PosVistaState extends State<PosVista> {
           resizeToAvoidBottomInset: true,
           backgroundColor: AppColors.surface,
           body: SafeArea(
+            left: false,
+            right: false,
+            top: true,
+            bottom: true,
             child: CustomScrollView(
               slivers: [
                 // 1. Parte superior: Buscador y filtros de categoría
@@ -405,6 +520,10 @@ class _PosVistaState extends State<PosVista> {
               if (totalArticulos == 0) return const SizedBox.shrink();
 
               return SafeArea(
+                top: false,
+                left: false,
+                right: false,
+                bottom: true,
                 child: Container(
                   constraints: const BoxConstraints(minHeight: 65),
                   padding: EdgeInsets.symmetric(
@@ -440,7 +559,7 @@ class _PosVistaState extends State<PosVista> {
                               ),
                             ),
                             Text(
-                              '\$${totalVenta.toStringAsFixed(2)}',
+                              formatoMoneda(totalVenta),
                               style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: isLandscape ? 17 : 20,

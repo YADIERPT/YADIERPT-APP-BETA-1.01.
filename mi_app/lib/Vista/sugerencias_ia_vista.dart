@@ -6,6 +6,7 @@ import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Tema/app_theme.dart';
 import '../Tema/app_svg_icons.dart';
+import '../Utilidades/formateador.dart';
 import 'Widgets/tarjeta_recomendacion_ia.dart';
 
 class SugerenciasIAVista extends StatefulWidget {
@@ -219,7 +220,7 @@ class _SugerenciasIAVistaState extends State<SugerenciasIAVista> {
         Expanded(
           child: _buildTarjetaKpi(
             titulo: 'Inversión Sugerida',
-            valor: '\$${ia.inversionTotalEstimada.toStringAsFixed(2)}',
+            valor: formatoMoneda(ia.inversionTotalEstimada),
             svgIcono: AppSvgIcons.monedas,
             color: AppColors.primary,
             fondo: AppColors.primaryContainer,
@@ -229,7 +230,7 @@ class _SugerenciasIAVistaState extends State<SugerenciasIAVista> {
         Expanded(
           child: _buildTarjetaKpi(
             titulo: 'Ganancia Est.',
-            valor: '\$${ia.gananciaProyectadaTotal.toStringAsFixed(2)}',
+            valor: formatoMoneda(ia.gananciaProyectadaTotal),
             svgIcono: AppSvgIcons.tendenciaAlza,
             color: AppColors.brightGreen,
             fondo: AppColors.subtleGreen,
