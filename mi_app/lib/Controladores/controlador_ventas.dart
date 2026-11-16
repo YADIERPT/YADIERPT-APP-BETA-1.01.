@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../Modelos/producto.dart';
 import '../Modelos/venta.dart';
 import '../Modelos/abono.dart';
 import '../Modelos/finanzas.dart';
+import '../Modelos/movimiento_inventario.dart';
 import '../BaseDatos/base_datos.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Servicios/servicio_ticket_pdf.dart';
@@ -528,6 +530,20 @@ class ControladorVentas extends ChangeNotifier {
             mapProd['cantidadEnInventario'] = nuevoStock;
             await txn.insert('productos', mapProd);
           }
+
+          // Registrar movimiento de salida por venta apartada (Append-Only)
+          final mov = MovimientoInventario(
+            productoUuid: articulo.producto.uuid,
+            tipo: TipoMovimientoInventario.venta,
+            cantidad: -articulo.cantidad,
+            referenciaUuid: venta.uuid,
+            motivo: 'Apartado Folio #${venta.id}',
+          );
+          await txn.insert(
+            'movimientos_inventario',
+            mov.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
 
         // 2. Inserción de la venta
@@ -535,14 +551,21 @@ class ControladorVentas extends ChangeNotifier {
 
         // 3. Inserción de los artículos
         for (var articulo in venta.articulos) {
-          await txn.insert('articulos_venta', articulo.toMap(venta.id));
+          await txn.insert(
+            'articulos_venta',
+            articulo.toMap(venta.id, ventaUuidParam: venta.uuid),
+          );
         }
+
+        final String deudorUuid = const Uuid().v4();
 
         // 4. Inserción de abono inicial y asiento financiero
         if (montoAbonoInicial > 0) {
           final abono = Abono(
             id: '${DateTime.now().millisecondsSinceEpoch}_init',
             ventaId: venta.id,
+            ventaUuid: venta.uuid,
+            deudorUuid: deudorUuid,
             monto: montoAbonoInicial,
             fecha: DateTime.now(),
             metodoPago: metodoPagoAbono,
@@ -561,7 +584,9 @@ class ControladorVentas extends ChangeNotifier {
         final double saldoPendiente = (venta.total - montoAbonoInicial).clamp(0.0, double.infinity);
         await txn.insert('deudores', {
           'id': 'deu_${venta.id}',
+          'uuid': deudorUuid,
           'venta_id': venta.id,
+          'venta_uuid': venta.uuid,
           'cliente': cliente.isNotEmpty ? cliente : 'Cliente Mostrador',
           'telefono': '',
           'montoTotal': venta.total,
@@ -570,6 +595,8 @@ class ControladorVentas extends ChangeNotifier {
           'fechaRegistro': venta.fecha.toIso8601String(),
           'fechaLimite': null,
           'estado': saldoPendiente <= 0.01 ? 'LIQUIDADA' : 'PENDIENTE',
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'sync_estado': 'pendiente',
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       });
 
@@ -908,6 +935,20 @@ class ControladorVentas extends ChangeNotifier {
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
+
+          // Registrar movimiento de salida por venta completada (Append-Only)
+          final mov = MovimientoInventario(
+            productoUuid: articulo.producto.uuid,
+            tipo: TipoMovimientoInventario.venta,
+            cantidad: -articulo.cantidad,
+            referenciaUuid: venta.uuid,
+            motivo: 'Venta Folio #${venta.id}',
+          );
+          await txn.insert(
+            'movimientos_inventario',
+            mov.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
 
         // 2. Registrar la venta en la tabla principal con validación explícita
@@ -922,7 +963,7 @@ class ControladorVentas extends ChangeNotifier {
         for (var articulo in venta.articulos) {
           final int rowIdArticulo = await txn.insert(
             'articulos_venta',
-            articulo.toMap(venta.id),
+            articulo.toMap(venta.id, ventaUuidParam: venta.uuid),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
           debugPrint('Artículo de venta insertado: ${articulo.producto.nombre} x${articulo.cantidad} (Row ID: $rowIdArticulo)');

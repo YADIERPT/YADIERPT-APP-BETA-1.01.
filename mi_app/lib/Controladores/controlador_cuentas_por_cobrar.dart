@@ -174,9 +174,19 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
           liquidada ? EstadoVenta.completada.name : EstadoVenta.apartada.name;
       final String cliente = mapaVenta['cliente']?.toString() ?? 'Cliente Mostrador';
 
+      final deudorQuery = await txn.query(
+        'deudores',
+        where: 'venta_id = ? OR id = ?',
+        whereArgs: [idStr, 'deu_$idStr'],
+      );
+      final String? deudorUuid = deudorQuery.isNotEmpty ? deudorQuery.first['uuid']?.toString() : null;
+      final String? ventaUuid = mapaVenta['uuid']?.toString();
+
       final abono = Abono(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         ventaId: idStr,
+        ventaUuid: ventaUuid,
+        deudorUuid: deudorUuid,
         monto: monto,
         fecha: DateTime.now(),
         metodoPago: metodoPago,

@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 /// Enumeración fuertemente tipada de los roles de usuario del vivero.
 ///
 /// Define la jerarquía de accesos y responsabilidades de Planteapp con política simplificada de 2 roles:
@@ -55,49 +57,78 @@ enum RolUsuario {
     }
   }
 }
-
 class Colaborador {
   final String id;
+  final String uuid;
   final String nombre;
   final String clave;
   final RolUsuario rol;
+  final String? updatedAt;
+  final String? deletedAt;
+  final String syncEstado;
+  final String? dispositivoId;
 
   Colaborador({
     required this.id,
+    String? uuid,
     required this.nombre,
     required this.clave,
     this.rol = RolUsuario.empleado,
-  });
+    this.updatedAt,
+    this.deletedAt,
+    this.syncEstado = 'pendiente',
+    this.dispositivoId,
+  }) : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4();
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'uuid': uuid,
       'nombre': nombre,
       'clave': clave,
       'rol': rol.valor,
+      'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': deletedAt,
+      'sync_estado': syncEstado,
+      'dispositivo_id': dispositivoId,
     };
   }
 
   factory Colaborador.fromMap(Map<String, dynamic> map) {
     return Colaborador(
       id: map['id']?.toString() ?? '',
+      uuid: map['uuid']?.toString(),
       nombre: map['nombre']?.toString() ?? '',
       clave: map['clave']?.toString() ?? '',
       rol: RolUsuario.desdeString(map['rol']),
+      updatedAt: map['updated_at']?.toString(),
+      deletedAt: map['deleted_at']?.toString(),
+      syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
+      dispositivoId: map['dispositivo_id']?.toString(),
     );
   }
 
   Colaborador copyWith({
     String? id,
+    String? uuid,
     String? nombre,
     String? clave,
     RolUsuario? rol,
+    String? updatedAt,
+    String? deletedAt,
+    String? syncEstado,
+    String? dispositivoId,
   }) {
     return Colaborador(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
       nombre: nombre ?? this.nombre,
       clave: clave ?? this.clave,
       rol: rol ?? this.rol,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      syncEstado: syncEstado ?? this.syncEstado,
+      dispositivoId: dispositivoId ?? this.dispositivoId,
     );
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 class Producto {
   String id;
+  String uuid;
   String nombre;
   String notas;
   double precioVenta;
@@ -11,9 +13,14 @@ class Producto {
   String tipo; // 'planta' o 'articulo'
   List<String> imagenes;
   bool activo;
+  String? updatedAt;
+  String? deletedAt;
+  String syncEstado;
+  String? dispositivoId;
 
   Producto({
     required this.id,
+    String? uuid,
     required this.nombre,
     this.notas = '',
     required this.precioVenta,
@@ -23,7 +30,12 @@ class Producto {
     this.tipo = 'planta',
     List<String>? imagenes,
     this.activo = true,
-  }) : imagenes = imagenes ?? [];
+    this.updatedAt,
+    this.deletedAt,
+    this.syncEstado = 'pendiente',
+    this.dispositivoId,
+  })  : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4(),
+        imagenes = imagenes ?? [];
 
   bool get esStockCritico => cantidadEnInventario <= umbralStockCritico;
   bool get esPlanta => tipo.toLowerCase() == 'planta';
@@ -32,6 +44,7 @@ class Producto {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'uuid': uuid,
       'nombre': nombre,
       'notas': notas,
       'precioVenta': precioVenta,
@@ -41,12 +54,17 @@ class Producto {
       'tipo': tipo,
       'imagenes': imagenes.join(','),
       'activo': activo ? 1 : 0,
+      'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': deletedAt,
+      'sync_estado': syncEstado,
+      'dispositivo_id': dispositivoId,
     };
   }
 
   factory Producto.fromMap(Map<String, dynamic> map) {
     return Producto(
       id: map['id'],
+      uuid: map['uuid']?.toString(),
       nombre: map['nombre'],
       notas: map['notas'] ?? '',
       precioVenta: (map['precioVenta'] as num).toDouble(),
@@ -62,11 +80,16 @@ class Producto {
       activo: map['activo'] == null
           ? true
           : (map['activo'] == 1 || map['activo'] == true),
+      updatedAt: map['updated_at']?.toString(),
+      deletedAt: map['deleted_at']?.toString(),
+      syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
+      dispositivoId: map['dispositivo_id']?.toString(),
     );
   }
 
   Producto copyWith({
     String? id,
+    String? uuid,
     String? nombre,
     String? notas,
     double? precioVenta,
@@ -76,9 +99,14 @@ class Producto {
     String? tipo,
     List<String>? imagenes,
     bool? activo,
+    String? updatedAt,
+    String? deletedAt,
+    String? syncEstado,
+    String? dispositivoId,
   }) {
     return Producto(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
       nombre: nombre ?? this.nombre,
       notas: notas ?? this.notas,
       precioVenta: precioVenta ?? this.precioVenta,
@@ -88,6 +116,10 @@ class Producto {
       tipo: tipo ?? this.tipo,
       imagenes: imagenes ?? List.from(this.imagenes),
       activo: activo ?? this.activo,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      syncEstado: syncEstado ?? this.syncEstado,
+      dispositivoId: dispositivoId ?? this.dispositivoId,
     );
   }
   void reducirInventario(int cantidad) {
