@@ -62,4 +62,7 @@ key.properties
 .env
 .env.*
 
+*.bak
+*.tmp
 *.apk
+plan_integracion_supabase_planteapp.md
