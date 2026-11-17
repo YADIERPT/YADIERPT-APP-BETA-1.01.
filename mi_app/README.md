@@ -1,59 +1,110 @@
-# Vivero POS (Punto de Venta) 
+# Planteapp (Biznaga Kíix) - Flutter App 🌱
 
-Una aplicación móvil desarrollada en **Flutter** para la gestión de ventas, inventario y finanzas de un vivero botánico. 
+Aplicación móvil oficial de **Planteapp** para el vivero botánico **Biznaga Kíix**, desarrollada en **Flutter** con arquitectura **100% Offline-First** y respaldo multi-dispositivo en **Supabase**.
 
-##  Requisitos Previos
+---
 
-Antes de ejecutar este proyecto, asegúrate de tener instalado:
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (Recomendado versión estable más reciente)
-- Android Studio o VS Code con las extensiones de Flutter y Dart.
-- Un dispositivo Android/iOS físico conectado o un emulador en ejecución.
+## 🌿 Características Destacadas
 
-## 🛠Comandos de Instalación y Ejecución
+- **Punto de Venta (POS):** Escaneo de código de barras por cámara o lector USB/BT, carrito reactivo, desglose de impuestos y pagos en efectivo, tarjeta o transferencia.
+- **Inventario Botánico con Movimientos Append-Only:** Control atómico de existencias en `movimientos_inventario` para evitar inconsistencias y sobreescrituras en terminales concurrentes.
+- **Cuentas por Cobrar (Deudores):** Registro de ventas a crédito, control de clientes y seguimiento de abonos.
+- **Cifrado de Alta Seguridad:** Base de datos local cifrada en reposo mediante **SQLCipher AES-256** con llave maestra protegida en Android Keystore / iOS Keychain (`flutter_secure_storage`).
+- **Autenticación y Roles Estrictos (RBAC):** Hash PBKDF2-HMAC-SHA256 local y sincronización con Supabase Auth bajo dos únicos roles: **Dueño** y **Empleado**.
+- **Sincronización Inteligente en la Nube:** Motor propio con cola *Outbox*, *Pull Incremental* por cursor temporal y avisos reactivos con *Supabase Realtime*.
+- **Modo Local Puro:** Si no se configuran llaves de Supabase, la app opera sin restricciones de forma 100% offline.
+- **Imágenes Optimizadas:** Compresión WebP en cliente (1000px y 300px), almacenamiento en Supabase Storage y visualización instantánea a 60 FPS desde caché local en disco.
+- **Tickets e Impresión:** Generación de recibos PDF e impresión térmica por Bluetooth (ESC/POS).
 
-Sigue estos pasos en tu terminal para poner en marcha el proyecto:
+---
+
+## 🛠 Requisitos Previos
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (versión 3.24.0 o superior).
+- Android Studio o VS Code con extensiones Flutter y Dart.
+- Dispositivo Android (API 26+) / iOS (13+) físico o emulador.
+
+---
+
+## 🚀 Comandos de Instalación y Ejecución
 
 ### 1. Descargar dependencias
-Este comando descargará todos los paquetes necesarios (como `mobile_scanner`, `printing`, `pdf`, etc.) definidos en el archivo `pubspec.yaml`.
 ```bash
 flutter pub get
 ```
 
 ### 2. Ejecutar la aplicación
-Conecta tu celular o inicia un emulador y ejecuta:
+
+#### Modo Local Puro (Offline autónomo)
 ```bash
 flutter run
 ```
-*Si tienes múltiples dispositivos conectados, Flutter te pedirá que elijas uno. Puedes especificarlo directamente con `flutter run -d <device_id>`.*
 
-### 3. Analizar el código (Opcional)
-Para comprobar que no haya errores de sintaxis o advertencias en el código:
+#### Con Sincronización Remota (Supabase)
 ```bash
-flutter analyze
+flutter run \
+  --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=tu-anon-key-publica
 ```
 
-## Compilación para Producción (Build)
-
-Cuando estés listo para generar los instalables de la aplicación para distribuirlos:
-
-### Generar APK para Android
-Esto creará un archivo instalable `.apk` que puedes compartir e instalar en dispositivos Android.
+### 3. Ejecutar la Suite de Pruebas
+El proyecto cuenta con una cobertura de 163 pruebas unitarias y de widgets:
 ```bash
-flutter build apk --release
-```
-*El archivo generado estará ubicado en: `build/app/outputs/flutter-apk/app-release.apk`*
-
-### Generar App Bundle para Google Play (AAB)
-Si planeas subir la app a la Google Play Store, utiliza este comando:
-```bash
-flutter build appbundle --release
+flutter test
 ```
 
-## Funcionalidades Principales
-* **Punto de Venta (POS):** Escáner de código de barras para búsqueda rápida, gestión del carrito y procesamiento de pagos (efectivo, tarjeta, transferencia).
-* **Inventario:** Control de stock, creación de nuevos lotes, alertas de escasez y catálogo fotográfico.
-* **Tickets:** Generación e impresión de tickets de venta en formato PDF compatibles con impresoras térmicas.
-* **Finanzas y Reportes:** Gráficos de ingresos, ticket promedio y un historial detallado de las transacciones diarias.
+### 4. Compilación para Producción (Release)
 
-## Diseños y Mockups
-El proyecto incluye un directorio llamado `MOCKUPS/` donde se encuentran los archivos SVG de alta fidelidad que sirven de referencia visual del diseño UI/UX (ideales para importar a Figma).
+#### APK para Android
+```bash
+flutter build apk --release \
+  --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=tu-anon-key-publica
+```
+*Binario generado en:* `build/app/outputs/flutter-apk/app-release.apk`
+
+#### App Bundle para Google Play (AAB)
+```bash
+flutter build appbundle --release \
+  --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=tu-anon-key-publica
+```
+
+---
+
+## 📁 Estructura del Código Fuente (`lib/`)
+
+```text
+lib/
+├── main.dart                             # Punto de entrada, configuración de servicios y MultiProvider
+├── controladores/                        # Gestores de estado (MVVM)
+│   ├── controlador_autenticacion.dart    # Login, sesiones y roles
+│   ├── controlador_inventario.dart       # Catálogo, lotes y existencias
+│   ├── controlador_ventas.dart           # POS, carrito y cobranza
+│   ├── controlador_sincronizacion.dart   # Orquestador del estado de sincronización
+│   └── controlador_ia_compras.dart       # Motor de recomendaciones en Isolate
+├── modelos/                              # Entidades del dominio y mapeo JSON/SQLite
+├── servicios/                            # Infraestructura de bajo nivel
+│   ├── base_datos.dart                   # SQLite v15 cifrado con SQLCipher
+│   ├── servicio_supabase.dart            # Cliente Supabase seguro y fallback local
+│   ├── servicio_sincronizacion.dart      # Motor Push/Pull incremental
+│   ├── servicio_realtime.dart            # Suscripción a avisos en vivo
+│   ├── servicio_autenticacion_supabase.dart # Sesión remota silenciosa
+│   ├── servicio_almacenamiento_imagenes.dart # Compresión WebP, caché y Storage
+│   └── secure_storage_service.dart       # Acceso a Keystore / Keychain
+└── vistas/                               # Pantallas y componentes UI
+    ├── inicio_vista.dart                 # Shell principal con navegación
+    ├── pos_vista.dart                    # Caja de cobro y lector
+    ├── inventario_vista.dart             # Gestión de productos y stock
+    ├── deudores_vista.dart               # Cuentas por cobrar y abonos
+    ├── sincronizacion_vista.dart         # Panel de respaldo y cola outbox
+    └── widgets/                          # Componentes reutilizables (IndicadorSincronizacion, ImagenProductoWidget)
+```
+
+---
+
+## 📑 Documentación Adicional
+Para detalles exhaustivos de arquitectura, auditorías y guías de validación, consulta la carpeta `../docs/`:
+- [Contexto General de Arquitectura](../docs/contexto_general_planteapp.md)
+- [Informe Final de Integración Supabase](../docs/informe_integracion_supabase.md)
+- [Guía de Pruebas Manuales](../docs/guia_pruebas_manuales_fase7.md)
