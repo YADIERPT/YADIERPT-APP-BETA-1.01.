@@ -76,6 +76,12 @@ class BaseDeDatos {
       }
     }
 
+    // Asegurar columnas de Supabase Auth en colaboradores (Fase 4)
+    try {
+      await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'auth_user_id', 'TEXT');
+      await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'email', 'TEXT');
+    } catch (_) {}
+
     return dbInstancia;
   }
 
@@ -470,6 +476,10 @@ class BaseDeDatos {
         await _agregarColumnaSiNoExiste(db, tabla, 'dispositivo_id', 'TEXT');
       }
 
+      // Columnas para Supabase Auth en colaboradores (Fase 4)
+      await _agregarColumnaSiNoExiste(db, 'colaboradores', 'auth_user_id', 'TEXT');
+      await _agregarColumnaSiNoExiste(db, 'colaboradores', 'email', 'TEXT');
+
       // Columnas relacionales UUID
       await _agregarColumnaSiNoExiste(db, 'articulos_venta', 'venta_uuid', 'TEXT');
       await _agregarColumnaSiNoExiste(db, 'articulos_venta', 'producto_uuid', 'TEXT');
@@ -669,6 +679,8 @@ class BaseDeDatos {
         nombre TEXT NOT NULL,
         clave TEXT NOT NULL,
         rol TEXT NOT NULL,
+        auth_user_id TEXT,
+        email TEXT,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',

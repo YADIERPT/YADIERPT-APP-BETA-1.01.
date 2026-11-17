@@ -7,6 +7,7 @@ import '../BaseDatos/base_datos.dart';
 import '../Constantes/limites.dart';
 import 'servicio_supabase.dart';
 import 'servicio_conectividad.dart';
+import 'servicio_autenticacion_supabase.dart';
 
 /// Contrato para interactuar con la fuente remota de sincronización (Supabase u origen simulado).
 abstract class FuenteRemotaSincronizacion {
@@ -118,7 +119,7 @@ class ServicioSincronizacion {
       fuenteRemota = FuenteRemotaSupabase(client);
     }
 
-    // Verificar conectividad a nivel de red si no estamos usando un mock inyectado
+    // Verificar conectividad y sesión de usuario si no estamos usando un mock inyectado
     if (clientOverride == null && fuenteRemotaOverride == null) {
       final hayRed = await ServicioConectividad.instancia.tieneConexion();
       if (!hayRed) {
@@ -126,6 +127,12 @@ class ServicioSincronizacion {
           exitoso: false,
           error: 'Sin conexión a internet disponible.',
         );
+      }
+
+      // Asegurar que la sesión de Supabase Auth esté activa para validar políticas RLS
+      final client = ServicioSupabase.instancia.client;
+      if (client != null && client.auth.currentSession == null) {
+        await ServicioAutenticacionSupabase.instancia.restaurarSesion();
       }
     }
 
@@ -489,6 +496,7 @@ class ServicioSincronizacion {
           if (remotoUpdated.compareTo(localUpdated) > 0) {
             final updateFila = Map<String, dynamic>.from(fila);
             updateFila.remove('id'); // Preservar la clave primaria interna de SQLite
+            updateFila.remove('clave'); // Preservar la clave PBKDF2 localmente hasheada
             await txn.update('colaboradores', updateFila, where: 'uuid = ?', whereArgs: [uuid]);
           }
         }
@@ -607,6 +615,7 @@ class ServicioSincronizacion {
           'codigo_local': local['id'],
           'nombre': local['nombre'],
           'rol': rolNorm,
+          'auth_user_id': local['auth_user_id'],
           'activo': local['activo'] == null || local['activo'] == 1,
           'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
           'deleted_at': local['deleted_at'],
@@ -774,6 +783,8 @@ class ServicioSincronizacion {
     return {
       'id': remoto['codigo_local'] ?? remoto['uuid'].toString().substring(0, 8),
       'uuid': remoto['uuid'],
+      'auth_user_id': remoto['auth_user_id'],
+      'email': remoto['email'],
       'nombre': remoto['nombre'],
       'clave': '', // Las claves no bajan de Supabase por seguridad PBKDF2 local
       'rol': remoto['rol'] == 'dueno' ? 'dueño' : 'empleado',
