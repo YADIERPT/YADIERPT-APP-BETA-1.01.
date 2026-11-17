@@ -8,6 +8,7 @@ import '../Constantes/limites.dart';
 import 'servicio_supabase.dart';
 import 'servicio_conectividad.dart';
 import 'servicio_autenticacion_supabase.dart';
+import 'servicio_almacenamiento_imagenes.dart';
 
 /// Contrato para interactuar con la fuente remota de sincronización (Supabase u origen simulado).
 abstract class FuenteRemotaSincronizacion {
@@ -159,6 +160,18 @@ class ServicioSincronizacion {
 
       // 2. Fase PULL: Descargar mutaciones remotas e integrar en SQLite local
       totalDescargados = await _ejecutarPull(fuenteRemota, db, dispositivoId);
+
+      // 2b. Procesar cola de imágenes pendientes hacia Supabase Storage (Fase 6)
+      try {
+        final client = clientOverride ?? ServicioSupabase.instancia.client;
+        if (client != null) {
+          await ServicioAlmacenamientoImagenes.instancia.procesarColaSubida(
+            clientOverride: client,
+          );
+        }
+      } catch (e) {
+        debugPrint('Aviso al procesar cola de imágenes en sincronización: $e');
+      }
 
       // 3. Registrar éxito y timestamp en config_sync
       final nowIso = DateTime.now().toUtc().toIso8601String();
@@ -529,6 +542,11 @@ class ServicioSincronizacion {
           'imagen_url': local['imagenes'] != null && local['imagenes'].toString().isNotEmpty
               ? local['imagenes'].toString().split(',').first
               : null,
+          'miniatura_url': local['imagenes'] != null && local['imagenes'].toString().split(',').length > 1
+              ? local['imagenes'].toString().split(',')[1]
+              : (local['imagenes'] != null && local['imagenes'].toString().isNotEmpty
+                  ? local['imagenes'].toString().split(',').first
+                  : null),
           'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
           'deleted_at': local['deleted_at'],
         };
@@ -635,6 +653,28 @@ class ServicioSincronizacion {
   }
 
   Map<String, dynamic> _mapearSupabaseAProductoLocal(Map<String, dynamic> remoto) {
+    final String imgUrl = remoto['imagen_url']?.toString() ?? '';
+    final String thumbUrl = remoto['miniatura_url']?.toString() ?? '';
+    String imagenesStr = '';
+    if (imgUrl.isNotEmpty && thumbUrl.isNotEmpty && imgUrl != thumbUrl) {
+      imagenesStr = '$imgUrl,$thumbUrl';
+    } else if (imgUrl.isNotEmpty) {
+      imagenesStr = imgUrl;
+    } else if (thumbUrl.isNotEmpty) {
+      imagenesStr = thumbUrl;
+    }
+
+    // Pre-cacheo de miniatura en segundo plano para disponibilidad inmediata sin conexión
+    final urlParaCache = thumbUrl.isNotEmpty ? thumbUrl : imgUrl;
+    final uuid = remoto['uuid']?.toString() ?? '';
+    if (urlParaCache.isNotEmpty && uuid.isNotEmpty) {
+      ServicioAlmacenamientoImagenes.instancia.cachearImagenRemota(
+        url: urlParaCache,
+        productoUuid: uuid,
+        esMiniatura: true,
+      ).ignore();
+    }
+
     return {
       'id': remoto['codigo_local'] ?? remoto['uuid'].toString().substring(0, 8),
       'uuid': remoto['uuid'],
@@ -645,7 +685,7 @@ class ServicioSincronizacion {
       'cantidadEnInventario': (remoto['stock'] as num?)?.toInt() ?? 0,
       'umbralStockCritico': (remoto['umbral_stock_critico'] as num?)?.toInt() ?? 5,
       'tipo': remoto['tipo'] ?? 'planta',
-      'imagenes': remoto['imagen_url'] ?? '',
+      'imagenes': imagenesStr,
       'activo': (remoto['activo'] == true && remoto['deleted_at'] == null) ? 1 : 0,
       'updated_at': remoto['updated_at'],
       'deleted_at': remoto['deleted_at'],

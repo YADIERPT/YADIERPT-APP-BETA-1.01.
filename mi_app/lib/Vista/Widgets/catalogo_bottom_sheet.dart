@@ -7,6 +7,7 @@ import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
 import '../../Utilidades/debouncer.dart';
+import 'imagen_producto_widget.dart';
 
 class CatalogoBottomSheet extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -322,29 +323,15 @@ class _CatalogoBottomSheetState extends State<CatalogoBottomSheet> {
   }
 
   Widget _buildImagenProducto(Producto prod) {
-    if (prod.imagenes.isNotEmpty && prod.imagenes.first.trim().isNotEmpty) {
-      final imgPath = prod.imagenes.first.trim();
-      if (imgPath.startsWith('assets/')) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.asset(
-            imgPath,
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(prod),
-          ),
-        );
-      } else {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.file(
-            File(imgPath),
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(prod),
-          ),
-        );
-      }
-    }
-    return _buildPlaceholder(prod);
+    return ImagenProductoWidget(
+      producto: prod,
+      width: 48,
+      height: 48,
+      borderRadius: BorderRadius.circular(10),
+      fit: BoxFit.cover,
+      usarMiniatura: true,
+      placeholder: _buildPlaceholder(prod),
+    );
   }
 
   Widget _buildPlaceholder(Producto prod) {

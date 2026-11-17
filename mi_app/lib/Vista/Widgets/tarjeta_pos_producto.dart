@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import 'imagen_producto_widget.dart';
 
 class TarjetaPosProducto extends StatelessWidget {
   final Producto producto;
@@ -213,29 +214,15 @@ class TarjetaPosProducto extends StatelessWidget {
   }
 
   Widget _buildImagen() {
-    if (producto.imagenes.isNotEmpty && producto.imagenes.first.trim().isNotEmpty) {
-      final imgPath = producto.imagenes.first.trim();
-      if (imgPath.startsWith('assets/')) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            imgPath,
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(),
-          ),
-        );
-      } else {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            File(imgPath),
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(),
-          ),
-        );
-      }
-    }
-    return _buildPlaceholder();
+    return ImagenProductoWidget(
+      producto: producto,
+      width: double.infinity,
+      height: double.infinity,
+      borderRadius: BorderRadius.circular(12),
+      fit: BoxFit.cover,
+      usarMiniatura: true,
+      placeholder: _buildPlaceholder(),
+    );
   }
 
   Widget _buildPlaceholder() {

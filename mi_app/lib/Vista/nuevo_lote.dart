@@ -7,7 +7,9 @@ import '../Controladores/controlador_inventario.dart';
 import '../Modelos/producto.dart';
 import '../Tema/app_theme.dart';
 import '../Constantes/limites.dart';
+import '../Servicios/servicio_almacenamiento_imagenes.dart';
 import '../Servicios/servicio_imagen.dart';
+import 'package:uuid/uuid.dart';
 
 class NuevoLoteVista extends StatefulWidget {
   final ControladorInventario controladorInventario;
@@ -132,14 +134,25 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
     if (formValido) {
       _formKey.currentState!.save();
       try {
+        List<String> imagenesFinales = [];
+        final productoUuid = const Uuid().v4();
+        if (rutaImagen != null && rutaImagen!.isNotEmpty) {
+          imagenesFinales = await ServicioAlmacenamientoImagenes.instancia
+              .prepararImagenParaProducto(
+            rutaOriginal: rutaImagen!,
+            productoUuid: productoUuid,
+          );
+        }
+
         final nuevo = Producto(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
+          uuid: productoUuid,
           nombre: nombre,
           tipo: tipoSeleccionado!,
           precioVenta: precioVenta > 0 ? precioVenta : costo,
           costo: costo,
           cantidadEnInventario: cantidad,
-          imagenes: rutaImagen != null ? [rutaImagen!] : [],
+          imagenes: imagenesFinales,
           notas: notas,
         );
         await widget.controladorInventario.agregarProducto(nuevo);

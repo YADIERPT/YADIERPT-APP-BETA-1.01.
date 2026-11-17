@@ -6,7 +6,9 @@ import '../../Modelos/colaborador.dart';
 import '../../Modelos/producto.dart';
 import '../../Tema/app_theme.dart';
 import '../../Constantes/limites.dart';
+import '../../Servicios/servicio_almacenamiento_imagenes.dart';
 import '../../Servicios/servicio_imagen.dart';
+import 'imagen_producto_widget.dart';
 
 class EditarProductoSheet extends StatefulWidget {
   final Producto producto;
@@ -147,20 +149,12 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
       );
     }
     if (!_imagenEliminada && widget.producto.imagenes.isNotEmpty) {
-      final img = widget.producto.imagenes.first;
-      if (img.startsWith('assets/')) {
-        return Image.asset(
-          img,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          errorBuilder: (c, e, s) => _buildPlaceholder(),
-        );
-      }
-      return Image.file(
-        File(img),
+      return ImagenProductoWidget(
+        producto: widget.producto,
         fit: BoxFit.cover,
         width: double.infinity,
-        errorBuilder: (c, e, s) => _buildPlaceholder(),
+        usarMiniatura: false,
+        placeholder: _buildPlaceholder(),
       );
     }
     return _buildPlaceholder();
@@ -209,7 +203,11 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
 
     List<String> imagenesFinales;
     if (_nuevaRutaImagen != null && _nuevaRutaImagen!.isNotEmpty) {
-      imagenesFinales = [_nuevaRutaImagen!];
+      imagenesFinales = await ServicioAlmacenamientoImagenes.instancia
+          .prepararImagenParaProducto(
+        rutaOriginal: _nuevaRutaImagen!,
+        productoUuid: widget.producto.uuid,
+      );
     } else if (_imagenEliminada) {
       imagenesFinales = [];
     } else {
@@ -218,6 +216,7 @@ class _EditarProductoSheetState extends State<EditarProductoSheet> {
 
     final productoActualizado = Producto(
       id: widget.producto.id,
+      uuid: widget.producto.uuid,
       nombre: nombreTrim,
       tipo: _tipo,
       precioVenta: precioVenta,

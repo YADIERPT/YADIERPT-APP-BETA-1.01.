@@ -7,6 +7,7 @@ import '../../Modelos/producto.dart';
 import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import 'imagen_producto_widget.dart';
 
 class TarjetaProductoInventario extends StatelessWidget {
   final Producto prod;
@@ -512,34 +513,15 @@ class TarjetaProductoInventario extends StatelessWidget {
   /// Soporta rutas locales de assets ('assets/...') o archivos guardados en el dispositivo ('/data/...').
   /// En caso de no existir o fallar, renderiza un ícono botánico SVG nativo sin requerir internet.
   Widget _buildImagenProducto(double width, double height) {
-    if (prod.imagenes.isNotEmpty && prod.imagenes.first.trim().isNotEmpty) {
-      final imgPath = prod.imagenes.first.trim();
-      if (imgPath.startsWith('assets/')) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            imgPath,
-            width: width,
-            height: height,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
-          ),
-        );
-      } else {
-        final file = File(imgPath);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            file,
-            width: width,
-            height: height,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
-          ),
-        );
-      }
-    }
-    return _buildPlaceholderIcon();
+    return ImagenProductoWidget(
+      producto: prod,
+      width: width,
+      height: height,
+      borderRadius: BorderRadius.circular(12),
+      fit: BoxFit.cover,
+      usarMiniatura: true,
+      placeholder: _buildPlaceholderIcon(),
+    );
   }
 
   Widget _buildPlaceholderIcon() {

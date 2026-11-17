@@ -22,6 +22,11 @@ class BaseDeDatos {
     return _database!;
   }
 
+  @visibleForTesting
+  void setDatabaseForTesting(Database? db) {
+    _database = db;
+  }
+
   Future<Database> _inicializarDB(String filePath) async {
     String path = filePath;
     final String password = await ClaveBaseDatos.obtenerClaveSegura();
@@ -80,6 +85,22 @@ class BaseDeDatos {
     try {
       await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'auth_user_id', 'TEXT');
       await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'email', 'TEXT');
+    } catch (_) {}
+
+    // Asegurar tabla cola_imagenes para sincronización en segundo plano de Storage (Fase 6)
+    try {
+      await dbInstancia.execute('''
+        CREATE TABLE IF NOT EXISTS cola_imagenes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          producto_uuid TEXT NOT NULL,
+          ruta_local_principal TEXT NOT NULL,
+          ruta_local_miniatura TEXT NOT NULL,
+          intentos INTEGER NOT NULL DEFAULT 0,
+          ultimo_error TEXT,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await dbInstancia.execute('CREATE INDEX IF NOT EXISTS idx_cola_img_producto ON cola_imagenes (producto_uuid)');
     } catch (_) {}
 
     return dbInstancia;
@@ -441,6 +462,19 @@ class BaseDeDatos {
       ''');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_cola_sync_created ON cola_sincronizacion (created_at ASC)');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_cola_sync_registro ON cola_sincronizacion (tabla, registro_uuid)');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cola_imagenes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          producto_uuid TEXT NOT NULL,
+          ruta_local_principal TEXT NOT NULL,
+          ruta_local_miniatura TEXT NOT NULL,
+          intentos INTEGER NOT NULL DEFAULT 0,
+          ultimo_error TEXT,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_cola_img_producto ON cola_imagenes (producto_uuid)');
 
       await db.execute('''
         CREATE TABLE IF NOT EXISTS config_sync (

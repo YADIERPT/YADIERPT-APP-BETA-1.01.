@@ -115,7 +115,12 @@ class ControladorSincronizacion extends ChangeNotifier {
       }
 
       final res = await db.rawQuery('SELECT COUNT(*) as total FROM cola_sincronizacion');
-      _cambiosPendientes = (res.first['total'] as num?)?.toInt() ?? 0;
+      int totalImg = 0;
+      try {
+        final resImg = await db.rawQuery('SELECT COUNT(*) as total FROM cola_imagenes');
+        totalImg = (resImg.first['total'] as num?)?.toInt() ?? 0;
+      } catch (_) {}
+      _cambiosPendientes = ((res.first['total'] as num?)?.toInt() ?? 0) + totalImg;
 
       final erroresRes = await db.query(
         'cola_sincronizacion',
@@ -123,7 +128,27 @@ class ControladorSincronizacion extends ChangeNotifier {
         orderBy: 'created_at DESC',
         limit: 15,
       );
-      _registroErrores = List<Map<String, dynamic>>.from(erroresRes);
+      final List<Map<String, dynamic>> listaErrores = List<Map<String, dynamic>>.from(erroresRes);
+      try {
+        final erroresImg = await db.query(
+          'cola_imagenes',
+          where: 'ultimo_error IS NOT NULL OR intentos > 0',
+          orderBy: 'created_at DESC',
+          limit: 10,
+        );
+        for (final err in erroresImg) {
+          listaErrores.add({
+            'id': err['id'],
+            'tabla': 'storage_productos',
+            'registro_uuid': err['producto_uuid'],
+            'operacion': 'upload',
+            'intentos': err['intentos'],
+            'ultimo_error': err['ultimo_error'],
+            'created_at': err['created_at'],
+          });
+        }
+      } catch (_) {}
+      _registroErrores = listaErrores;
       notifyListeners();
     } catch (_) {}
   }
@@ -151,8 +176,13 @@ class ControladorSincronizacion extends ChangeNotifier {
     if (_usarMocks) return;
     try {
       final db = await BaseDeDatos.instancia.database;
-      final res = await db.rawQuery('SELECT COUNT(*) as total FROM cola_sincronizacion');
-      _cambiosPendientes = (res.first['total'] as num?)?.toInt() ?? 0;
+      final resSync = await db.rawQuery('SELECT COUNT(*) as total FROM cola_sincronizacion');
+      int totalImg = 0;
+      try {
+        final resImg = await db.rawQuery('SELECT COUNT(*) as total FROM cola_imagenes');
+        totalImg = (resImg.first['total'] as num?)?.toInt() ?? 0;
+      } catch (_) {}
+      _cambiosPendientes = ((resSync.first['total'] as num?)?.toInt() ?? 0) + totalImg;
 
       final config = await db.query('config_sync', where: 'id = 1');
       if (config.isNotEmpty) {
@@ -224,6 +254,13 @@ class ControladorSincronizacion extends ChangeNotifier {
         {'intentos': 0, 'ultimo_error': null},
         where: 'ultimo_error IS NOT NULL OR intentos > 0',
       );
+      try {
+        await db.update(
+          'cola_imagenes',
+          {'intentos': 0, 'ultimo_error': null},
+          where: 'ultimo_error IS NOT NULL OR intentos > 0',
+        );
+      } catch (_) {}
       _ultimoError = null;
       return await sincronizarManual();
     } catch (e) {
