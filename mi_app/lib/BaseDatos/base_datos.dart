@@ -640,6 +640,14 @@ class BaseDeDatos {
     await _actualizarEsquema(db, oldVersion, newVersion);
   }
 
+  @visibleForTesting
+  Future<void> crearEsquemaParaPruebas(
+    Database db,
+    int version,
+  ) async {
+    await _crearEsquema(db, version);
+  }
+
   static Future<void> _agregarColumnaSiNoExiste(
     DatabaseExecutor db,
     String tabla,

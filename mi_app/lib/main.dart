@@ -17,6 +17,8 @@ import 'Controladores/controlador_autenticacion.dart';
 import 'Controladores/controlador_biometrico.dart';
 import 'Controladores/controlador_hardware.dart';
 import 'Controladores/controlador_cuentas_por_cobrar.dart';
+import 'Controladores/controlador_sincronizacion.dart';
+import 'Servicios/servicio_supabase.dart';
 import 'IA/Controladores/controlador_ia_compras.dart';
 import 'Modelos/producto.dart';
 
@@ -69,6 +71,15 @@ void main() async {
     controladorIA: controladorIA,
     controladorBiometrico: controladorBiometrico,
   );
+
+  // Inicialización de cliente Supabase (silencioso en modo local puro si no hay llaves)
+  try {
+    await ServicioSupabase.instancia.inicializar();
+  } catch (e) {
+    debugPrint('Aviso en inicialización de Supabase: $e');
+  }
+
+  final controladorSincronizacion = ControladorSincronizacion();
   // Cargar siempre la cuenta administradora por defecto en un bloque aislado
   try {
     await controladorAutenticacion.cargarUsuariosPorDefecto();
@@ -127,6 +138,7 @@ void main() async {
         ChangeNotifierProvider<ControladorIACompras>.value(value: controladorIA),
         ChangeNotifierProvider<ControladorHardware>.value(value: controladorHardware),
         Provider<ControladorBiometrico>.value(value: controladorBiometrico),
+        ChangeNotifierProvider<ControladorSincronizacion>.value(value: controladorSincronizacion),
       ],
       child: const ViverApp(),
     ),
