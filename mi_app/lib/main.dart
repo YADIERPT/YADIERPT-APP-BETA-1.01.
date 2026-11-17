@@ -19,6 +19,7 @@ import 'Controladores/controlador_hardware.dart';
 import 'Controladores/controlador_cuentas_por_cobrar.dart';
 import 'Controladores/controlador_sincronizacion.dart';
 import 'Servicios/servicio_supabase.dart';
+import 'Servicios/servicio_realtime.dart';
 import 'IA/Controladores/controlador_ia_compras.dart';
 import 'Modelos/producto.dart';
 
@@ -80,6 +81,10 @@ void main() async {
   }
 
   final controladorSincronizacion = ControladorSincronizacion();
+
+  // Inicializar servicio de Realtime para sincronización multi-dispositivo (Fase 4b)
+  ServicioRealtime.instancia.inicializar();
+
   // Cargar siempre la cuenta administradora por defecto en un bloque aislado
   try {
     await controladorAutenticacion.cargarUsuariosPorDefecto();

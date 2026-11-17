@@ -8,6 +8,7 @@ import '../BaseDatos/base_datos.dart';
 import '../Servicios/servicio_criptografia.dart';
 import '../Servicios/secure_storage_service.dart';
 import '../Servicios/servicio_autenticacion_supabase.dart';
+import '../Servicios/servicio_realtime.dart';
 
 /// Alias semántico para el controlador de personal / colaboradores
 typedef ControladorEmpleados = ControladorAutenticacion;
@@ -382,7 +383,11 @@ class ControladorAutenticacion extends ChangeNotifier {
 
       if (resultados.isNotEmpty) {
         _usuarioActual = Colaborador.fromMap(resultados.first);
-        ServicioAutenticacionSupabase.instancia.restaurarSesion().catchError((e) {
+        ServicioAutenticacionSupabase.instancia.restaurarSesion().then((restaurada) {
+          if (restaurada) {
+            ServicioRealtime.instancia.iniciarEscucha();
+          }
+        }).catchError((e) {
           debugPrint('Aviso al restaurar sesión Supabase por ID: $e');
           return false;
         });
@@ -585,6 +590,9 @@ class ControladorAutenticacion extends ChangeNotifier {
     _tokenDesafioActivo = null;
     _expiracionTokenDesafio = null;
     _usuarioDesafio = null;
+    ServicioRealtime.instancia.detenerEscucha().catchError((e) {
+      debugPrint('Aviso al detener Realtime: $e');
+    });
     ServicioAutenticacionSupabase.instancia.cerrarSesion().catchError((e) {
       debugPrint('Aviso al cerrar sesión Supabase: $e');
     });
@@ -608,6 +616,10 @@ class ControladorAutenticacion extends ChangeNotifier {
             email: _usuarioActual!.emailAutenticacion,
           );
         }
+        // Iniciar escucha reactiva Realtime multi-dispositivo (Fase 4b)
+        ServicioRealtime.instancia.iniciarEscucha().catchError((e) {
+          debugPrint('Aviso al iniciar Realtime tras login: $e');
+        });
       }
     } catch (e) {
       debugPrint('Aviso en login silencioso Supabase: $e');
