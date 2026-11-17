@@ -9,6 +9,7 @@ import '../Controladores/controlador_inventario.dart';
 import 'Widgets/catalogo_bottom_sheet.dart';
 import 'Widgets/articulo_ticket_item.dart';
 import 'Widgets/venta_footer.dart';
+import 'Widgets/indicador_sincronizacion.dart';
 import 'impresion_ticket.dart';
 import '../Servicios/servicio_ticket_pdf.dart';
 import '../Utilidades/formateador.dart';
@@ -697,6 +698,10 @@ class _VentaVistaState extends State<VentaVista> {
                           ),
                         ],
                       ),
+                actions: const [
+                  IndicadorSincronizacion(),
+                  SizedBox(width: 8),
+                ],
               ),
               body: isLandscape
                   ? _buildLandscapeLayout(venta, totalArticulos)

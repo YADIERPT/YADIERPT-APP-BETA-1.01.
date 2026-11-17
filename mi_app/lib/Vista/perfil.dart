@@ -9,6 +9,7 @@ import 'empleados_vista.dart';
 import 'configuracion_financiera_vista.dart';
 import 'seguridad_acceso_vista.dart';
 import 'hardware_vista.dart';
+import 'sincronizacion_vista.dart';
 import 'Widgets/verificacion_seguridad_sheet.dart';
 import 'Widgets/role_guard.dart';
 import 'Widgets/app_logo.dart';
@@ -18,6 +19,7 @@ import '../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../Controladores/controlador_biometrico.dart';
 import '../Controladores/controlador_hardware.dart';
+import '../Controladores/controlador_sincronizacion.dart';
 import '../Modelos/colaborador.dart';
 
 class PerfilVista extends StatefulWidget {
@@ -281,6 +283,33 @@ class _PerfilVistaState extends State<PerfilVista> {
                   ),
                 ),
               ),
+              RoleGuard.soloDueno(
+                rolActual: usuario?.rol,
+                modo: RoleGuardMode.ocultar,
+                child: _buildListTile(
+                  Icons.cloud_sync_outlined,
+                  'Sincronización y Respaldo',
+                  'Estado en la nube, sincronizar ahora y outbox',
+                  iconBgColor: AppColors.subtleGreen,
+                  iconColor: AppColors.brightGreen,
+                  onTap: () {
+                    ControladorSincronizacion? ctrlSync;
+                    try {
+                      ctrlSync = context.read<ControladorSincronizacion>();
+                    } catch (_) {}
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SincronizacionVista(
+                          controladorSincronizacion: ctrlSync,
+                        ),
+                      ),
+                    ).then((_) {
+                      if (mounted) setState(() {});
+                    });
+                  },
+                ),
+              ),
               _buildListTile(
                 Icons.account_balance_wallet_outlined,
                 'Cuentas por Cobrar (Deudores)',
@@ -481,14 +510,12 @@ class _PerfilVistaState extends State<PerfilVista> {
     final Color fg = iconColor ?? AppColors.brightGreen;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
       child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.border, width: 1),
+        ),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
           dense: true,

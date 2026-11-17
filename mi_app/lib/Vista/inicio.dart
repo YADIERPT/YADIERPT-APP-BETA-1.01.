@@ -16,6 +16,7 @@ import 'login.dart';
 import 'Widgets/dashboard_vista.dart';
 import 'Widgets/notificaciones_stock_sheet.dart';
 import 'Widgets/app_logo.dart';
+import 'Widgets/indicador_sincronizacion.dart';
 import '../Servicios/secure_storage_service.dart';
 
 class InicioVista extends StatefulWidget {
@@ -355,6 +356,8 @@ class _InicioVistaState extends State<InicioVista> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            const IndicadorSincronizacion(),
+                            const SizedBox(width: 4),
                             GestureDetector(
                               onTap: () {
                                 NotificacionesStockSheet.mostrar(
