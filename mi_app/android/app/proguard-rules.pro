@@ -48,3 +48,9 @@
 # 11. Impresora Térmica Bluetooth ESC/POS
 -keep class com.miller.print_bluetooth_thermal.** { *; }
 -dontwarn com.miller.print_bluetooth_thermal.**
+
+# 12. Notificaciones Locales y Push (flutter_local_notifications & firebase)
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+-dontwarn com.dexterous.flutterlocalnotifications.**
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
