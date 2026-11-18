@@ -4,6 +4,7 @@ import '../BaseDatos/base_datos.dart';
 import '../Servicios/servicio_conectividad.dart';
 import '../Servicios/servicio_sincronizacion.dart';
 import '../Servicios/servicio_supabase.dart';
+import '../Servicios/sync_service.dart';
 
 /// Estado visible para la interfaz de usuario respecto a la sincronización.
 enum EstadoSincronizacionUI {
@@ -237,6 +238,7 @@ class ControladorSincronizacion extends ChangeNotifier {
   void sincronizarEnSegundoPlano() {
     if (_sincronizando || _servicioSupabase.modoLocalPuro || !_syncHabilitada) return;
     sincronizarManual().ignore();
+    SyncService.instancia.syncAll().ignore();
   }
 
   /// Reinicia el contador de reintentos para los elementos con error en la cola y ejecuta una sincronización

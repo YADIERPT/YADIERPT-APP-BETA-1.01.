@@ -70,6 +70,27 @@ class SyncImagesResult {
       'SyncImagesResult(exitoso: $exitoso, totalImagenesSubidas: $totalImagenesSubidas, error: $error)';
 }
 
+/// Resultado integral del ciclo secuencial de sincronización (Push -> Storage -> Pull).
+class SyncCycleResult {
+  final bool exitoso;
+  final SyncPushResult pushResult;
+  final SyncImagesResult imagesResult;
+  final SyncPullResult pullResult;
+  final String? error;
+
+  const SyncCycleResult({
+    required this.exitoso,
+    required this.pushResult,
+    required this.imagesResult,
+    required this.pullResult,
+    this.error,
+  });
+
+  @override
+  String toString() =>
+      'SyncCycleResult(exitoso: $exitoso, push: $pushResult, images: $imagesResult, pull: $pullResult, error: $error)';
+}
+
 /// Configuración de sincronización por tabla.
 class _TablaSyncConfig {
   final String nombreLocal;
@@ -133,6 +154,43 @@ class SyncService {
       transformadorPush: _mapearArticuloVentaASupabase,
     ),
   ];
+
+  // ===========================================================================
+  // CICLO INTEGRAL SECUENCIAL (Push -> Storage Sync -> Pull)
+  // ===========================================================================
+
+  /// Ejecuta el ciclo completo de sincronización secuencial en el orden:
+  /// 1. `pushLocalChanges()`: Sube registros de datos locales pendientes (`is_synced == 0`).
+  /// 2. `syncImages()`: Comprime y sube archivos físicos locales a Supabase Storage.
+  /// 3. `pullCloudChanges()`: Descarga mutaciones de la nube aplicando cursor y Upsert masivo.
+  Future<SyncCycleResult> syncAll({
+    SupabaseClient? clientOverride,
+    Database? dbOverride,
+  }) async {
+    final resPush = await pushLocalChanges(
+      clientOverride: clientOverride,
+      dbOverride: dbOverride,
+    );
+    final resImages = await syncImages(
+      clientOverride: clientOverride,
+      dbOverride: dbOverride,
+    );
+    final resPull = await pullCloudChanges(
+      clientOverride: clientOverride,
+      dbOverride: dbOverride,
+    );
+
+    final bool exito = resPush.exitoso && resImages.exitoso && resPull.exitoso;
+    final String? error = resPush.error ?? resImages.error ?? resPull.error;
+
+    return SyncCycleResult(
+      exitoso: exito,
+      pushResult: resPush,
+      imagesResult: resImages,
+      pullResult: resPull,
+      error: error,
+    );
+  }
 
   // ===========================================================================
   // FASE 2: PUSH (Subida de cambios locales en lotes)

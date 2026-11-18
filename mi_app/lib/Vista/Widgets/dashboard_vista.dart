@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../Controladores/controlador_inicio.dart';
-import '../../Controladores/controlador_inventario.dart';
 import '../../Controladores/controlador_ventas.dart';
 import '../../Controladores/controlador_autenticacion.dart';
 import '../../Modelos/venta.dart';
@@ -14,6 +13,7 @@ import '../deudores_vista.dart';
 import '../inventario_vista.dart';
 import '../../Controladores/controlador_cuentas_por_cobrar.dart';
 import '../../Servicios/motor_feedback.dart';
+import '../../Servicios/sync_service.dart';
 import '../../Utilidades/formateador.dart';
 
 class DashboardVista extends StatefulWidget {
@@ -64,11 +64,67 @@ class _DashboardVistaState extends State<DashboardVista> {
   }
 
   Future<void> _handleRefresh() async {
-    await context.read<ControladorInicio>().inicializarDatosOffline();
+    final cInicio = context.read<ControladorInicio>();
+
+    // 1. Ejecutar ciclo completo de sincronización secuencial (Fase 5)
+    final syncService = SyncService.instancia;
+    final resPush = await syncService.pushLocalChanges();
+    final resImages = await syncService.syncImages();
+    final resPull = await syncService.pullCloudChanges();
+
+    // 2. Recargar métricas locales
+    await cInicio.inicializarDatosOffline();
     await Future.delayed(const Duration(milliseconds: 300));
-    if (mounted) {
-      setState(() {});
-    }
+
+    if (!mounted) return;
+    setState(() {});
+
+      final bool exito = resPush.exitoso && resImages.exitoso && resPull.exitoso;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (exito) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Ventas y métricas sincronizadas con la nube',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Sincronización pausada, modo offline',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFC62828),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
   }
 
   @override
@@ -100,7 +156,7 @@ class _DashboardVistaState extends State<DashboardVista> {
 
         final usuarioActual = cAuth.usuarioActual;
         final bool esEmpleado = usuarioActual?.rol == RolUsuario.empleado;
-        final bool tienePermisoFinanzas = usuarioActual?.rol?.puedeVerFinanzas ?? false;
+        final bool tienePermisoFinanzas = usuarioActual?.rol.puedeVerFinanzas ?? false;
         final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
         return Scaffold(

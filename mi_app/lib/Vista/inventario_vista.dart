@@ -9,13 +9,13 @@ import 'Widgets/ajuste_stock_sheet.dart';
 import 'Widgets/editar_producto_sheet.dart';
 import 'Widgets/tarjeta_producto_inventario.dart';
 import 'Widgets/resumen_inventario_header.dart';
-import 'Widgets/role_guard.dart';
 import '../Controladores/controlador_inventario.dart';
 import '../Controladores/controlador_ventas.dart';
 import '../Controladores/controlador_autenticacion.dart';
 import '../IA/Controladores/controlador_ia_compras.dart';
 import '../Modelos/producto.dart';
 import '../Servicios/motor_feedback.dart';
+import '../Servicios/sync_service.dart';
 import '../Tema/app_theme.dart';
 import '../Utilidades/debouncer.dart';
 
@@ -150,17 +150,75 @@ class _InventarioVistaState extends State<InventarioVista> {
   }
 
   Future<void> _handleRefresh() async {
-    final rolActual = context.read<ControladorAutenticacion>().usuarioActual?.rol;
-    final bool esDueno = rolActual?.esDuena ?? false;
-    final soloActivos = !(esDueno && _verDeshabilitados);
-    await context.read<ControladorInventario>().cargarProductos(soloActivos: soloActivos);
+    final cAuth = context.read<ControladorAutenticacion>();
+    final cInv = context.read<ControladorInventario>();
     final cIA = context.read<ControladorIACompras>();
     final cVentas = context.read<ControladorVentas>();
+
+    // 1. Ejecutar secuencia completa de sincronización con la nube (Fase 5)
+    final syncService = SyncService.instancia;
+    final resPush = await syncService.pushLocalChanges();
+    final resImages = await syncService.syncImages();
+    final resPull = await syncService.pullCloudChanges();
+
+    // 2. Recargar catálogo y modelos locales en memoria
+    final rolActual = cAuth.usuarioActual?.rol;
+    final bool esDueno = rolActual?.esDuena ?? false;
+    final soloActivos = !(esDueno && _verDeshabilitados);
+    await cInv.cargarProductos(soloActivos: soloActivos);
     await cIA.inicializar(cVentas.ventas);
     await Future.delayed(const Duration(milliseconds: 300));
-    if (mounted) {
-      setState(() {});
-    }
+
+    if (!mounted) return;
+    setState(() {});
+
+      // 3. Feedback Visual mediante SnackBar
+      final bool exito = resPush.exitoso && resImages.exitoso && resPull.exitoso;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (exito) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Catálogo sincronizado con éxito',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Sincronización pausada, modo offline',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFC62828),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
   }
 
   void _cambiarFiltro(String filtro) {
