@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../Controladores/controlador_inicio.dart';
+import '../../Controladores/controlador_inventario.dart';
 import '../../Controladores/controlador_ventas.dart';
 import '../../Controladores/controlador_autenticacion.dart';
 import '../../Modelos/venta.dart';
@@ -65,66 +66,71 @@ class _DashboardVistaState extends State<DashboardVista> {
 
   Future<void> _handleRefresh() async {
     final cInicio = context.read<ControladorInicio>();
+    final cInv = context.read<ControladorInventario>();
+    final cVentas = context.read<ControladorVentas>();
 
-    // 1. Ejecutar ciclo completo de sincronización secuencial (Fase 5)
+    // 1. Ejecutar ciclo completo de sincronización secuencial en orden estricto (Fase 5)
     final syncService = SyncService.instancia;
     final resPush = await syncService.pushLocalChanges();
     final resImages = await syncService.syncImages();
     final resPull = await syncService.pullCloudChanges();
 
-    // 2. Recargar métricas locales
+    // 2. Recargar modelos y métricas locales en memoria tras el Pull
+    await cInv.cargarProductos();
+    await cVentas.cargarVentas();
     await cInicio.inicializarDatosOffline();
     await Future.delayed(const Duration(milliseconds: 300));
 
     if (!mounted) return;
     setState(() {});
 
-      final bool exito = resPush.exitoso && resImages.exitoso && resPull.exitoso;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    // 3. Feedback Visual mediante SnackBar
+    final bool exito = resPush.exitoso && resImages.exitoso && resPull.exitoso;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-      if (exito) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Ventas y métricas sincronizadas con la nube',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
+    if (exito) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Sincronización completada',
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF2E7D32),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 3),
+              ),
+            ],
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Sincronización pausada, modo offline',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
+          backgroundColor: const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Trabajando sin conexión (Offline)',
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
-              ],
-            ),
-            backgroundColor: const Color(0xFFC62828),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 3),
+              ),
+            ],
           ),
-        );
-      }
+          backgroundColor: const Color(0xFFEF6C00),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override

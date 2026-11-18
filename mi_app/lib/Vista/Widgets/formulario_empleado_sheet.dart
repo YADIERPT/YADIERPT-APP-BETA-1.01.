@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../Controladores/controlador_autenticacion.dart';
 import '../../Modelos/colaborador.dart';
@@ -112,9 +113,9 @@ class _FormularioEmpleadoSheetState extends State<FormularioEmpleadoSheet> {
           nuevaClave: (!editandoDueno && clave.isNotEmpty) ? clave : null,
         );
       } else {
-        // Generar un ID único corto para el nuevo empleado (ej. EMP-1823)
-        final sufijo = DateTime.now().millisecondsSinceEpoch.toString();
-        final nuevoId = 'EMP-${sufijo.substring(sufijo.length - 4)}';
+        // Generar un ID único corto para el nuevo empleado (ej. EMP-A1B2)
+        final sufijo = const Uuid().v4().substring(0, 4).toUpperCase();
+        final nuevoId = 'EMP-$sufijo';
 
         final nuevoEmp = Colaborador(
           id: nuevoId,

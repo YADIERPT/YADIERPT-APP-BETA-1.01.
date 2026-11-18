@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +17,7 @@ void main() {
     late Database db;
 
     setUp(() async {
+      SharedPreferences.setMockInitialValues({});
       db = await openDatabase(
         inMemoryDatabasePath,
         version: 15,
@@ -158,6 +160,7 @@ void main() {
     late Database db;
 
     setUp(() async {
+      SharedPreferences.setMockInitialValues({});
       db = await openDatabase(
         inMemoryDatabasePath,
         version: 15,
@@ -278,6 +281,117 @@ void main() {
 
       final cursorActual = await SyncService.instancia.obtenerLastSyncTimestamp(db: db);
       expect(cursorActual, equals(cursorOriginal));
+    });
+
+    test('7. SharedPreferences: Lee y actualiza el cursor last_sync_timestamp en preferencias compartidas', () async {
+      SharedPreferences.setMockInitialValues({
+        SyncService.keyPrefLastSyncTimestamp: '2026-11-18T00:00:00Z',
+      });
+
+      final cursorLeido = await SyncService.instancia.obtenerLastSyncTimestamp(db: db);
+      expect(cursorLeido, equals('2026-11-18T00:00:00Z'));
+
+      const nuevoCursor = '2026-11-18T04:30:00Z';
+      await SyncService.instancia.actualizarLastSyncTimestamp(nuevoCursor, db: db);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(SyncService.keyPrefLastSyncTimestamp), equals(nuevoCursor));
+    });
+
+    test('8. Push y Pull de cortes_caja y deudores: Sube y descarga respetando is_synced y mapeo relacional', () async {
+      final corteUuid = const Uuid().v4();
+      final deudorUuid = const Uuid().v4();
+      final ventaUuid = const Uuid().v4();
+
+      await db.insert('ventas', {
+        'id': 'VEN-100',
+        'uuid': ventaUuid,
+        'fecha': DateTime.now().toUtc().toIso8601String(),
+        'estado': 'apartada',
+        'porcentajeIva': 0.16,
+        'aplicarIva': 1,
+        'cliente': 'Ana Botánica',
+        'montoPagado': 100.0,
+        'is_synced': 1,
+      });
+
+      await db.insert('cortes_caja', {
+        'id': corteUuid,
+        'uuid': corteUuid,
+        'colaborador_uuid': const Uuid().v4(),
+        'dispositivo_id': 'pos-tablet-01',
+        'monto_apertura': 500.0,
+        'monto_ventas_efectivo': 1500.0,
+        'monto_esperado': 2000.0,
+        'monto_real': 2000.0,
+        'diferencia': 0.0,
+        'estado': 'CERRADA',
+        'fecha_apertura': DateTime.now().toUtc().toIso8601String(),
+        'is_synced': 0,
+      });
+
+      await db.insert('deudores', {
+        'id': deudorUuid,
+        'uuid': deudorUuid,
+        'venta_id': 'VEN-100',
+        'venta_uuid': ventaUuid,
+        'cliente': 'Ana Botánica',
+        'montoTotal': 300.0,
+        'montoPagado': 100.0,
+        'saldoPendiente': 200.0,
+        'fechaRegistro': DateTime.now().toUtc().toIso8601String(),
+        'estado': 'PENDIENTE',
+        'is_synced': 0,
+      });
+
+      final List<Map<String, dynamic>> subidos = [];
+      final resPush = await SyncService.instancia.pushLocalChanges(
+        dbOverride: db,
+        upsertHandlerOverride: (tabla, lote) async {
+          subidos.addAll(lote);
+        },
+      );
+
+      expect(resPush.exitoso, isTrue);
+      expect(subidos.any((m) => m['uuid'] == corteUuid), isTrue);
+      expect(subidos.any((m) => m['uuid'] == deudorUuid), isTrue);
+
+      final cCheck = await db.query('cortes_caja', where: 'id = ?', whereArgs: [corteUuid]);
+      expect(cCheck.first['is_synced'], equals(1));
+
+      final dCheck = await db.query('deudores', where: 'id = ?', whereArgs: [deudorUuid]);
+      expect(dCheck.first['is_synced'], equals(1));
+
+      final pullCorteUuid = const Uuid().v4();
+      final resPull = await SyncService.instancia.pullCloudChanges(
+        dbOverride: db,
+        pullHandlerOverride: (tabla, cursor) async {
+          if (tabla == 'cortes_caja') {
+            return [
+              {
+                'id': pullCorteUuid,
+                'uuid': pullCorteUuid,
+                'colaborador_uuid': 'colab-01',
+                'dispositivo_id': 'tablet-remota',
+                'monto_apertura': 300.0,
+                'monto_ventas_efectivo': 800.0,
+                'monto_esperado': 1100.0,
+                'monto_real': 1100.0,
+                'diferencia': 0.0,
+                'estado': 'CERRADA',
+                'fecha_apertura': '2026-11-18T05:00:00Z',
+                'updated_at': '2026-11-18T05:00:00Z',
+              }
+            ];
+          }
+          return [];
+        },
+      );
+
+      expect(resPull.exitoso, isTrue);
+      final cPull = await db.query('cortes_caja', where: 'uuid = ?', whereArgs: [pullCorteUuid]);
+      expect(cPull.isNotEmpty, isTrue);
+      expect(cPull.first['is_synced'], equals(1));
     });
   });
 
@@ -405,6 +519,37 @@ void main() {
       // La ruta local original debe permanecer intacta en SQLite
       final prod = await db.query('productos', where: 'id = ?', whereArgs: ['PROD-ERROR']);
       expect(prod.first['imagenes'], equals(archivoLocal.path));
+    });
+
+    test('10. syncImages: Omite productos que tienen deleted_at (eliminados lógicamente)', () async {
+      final archivoLocal = File(p.join(tempDir.path, 'foto_eliminado.jpg'));
+      await archivoLocal.writeAsBytes(List.filled(150, 67));
+
+      await db.insert('productos', {
+        'id': 'PROD-DELETED',
+        'uuid': const Uuid().v4(),
+        'nombre': 'Planta Eliminada',
+        'precioVenta': 100.0,
+        'costo': 40.0,
+        'cantidadEnInventario': 0,
+        'imagenes': archivoLocal.path,
+        'is_synced': 1,
+        'deleted_at': '2026-11-18T00:00:00Z',
+        'activo': 0,
+      });
+
+      int llamados = 0;
+      final resultado = await SyncService.instancia.syncImages(
+        dbOverride: db,
+        storageUploaderOverride: (bucket, remotePath, file) async {
+          llamados++;
+          return 'https://xyz.supabase.co/$remotePath';
+        },
+      );
+
+      expect(resultado.exitoso, isTrue);
+      expect(resultado.totalImagenesSubidas, equals(0));
+      expect(llamados, equals(0));
     });
   });
 }

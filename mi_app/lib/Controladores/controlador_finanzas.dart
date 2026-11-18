@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import '../Modelos/finanzas.dart';
 import '../BaseDatos/base_datos.dart';
 
@@ -54,7 +55,7 @@ class ControladorFinanzas extends ChangeNotifier {
     DatabaseExecutor? executor,
   }) async {
     final transaccion = TransaccionFinanciera(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       tipo: TipoTransaccion.ingreso,
       monto: monto,
       fecha: DateTime.now(),
@@ -83,7 +84,7 @@ class ControladorFinanzas extends ChangeNotifier {
     DatabaseExecutor? executor,
   }) async {
     final transaccion = TransaccionFinanciera(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       tipo: TipoTransaccion.egreso,
       monto: monto,
       fecha: DateTime.now(),
@@ -99,7 +100,7 @@ class ControladorFinanzas extends ChangeNotifier {
     DatabaseExecutor? executor,
   }) async {
     final transaccion = TransaccionFinanciera(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       tipo: TipoTransaccion.merma,
       monto: costoPerdido,
       fecha: DateTime.now(),

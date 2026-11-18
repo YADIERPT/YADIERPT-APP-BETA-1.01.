@@ -336,6 +336,8 @@ class ControladorVentas extends ChangeNotifier {
         }
 
         final articulo = ArticuloVenta(
+          id: articuloId.toString(),
+          uuid: fila['a_uuid']?.toString() ?? articuloId.toString(),
           producto: producto,
           cantidad: (fila['a_cantidad'] as num?)?.toInt() ?? 1,
           precioUnitario: (fila['a_precioUnitario'] as num?)?.toDouble() ??
@@ -350,8 +352,10 @@ class ControladorVentas extends ChangeNotifier {
   }
 
   void iniciarVenta() {
+    final nuevoUuid = const Uuid().v4();
     _ventaActual = Venta(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: nuevoUuid,
+      uuid: nuevoUuid,
       fecha: DateTime.now(),
       porcentajeIva: controladorPerfil.configuracion.porcentajeIvaDefecto,
       aplicarIva: controladorPerfil.configuracion.aplicarIva,
@@ -508,26 +512,31 @@ class ControladorVentas extends ChangeNotifier {
           if (res.isNotEmpty) {
             final int stockActual =
                 (res.first['cantidadEnInventario'] as int?) ?? 0;
-            final int nuevoStock = stockActual - articulo.cantidad;
 
-            if (nuevoStock < 0) {
+            if (stockActual < articulo.cantidad) {
               throw Exception(
                 'Stock insuficiente para apartar "${articulo.producto.nombre}". '
                 'Disponible: $stockActual, Requerido: ${articulo.cantidad}.',
               );
             }
 
-            await txn.update(
-              'productos',
-              {'cantidadEnInventario': nuevoStock},
-              where: 'id = ?',
-              whereArgs: [articulo.producto.id],
-            );
+            // Decremento atómico en SQL para prevenir condiciones de carrera (Lost Updates)
+            final int filasAfectadas = await txn.rawUpdate('''
+              UPDATE productos 
+              SET cantidadEnInventario = cantidadEnInventario - ?
+              WHERE id = ? AND cantidadEnInventario >= ?
+            ''', [articulo.cantidad, articulo.producto.id, articulo.cantidad]);
+
+            if (filasAfectadas == 0) {
+              throw Exception(
+                'Conflicto de concurrencia: Stock insuficiente para apartar "${articulo.producto.nombre}". '
+                'Disponible: $stockActual, Requerido: ${articulo.cantidad}.',
+              );
+            }
           } else {
             final prod = controladorInventario.obtenerProducto(articulo.producto.id) ?? articulo.producto;
-            final nuevoStock = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
             final mapProd = prod.toMap();
-            mapProd['cantidadEnInventario'] = nuevoStock;
+            mapProd['cantidadEnInventario'] = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
             await txn.insert('productos', mapProd);
           }
 
@@ -561,8 +570,11 @@ class ControladorVentas extends ChangeNotifier {
 
         // 4. Inserción de abono inicial y asiento financiero
         if (montoAbonoInicial > 0) {
+          final String abonoUuid = const Uuid().v4();
+          final String transaccionUuid = const Uuid().v4();
           final abono = Abono(
-            id: '${DateTime.now().millisecondsSinceEpoch}_init',
+            id: abonoUuid,
+            uuid: abonoUuid,
             ventaId: venta.id,
             ventaUuid: venta.uuid,
             deudorUuid: deudorUuid,
@@ -572,7 +584,7 @@ class ControladorVentas extends ChangeNotifier {
           );
           await txn.insert('abonos_venta', abono.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
           await txn.insert('transacciones', {
-            'id': '${DateTime.now().millisecondsSinceEpoch}_tr_init',
+            'id': transaccionUuid,
             'tipo': TipoTransaccion.ingreso.name,
             'monto': montoAbonoInicial,
             'fecha': DateTime.now().toIso8601String(),
@@ -781,8 +793,10 @@ class ControladorVentas extends ChangeNotifier {
           liquidada ? EstadoVenta.completada.name : EstadoVenta.apartada.name;
       final String cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
 
+      final String nuevoAbonoUuid = const Uuid().v4();
       final abono = Abono(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: nuevoAbonoUuid,
+        uuid: nuevoAbonoUuid,
         ventaId: idStr,
         monto: monto,
         fecha: DateTime.now(),
@@ -909,26 +923,31 @@ class ControladorVentas extends ChangeNotifier {
           if (res.isNotEmpty) {
             final int stockActual =
                 (res.first['cantidadEnInventario'] as int?) ?? 0;
-            final int nuevoStock = stockActual - articulo.cantidad;
 
-            if (nuevoStock < 0) {
+            if (stockActual < articulo.cantidad) {
               throw Exception(
                 'Stock insuficiente para "${articulo.producto.nombre}". '
                 'Disponible: $stockActual, Solicitado: ${articulo.cantidad}.',
               );
             }
 
-            await txn.update(
-              'productos',
-              {'cantidadEnInventario': nuevoStock},
-              where: 'id = ?',
-              whereArgs: [articulo.producto.id],
-            );
+            // Decremento atómico en SQL para prevenir condiciones de carrera (Lost Updates)
+            final int filasAfectadas = await txn.rawUpdate('''
+              UPDATE productos 
+              SET cantidadEnInventario = cantidadEnInventario - ?
+              WHERE id = ? AND cantidadEnInventario >= ?
+            ''', [articulo.cantidad, articulo.producto.id, articulo.cantidad]);
+
+            if (filasAfectadas == 0) {
+              throw Exception(
+                'Conflicto de concurrencia: Stock insuficiente para "${articulo.producto.nombre}". '
+                'Disponible: $stockActual, Solicitado: ${articulo.cantidad}.',
+              );
+            }
           } else {
             final prod = controladorInventario.obtenerProducto(articulo.producto.id) ?? articulo.producto;
-            final nuevoStock = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
             final mapProd = prod.toMap();
-            mapProd['cantidadEnInventario'] = nuevoStock;
+            mapProd['cantidadEnInventario'] = (prod.cantidadEnInventario - articulo.cantidad).clamp(0, 999999);
             await txn.insert(
               'productos',
               mapProd,

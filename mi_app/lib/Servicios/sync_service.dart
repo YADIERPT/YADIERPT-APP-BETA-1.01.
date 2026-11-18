@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -126,8 +127,11 @@ class SyncService {
   /// Orden relacional estricto para sincronización:
   /// 1. Empleados / Colaboradores (sin dependencias)
   /// 2. Productos (sin dependencias)
-  /// 3. Ventas (depende de colaboradores)
-  /// 4. Tickets / Artículos de Venta (depende de ventas y productos)
+  /// 3. Cortes de Caja (cajeros y turnos de caja)
+  /// 4. Ventas (depende de colaboradores)
+  /// 5. Tickets / Artículos de Venta (depende de ventas y productos)
+  /// 6. Movimientos de Inventario (depende de productos y ventas)
+  /// 7. Deudores (depende de ventas)
   static const List<_TablaSyncConfig> _tablasConfig = [
     _TablaSyncConfig(
       nombreLocal: 'colaboradores',
@@ -142,6 +146,12 @@ class SyncService {
       transformadorPush: _mapearProductoASupabase,
     ),
     _TablaSyncConfig(
+      nombreLocal: 'cortes_caja',
+      nombreRemoto: 'cortes_caja',
+      campoId: 'id',
+      transformadorPush: _mapearCorteCajaASupabase,
+    ),
+    _TablaSyncConfig(
       nombreLocal: 'ventas',
       nombreRemoto: 'ventas',
       campoId: 'id',
@@ -152,6 +162,18 @@ class SyncService {
       nombreRemoto: 'articulos_venta',
       campoId: 'uuid',
       transformadorPush: _mapearArticuloVentaASupabase,
+    ),
+    _TablaSyncConfig(
+      nombreLocal: 'movimientos_inventario',
+      nombreRemoto: 'movimientos_inventario',
+      campoId: 'uuid',
+      transformadorPush: _mapearMovimientoInventarioASupabase,
+    ),
+    _TablaSyncConfig(
+      nombreLocal: 'deudores',
+      nombreRemoto: 'deudores',
+      campoId: 'id',
+      transformadorPush: _mapearDeudorASupabase,
     ),
   ];
 
@@ -428,14 +450,14 @@ class SyncService {
         final tablaLocalReal = await _determinarTablaLocal(db, config.nombreLocal);
         if (tablaLocalReal == null) continue;
 
-        // 5. Consultar registros remotos donde updated_at > last_sync_timestamp
+        // 5. Consultar registros remotos donde updated_at >= last_sync_timestamp
         final List<Map<String, dynamic>> registrosRemotos;
         if (pullHandlerOverride != null) {
           registrosRemotos = await pullHandlerOverride(config.nombreRemoto, lastSyncTimestamp);
         } else {
           var query = client!.from(config.nombreRemoto).select();
           if (lastSyncTimestamp != null && lastSyncTimestamp.isNotEmpty) {
-            query = query.gt('updated_at', lastSyncTimestamp);
+            query = query.gte('updated_at', lastSyncTimestamp);
           }
           final respuesta = await query.order('updated_at', ascending: true);
           registrosRemotos = List<Map<String, dynamic>>.from(respuesta);
@@ -564,11 +586,11 @@ class SyncService {
 
       final db = dbOverride ?? (await BaseDeDatos.instancia.database);
 
-      // 3. Buscar productos que tengan rutas de imágenes locales
+      // 3. Buscar productos que tengan imágenes locales y no estén eliminados (Soft Delete)
       final productos = await db.query(
         'productos',
         columns: ['id', 'uuid', 'imagenes'],
-        where: "imagenes IS NOT NULL AND imagenes != ''",
+        where: "imagenes IS NOT NULL AND imagenes != '' AND (deleted_at IS NULL OR deleted_at = '')",
       );
 
       if (productos.isEmpty) {
@@ -714,8 +736,24 @@ class SyncService {
   // Control de Cursor de Sincronización (last_sync_timestamp)
   // ===========================================================================
 
-  /// Lee el timestamp del último PULL exitoso desde SQLite (`config_sync`)
+  /// Clave estandarizada en SharedPreferences para el cursor de sincronización
+  static const String keyPrefLastSyncTimestamp = 'last_sync_timestamp';
+
+  /// Lee la fecha de la última sincronización (`last_sync_timestamp`) desde `SharedPreferences`
+  /// con fallback robusto a la tabla local `config_sync` de SQLite.
   Future<String?> obtenerLastSyncTimestamp({Database? db}) async {
+    // 1. Intentar leer desde SharedPreferences (Fase 3)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ts = prefs.getString(keyPrefLastSyncTimestamp);
+      if (ts != null && ts.isNotEmpty) {
+        return ts;
+      }
+    } catch (e) {
+      debugPrint('SyncService: Lectura de SharedPreferences omitida o en entorno de pruebas: $e');
+    }
+
+    // 2. Respaldo / Fallback en SQLite (config_sync)
     try {
       final database = db ?? (await BaseDeDatos.instancia.database);
       await _asegurarColumnaLastSyncTimestamp(database);
@@ -725,13 +763,23 @@ class SyncService {
             res.first['ultima_sync_exitosa']?.toString();
       }
     } catch (e) {
-      debugPrint('SyncService: Error al leer last_sync_timestamp: $e');
+      debugPrint('SyncService: Error al leer last_sync_timestamp de SQLite: $e');
     }
     return null;
   }
 
-  /// Actualiza atómicamente el `last_sync_timestamp` tras una descarga exitosa
+  /// Actualiza atómicamente el `last_sync_timestamp` tanto en `SharedPreferences`
+  /// como en SQLite tras una descarga exitosa.
   Future<void> actualizarLastSyncTimestamp(String timestamp, {Database? db}) async {
+    // 1. Guardar en SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(keyPrefLastSyncTimestamp, timestamp);
+    } catch (e) {
+      debugPrint('SyncService: Guardado en SharedPreferences omitido o en entorno de pruebas: $e');
+    }
+
+    // 2. Guardar en SQLite (config_sync) para redundancia local
     try {
       final database = db ?? (await BaseDeDatos.instancia.database);
       await _asegurarColumnaLastSyncTimestamp(database);
@@ -744,7 +792,7 @@ class SyncService {
         where: 'id = 1',
       );
     } catch (e) {
-      debugPrint('SyncService: Error al actualizar last_sync_timestamp: $e');
+      debugPrint('SyncService: Error al actualizar last_sync_timestamp en SQLite: $e');
     }
   }
 
@@ -799,6 +847,12 @@ class SyncService {
       case 'colaboradores':
       case 'empleados':
         return _mapearSupabaseAColaboradorLocal(remoto, txn);
+      case 'cortes_caja':
+        return _mapearSupabaseACorteCajaLocal(remoto, txn);
+      case 'movimientos_inventario':
+        return _mapearSupabaseAMovimientoInventarioLocal(remoto, txn);
+      case 'deudores':
+        return _mapearSupabaseADeudorLocal(remoto, txn);
       default:
         final copia = Map<String, dynamic>.from(remoto);
         copia['is_synced'] = 1;
@@ -851,6 +905,7 @@ class SyncService {
       'activo': (remoto['activo'] == true || remoto['activo'] == 1) && remoto['deleted_at'] == null ? 1 : 0,
       'is_synced': 1,
       'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': remoto['updated_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': remoto['deleted_at']?.toString(),
     };
@@ -887,6 +942,7 @@ class SyncService {
       'notas': remoto['notas']?.toString() ?? '',
       'is_synced': 1,
       'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? remoto['fecha']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': remoto['updated_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': remoto['deleted_at']?.toString(),
     };
@@ -913,6 +969,7 @@ class SyncService {
     }
 
     final mapa = <String, dynamic>{
+      'id': uuid,
       'uuid': uuid,
       'venta_id': ventaId,
       'venta_uuid': remoto['venta_uuid']?.toString(),
@@ -922,15 +979,10 @@ class SyncService {
       'precioUnitario': (remoto['precio_unitario'] ?? remoto['precioUnitario'] as num?)?.toDouble() ?? 0.0,
       'is_synced': 1,
       'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': remoto['updated_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': remoto['deleted_at']?.toString(),
     };
-
-    // Preservar autoincrement ID existente para INSERT OR REPLACE
-    final existente = await txn.query('articulos_venta', columns: ['id'], where: 'uuid = ?', whereArgs: [uuid], limit: 1);
-    if (existente.isNotEmpty) {
-      mapa['id'] = existente.first['id'];
-    }
 
     return mapa;
   }
@@ -970,7 +1022,109 @@ class SyncService {
       'email': remoto['email']?.toString(),
       'is_synced': 1,
       'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': remoto['updated_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': remoto['deleted_at']?.toString(),
+    };
+  }
+
+  static Future<Map<String, dynamic>> _mapearSupabaseAMovimientoInventarioLocal(
+    Map<String, dynamic> remoto,
+    DatabaseExecutor txn,
+  ) async {
+    final String uuid = remoto['uuid']?.toString() ?? const Uuid().v4();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': uuid,
+      'producto_uuid': remoto['producto_uuid']?.toString() ?? '',
+      'tipo': remoto['tipo']?.toString() ?? 'ajuste',
+      'cantidad': (remoto['cantidad'] as num?)?.toInt() ?? 0,
+      'referencia_uuid': remoto['referencia_uuid']?.toString(),
+      'motivo': remoto['motivo']?.toString(),
+      'colaborador_uuid': remoto['colaborador_uuid']?.toString(),
+      'dispositivo_id': remoto['dispositivo_id']?.toString(),
+      'is_synced': 1,
+      'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? nowIso,
+      'updated_at': remoto['updated_at']?.toString() ?? nowIso,
+    };
+  }
+
+  static Future<Map<String, dynamic>> _mapearSupabaseACorteCajaLocal(
+    Map<String, dynamic> remoto,
+    DatabaseExecutor txn,
+  ) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final uuid = remoto['uuid']?.toString() ?? remoto['id']?.toString() ?? const Uuid().v4();
+    final idLocal = remoto['codigo_local']?.toString() ?? remoto['id']?.toString() ?? uuid;
+    return {
+      'id': idLocal,
+      'uuid': uuid,
+      'colaborador_uuid': remoto['colaborador_uuid']?.toString() ?? '',
+      'dispositivo_id': remoto['dispositivo_id']?.toString() ?? 'pos-remoto',
+      'monto_apertura': (remoto['monto_apertura'] as num?)?.toDouble() ?? 0.0,
+      'monto_ventas_efectivo': (remoto['monto_ventas_efectivo'] as num?)?.toDouble() ?? 0.0,
+      'monto_abonos_efectivo': (remoto['monto_abonos_efectivo'] as num?)?.toDouble() ?? 0.0,
+      'monto_egresos': (remoto['monto_egresos'] as num?)?.toDouble() ?? 0.0,
+      'monto_esperado': (remoto['monto_esperado'] as num?)?.toDouble() ?? 0.0,
+      'monto_real': (remoto['monto_real'] as num?)?.toDouble() ?? 0.0,
+      'diferencia': (remoto['diferencia'] as num?)?.toDouble() ?? 0.0,
+      'estado': remoto['estado']?.toString() ?? 'ABIERTA',
+      'notas': remoto['notas']?.toString() ?? '',
+      'fecha_apertura': remoto['fecha_apertura']?.toString() ?? nowIso,
+      'fecha_cierre': remoto['fecha_cierre']?.toString(),
+      'is_synced': 1,
+      'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? nowIso,
+      'updated_at': remoto['updated_at']?.toString() ?? nowIso,
+      'deleted_at': remoto['deleted_at']?.toString(),
+    };
+  }
+
+  static Future<Map<String, dynamic>> _mapearSupabaseADeudorLocal(
+    Map<String, dynamic> remoto,
+    DatabaseExecutor txn,
+  ) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final uuid = remoto['uuid']?.toString() ?? remoto['id']?.toString() ?? const Uuid().v4();
+    String idLocal = remoto['codigo_local']?.toString() ?? remoto['id']?.toString() ?? uuid;
+
+    final existente = await txn.query(
+      'deudores',
+      columns: ['id'],
+      where: 'id = ? OR uuid = ?',
+      whereArgs: [uuid, uuid],
+      limit: 1,
+    );
+    if (existente.isNotEmpty) {
+      idLocal = existente.first['id'].toString();
+    }
+
+    final ventaUuid = remoto['venta_uuid']?.toString();
+    String ventaId = ventaUuid ?? '';
+    if (ventaUuid != null && ventaUuid.isNotEmpty) {
+      final v = await txn.query('ventas', columns: ['id'], where: 'uuid = ? OR id = ?', whereArgs: [ventaUuid, ventaUuid]);
+      if (v.isNotEmpty) {
+        ventaId = v.first['id'].toString();
+      }
+    }
+
+    return {
+      'id': idLocal,
+      'uuid': uuid,
+      'venta_id': ventaId.isNotEmpty ? ventaId : (remoto['venta_id']?.toString() ?? ''),
+      'cliente': remoto['nombre_cliente'] ?? remoto['cliente'] ?? 'Cliente Mostrador',
+      'telefono': remoto['telefono'] ?? '',
+      'montoTotal': (remoto['monto_total'] ?? remoto['montoTotal'] as num?)?.toDouble() ?? 0.0,
+      'montoPagado': (remoto['monto_pagado'] ?? remoto['montoPagado'] as num?)?.toDouble() ?? 0.0,
+      'saldoPendiente': (remoto['saldo_pendiente'] ?? remoto['saldoPendiente'] as num?)?.toDouble() ?? 0.0,
+      'estado': remoto['estado']?.toString() ?? 'PENDIENTE',
+      'fechaRegistro': remoto['created_at']?.toString() ?? remoto['fechaRegistro']?.toString() ?? nowIso,
+      'fechaLimite': remoto['fecha_limite']?.toString() ?? remoto['fechaLimite']?.toString(),
+      'is_synced': 1,
+      'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? nowIso,
+      'updated_at': remoto['updated_at']?.toString() ?? nowIso,
       'deleted_at': remoto['deleted_at']?.toString(),
     };
   }
@@ -1000,6 +1154,7 @@ class SyncService {
           : (local['imagenes'] != null && local['imagenes'].toString().isNotEmpty
               ? local['imagenes'].toString().split(',').first
               : null),
+      'created_at': local['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': local['deleted_at'],
     };
@@ -1020,6 +1175,7 @@ class SyncService {
       'aplicar_iva': aplicarIva,
       'monto_pagado': local['montoPagado'] ?? 0.0,
       'notas': local['notas'] ?? '',
+      'created_at': local['created_at'] ?? local['fecha'] ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': local['deleted_at'],
     };
@@ -1032,6 +1188,7 @@ class SyncService {
       'producto_uuid': local['producto_uuid'],
       'cantidad': local['cantidad'],
       'precio_unitario': local['precioUnitario'],
+      'created_at': local['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': local['deleted_at'],
     };
@@ -1048,7 +1205,67 @@ class SyncService {
       'rol': rolNorm,
       'auth_user_id': local['auth_user_id'],
       'activo': local['activo'] == null || local['activo'] == 1,
+      'created_at': local['created_at'] ?? DateTime.now().toUtc().toIso8601String(),
       'updated_at': local['updated_at'] ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': local['deleted_at'],
+    };
+  }
+
+  static Map<String, dynamic> _mapearMovimientoInventarioASupabase(Map<String, dynamic> local) {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': local['uuid'],
+      'producto_uuid': local['producto_uuid'],
+      'tipo': local['tipo']?.toString() ?? 'ajuste',
+      'cantidad': local['cantidad'] ?? 0,
+      'referencia_uuid': local['referencia_uuid'],
+      'motivo': local['motivo'],
+      'colaborador_uuid': local['colaborador_uuid'],
+      'dispositivo_id': local['dispositivo_id'],
+      'created_at': local['created_at'] ?? nowIso,
+      'updated_at': local['updated_at'] ?? local['created_at'] ?? nowIso,
+    };
+  }
+
+  static Map<String, dynamic> _mapearCorteCajaASupabase(Map<String, dynamic> local) {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': local['uuid'] ?? local['id'],
+      'codigo_local': local['id'],
+      'colaborador_uuid': local['colaborador_uuid'],
+      'dispositivo_id': local['dispositivo_id'] ?? 'pos-tablet',
+      'monto_apertura': local['monto_apertura'] ?? 0.0,
+      'monto_ventas_efectivo': local['monto_ventas_efectivo'] ?? 0.0,
+      'monto_abonos_efectivo': local['monto_abonos_efectivo'] ?? 0.0,
+      'monto_egresos': local['monto_egresos'] ?? 0.0,
+      'monto_esperado': local['monto_esperado'] ?? 0.0,
+      'monto_real': local['monto_real'] ?? 0.0,
+      'diferencia': local['diferencia'] ?? 0.0,
+      'estado': local['estado'] ?? 'ABIERTA',
+      'notas': local['notas'] ?? '',
+      'fecha_apertura': local['fecha_apertura'] ?? nowIso,
+      'fecha_cierre': local['fecha_cierre'],
+      'created_at': local['created_at'] ?? local['fecha_apertura'] ?? nowIso,
+      'updated_at': local['updated_at'] ?? nowIso,
+      'deleted_at': local['deleted_at'],
+    };
+  }
+
+  static Map<String, dynamic> _mapearDeudorASupabase(Map<String, dynamic> local) {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': local['uuid'] ?? local['id'],
+      'codigo_local': local['id'],
+      'venta_uuid': local['venta_uuid'] ?? local['venta_id'],
+      'nombre_cliente': local['cliente'] ?? 'Cliente Mostrador',
+      'telefono': local['telefono'] ?? '',
+      'monto_total': local['montoTotal'] ?? 0.0,
+      'monto_pagado': local['montoPagado'] ?? 0.0,
+      'saldo_pendiente': local['saldoPendiente'] ?? 0.0,
+      'estado': local['estado'] ?? 'PENDIENTE',
+      'fecha_limite': local['fechaLimite'],
+      'created_at': local['created_at'] ?? local['fechaRegistro'] ?? nowIso,
+      'updated_at': local['updated_at'] ?? nowIso,
       'deleted_at': local['deleted_at'],
     };
   }

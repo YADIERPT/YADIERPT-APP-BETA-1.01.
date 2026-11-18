@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 
 import '../Controladores/controlador_inventario.dart';
 import '../Modelos/producto.dart';
@@ -135,8 +136,10 @@ class _NuevoLoteVistaState extends State<NuevoLoteVista> {
     if (formValido) {
       _formKey.currentState!.save();
       try {
+        final nuevoUuid = const Uuid().v4();
         final nuevo = Producto(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: nuevoUuid,
+          uuid: nuevoUuid,
           nombre: nombre,
           tipo: tipoSeleccionado!,
           precioVenta: precioVenta > 0 ? precioVenta : costo,

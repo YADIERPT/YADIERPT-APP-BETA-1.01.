@@ -51,7 +51,7 @@ class BaseDeDatos {
       dbInstancia = await sqlcipher.openDatabase(
         path,
         password: password,
-        version: 15,
+        version: 16,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -61,7 +61,7 @@ class BaseDeDatos {
     } else {
       dbInstancia = await openDatabase(
         path,
-        version: 15,
+        version: 16,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -94,10 +94,13 @@ class BaseDeDatos {
         'articulos_venta',
         'deudores',
         'abonos_venta',
+        'cortes_caja',
+        'movimientos_inventario',
       ];
       for (final tabla in tablasSincronizables) {
         await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
         await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'updated_at', 'TEXT');
+        await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'created_at', 'TEXT');
       }
     } catch (_) {}
 
@@ -701,6 +704,128 @@ class BaseDeDatos {
         END;
       ''');
     }
+    if (oldVersion < 16 && newVersion >= 16) {
+      // 1. Asegurar columna created_at en todas las tablas sincronizables
+      final tablasSincronizables = [
+        'colaboradores',
+        'productos',
+        'ventas',
+        'articulos_venta',
+        'deudores',
+        'abonos_venta',
+      ];
+      for (final tabla in tablasSincronizables) {
+        await _agregarColumnaSiNoExiste(
+          db,
+          tabla,
+          'created_at',
+          'TEXT',
+        );
+      }
+
+      // Inicializar created_at en registros preexistentes que no lo tengan
+      try {
+        await db.execute("UPDATE colaboradores SET created_at = COALESCE(updated_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+        await db.execute("UPDATE productos SET created_at = COALESCE(updated_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+        await db.execute("UPDATE ventas SET created_at = COALESCE(fecha, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+        await db.execute("UPDATE abonos_venta SET created_at = COALESCE(fecha, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+        await db.execute("UPDATE deudores SET created_at = COALESCE(fechaRegistro, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+        await db.execute("UPDATE articulos_venta SET created_at = COALESCE(updated_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHERE created_at IS NULL OR created_at = '';");
+      } catch (_) {}
+
+      // 2. Migración estructural de articulos_venta: Reemplazar AUTOINCREMENT por UUID PK
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS articulos_venta_v16 (
+          id TEXT PRIMARY KEY,
+          uuid TEXT NOT NULL,
+          venta_id TEXT NOT NULL,
+          venta_uuid TEXT,
+          producto_id TEXT NOT NULL,
+          producto_uuid TEXT,
+          cantidad INTEGER NOT NULL,
+          precioUnitario REAL NOT NULL,
+          is_synced INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_estado TEXT NOT NULL DEFAULT 'pendiente',
+          dispositivo_id TEXT,
+          FOREIGN KEY (venta_id) REFERENCES ventas (id) ON DELETE CASCADE,
+          FOREIGN KEY (producto_id) REFERENCES productos (id)
+        )
+      ''');
+
+      await db.execute('''
+        INSERT INTO articulos_venta_v16 (
+          id, uuid, venta_id, venta_uuid, producto_id, producto_uuid,
+          cantidad, precioUnitario, is_synced, created_at, updated_at,
+          deleted_at, sync_estado, dispositivo_id
+        )
+        SELECT 
+          COALESCE(uuid, hex(randomblob(16))),
+          COALESCE(uuid, hex(randomblob(16))),
+          venta_id, venta_uuid, producto_id, producto_uuid,
+          cantidad, precioUnitario, is_synced,
+          COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          updated_at, deleted_at, sync_estado, dispositivo_id
+        FROM articulos_venta;
+      ''');
+
+      await db.execute('DROP TABLE articulos_venta');
+      await db.execute('ALTER TABLE articulos_venta_v16 RENAME TO articulos_venta');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_articulos_venta_uuid ON articulos_venta (uuid)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_articulos_venta_id ON articulos_venta (venta_id)');
+
+      // 3. Crear tabla oficial de cortes_caja
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cortes_caja (
+          id TEXT PRIMARY KEY,
+          uuid TEXT NOT NULL,
+          colaborador_uuid TEXT NOT NULL,
+          dispositivo_id TEXT NOT NULL,
+          monto_apertura REAL NOT NULL DEFAULT 0.0,
+          monto_ventas_efectivo REAL NOT NULL DEFAULT 0.0,
+          monto_abonos_efectivo REAL NOT NULL DEFAULT 0.0,
+          monto_egresos REAL NOT NULL DEFAULT 0.0,
+          monto_esperado REAL NOT NULL DEFAULT 0.0,
+          monto_real REAL NOT NULL DEFAULT 0.0,
+          diferencia REAL NOT NULL DEFAULT 0.0,
+          estado TEXT NOT NULL DEFAULT 'ABIERTA',
+          notas TEXT NOT NULL DEFAULT '',
+          fecha_apertura TEXT NOT NULL,
+          fecha_cierre TEXT,
+          is_synced INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_estado TEXT NOT NULL DEFAULT 'pendiente'
+        )
+      ''');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_cortes_caja_uuid ON cortes_caja (uuid)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_cortes_caja_dispositivo ON cortes_caja (dispositivo_id, estado)');
+
+      // 4. Triggers automáticos para cortes_caja y articulos_venta
+      await db.execute('DROP TRIGGER IF EXISTS trg_articulos_venta_updated_at');
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_articulos_venta_updated_at AFTER UPDATE ON articulos_venta
+        WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
+        BEGIN
+          UPDATE articulos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        END;
+      ''');
+
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_cortes_caja_updated_at AFTER UPDATE ON cortes_caja
+        WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
+        BEGIN
+          UPDATE cortes_caja 
+          SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 
+              is_synced = 0, 
+              sync_estado = 'pendiente' 
+          WHERE rowid = NEW.rowid;
+        END;
+      ''');
+    }
   }
 
   @visibleForTesting
@@ -744,6 +869,7 @@ class BaseDeDatos {
         auth_user_id TEXT,
         email TEXT,
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -766,6 +892,7 @@ class BaseDeDatos {
         tipo TEXT NOT NULL DEFAULT 'planta',
         activo INTEGER NOT NULL DEFAULT 1,
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -787,6 +914,7 @@ class BaseDeDatos {
         montoPagado REAL NOT NULL DEFAULT 0.0,
         notas TEXT NOT NULL DEFAULT '',
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -807,6 +935,7 @@ class BaseDeDatos {
         fecha TEXT NOT NULL,
         metodoPago TEXT NOT NULL DEFAULT 'Efectivo',
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -818,8 +947,8 @@ class BaseDeDatos {
 
     await db.execute('''
       CREATE TABLE articulos_venta (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        uuid TEXT,
+        id TEXT PRIMARY KEY,
+        uuid TEXT NOT NULL,
         venta_id TEXT NOT NULL,
         venta_uuid TEXT,
         producto_id TEXT NOT NULL,
@@ -827,6 +956,7 @@ class BaseDeDatos {
         cantidad INTEGER NOT NULL,
         precioUnitario REAL NOT NULL,
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -937,6 +1067,7 @@ class BaseDeDatos {
         fechaLimite TEXT,
         estado TEXT NOT NULL DEFAULT 'PENDIENTE',
         is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -945,6 +1076,33 @@ class BaseDeDatos {
       )
     ''');
     await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_deudores_uuid ON deudores (uuid)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cortes_caja (
+        id TEXT PRIMARY KEY,
+        uuid TEXT NOT NULL,
+        colaborador_uuid TEXT NOT NULL,
+        dispositivo_id TEXT NOT NULL,
+        monto_apertura REAL NOT NULL DEFAULT 0.0,
+        monto_ventas_efectivo REAL NOT NULL DEFAULT 0.0,
+        monto_abonos_efectivo REAL NOT NULL DEFAULT 0.0,
+        monto_egresos REAL NOT NULL DEFAULT 0.0,
+        monto_esperado REAL NOT NULL DEFAULT 0.0,
+        monto_real REAL NOT NULL DEFAULT 0.0,
+        diferencia REAL NOT NULL DEFAULT 0.0,
+        estado TEXT NOT NULL DEFAULT 'ABIERTA',
+        notas TEXT NOT NULL DEFAULT '',
+        fecha_apertura TEXT NOT NULL,
+        fecha_cierre TEXT,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT,
+        deleted_at TEXT,
+        sync_estado TEXT NOT NULL DEFAULT 'pendiente'
+      )
+    ''');
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_cortes_caja_uuid ON cortes_caja (uuid)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cortes_caja_dispositivo ON cortes_caja (dispositivo_id, estado)');
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS movimientos_inventario (
@@ -1088,6 +1246,18 @@ class BaseDeDatos {
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
         UPDATE abonos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+      END;
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS trg_cortes_caja_updated_at AFTER UPDATE ON cortes_caja
+      WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
+      BEGIN
+        UPDATE cortes_caja 
+        SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 
+            is_synced = 0, 
+            sync_estado = 'pendiente' 
+        WHERE rowid = NEW.rowid;
       END;
     ''');
   }

@@ -185,7 +185,7 @@ class _InventarioVistaState extends State<InventarioVista> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Catálogo sincronizado con éxito',
+                    'Sincronización completada',
                     style: TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -206,13 +206,13 @@ class _InventarioVistaState extends State<InventarioVista> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Sincronización pausada, modo offline',
+                    'Trabajando sin conexión (Offline)',
                     style: TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFFC62828),
+            backgroundColor: const Color(0xFFEF6C00),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             duration: const Duration(seconds: 3),

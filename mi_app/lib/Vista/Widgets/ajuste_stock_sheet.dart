@@ -54,6 +54,8 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: BoxDecoration(
@@ -178,27 +180,36 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
             ),
           ),
           const SizedBox(height: 14),
+          // SECCIÓN DECORATIVA DE ALERTA: Umbral de Stock Crítico
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 12,
             ),
             decoration: BoxDecoration(
-              color: AppColors.secondarySurface,
+              color: isDarkMode
+                  ? Colors.orange.withOpacity(0.05)
+                  : Colors.orange.withOpacity(0.15),
               borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.orange,
+                width: 1.5,
+              ),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    color: isDarkMode
+                        ? Colors.orange.withOpacity(0.12)
+                        : Colors.orange.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.warning_amber_rounded,
-                    color: AppColors.warning,
-                    size: 22,
+                    color: Colors.orange,
+                    size: 28,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -209,7 +220,9 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                       Text(
                         'Umbral de Stock Crítico',
                         style: TextStyle(
-                          color: AppColors.textPrimary,
+                          color: isDarkMode
+                              ? const Color(0xFFFFB74D) // Naranja claro/ámbar legible en fondo oscuro
+                              : const Color(0xFFBF360C), // Naranja oscuro/terracota legible en fondo claro
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
@@ -218,7 +231,7 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                       Text(
                         'Alertar cuando queden existencias',
                         style: TextStyle(
-                          color: AppColors.textSecondary,
+                          color: isDarkMode ? Colors.white70 : const Color(0xFF5D4037),
                           fontSize: 11,
                         ),
                         maxLines: 2,
@@ -230,9 +243,21 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                 const SizedBox(width: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: AppColors.card,
+                    color: isDarkMode ? AppColors.card : Colors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.border, width: 1),
+                    border: Border.all(
+                      color: isDarkMode
+                          ? Colors.orange.withOpacity(0.35)
+                          : Colors.orange.shade300,
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.04),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -254,7 +279,7 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                           child: Icon(
                             Icons.remove,
                             size: 16,
-                            color: AppColors.textPrimary,
+                            color: isDarkMode ? Colors.white : AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -264,7 +289,7 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                         child: Text(
                           '$_umbral',
                           style: TextStyle(
-                            color: AppColors.textPrimary,
+                            color: isDarkMode ? Colors.white : AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -287,7 +312,7 @@ class _AjusteStockSheetState extends State<AjusteStockSheet> {
                           child: Icon(
                             Icons.add,
                             size: 16,
-                            color: AppColors.textPrimary,
+                            color: isDarkMode ? Colors.white : AppColors.textPrimary,
                           ),
                         ),
                       ),

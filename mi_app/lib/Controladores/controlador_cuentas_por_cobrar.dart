@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../BaseDatos/base_datos.dart';
 import '../Modelos/abono.dart';
@@ -182,8 +183,10 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
       final String? deudorUuid = deudorQuery.isNotEmpty ? deudorQuery.first['uuid']?.toString() : null;
       final String? ventaUuid = mapaVenta['uuid']?.toString();
 
+      final String nuevoAbonoUuid = const Uuid().v4();
       final abono = Abono(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: nuevoAbonoUuid,
+        uuid: nuevoAbonoUuid,
         ventaId: idStr,
         ventaUuid: ventaUuid,
         deudorUuid: deudorUuid,

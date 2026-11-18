@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../Modelos/producto.dart';
 import '../../Modelos/venta.dart';
@@ -259,7 +260,7 @@ class MotorIARecomendacion {
       if (producto.precioVenta > 0 && producto.costo >= producto.precioVenta) {
         sugerencias.add(
           RecomendacionCompra(
-            id: 'REC-$pId-${hoy.millisecondsSinceEpoch}',
+            id: 'REC-$pId-${const Uuid().v4()}',
             productoId: pId,
             nombreProducto: producto.nombre,
             tipo: producto.tipo,
@@ -357,7 +358,7 @@ class MotorIARecomendacion {
 
             sugerencias.add(
               RecomendacionCompra(
-                id: 'REC-$pId-${hoy.millisecondsSinceEpoch}',
+                id: 'REC-$pId-${const Uuid().v4()}',
                 productoId: pId,
                 nombreProducto: producto.nombre,
                 tipo: producto.tipo,
@@ -386,7 +387,7 @@ class MotorIARecomendacion {
         if (stock <= producto.umbralStockCritico) {
           sugerencias.add(
             RecomendacionCompra(
-              id: 'REC-$pId-${hoy.millisecondsSinceEpoch}',
+              id: 'REC-$pId-${const Uuid().v4()}',
               productoId: pId,
               nombreProducto: producto.nombre,
               tipo: producto.tipo,
@@ -416,7 +417,7 @@ class MotorIARecomendacion {
           final int lotePrueba = math.max(1, producto.umbralStockCritico);
           sugerencias.add(
             RecomendacionCompra(
-              id: 'REC-$pId-${hoy.millisecondsSinceEpoch}',
+              id: 'REC-$pId-${const Uuid().v4()}',
               productoId: pId,
               nombreProducto: producto.nombre,
               tipo: producto.tipo,
@@ -441,7 +442,7 @@ class MotorIARecomendacion {
           // Tiene stock pero aún no hay ventas: observar antes de comprar más
           sugerencias.add(
             RecomendacionCompra(
-              id: 'REC-$pId-${hoy.millisecondsSinceEpoch}',
+              id: 'REC-$pId-${const Uuid().v4()}',
               productoId: pId,
               nombreProducto: producto.nombre,
               tipo: producto.tipo,

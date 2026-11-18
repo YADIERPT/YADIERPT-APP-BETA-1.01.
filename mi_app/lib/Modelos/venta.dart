@@ -4,13 +4,14 @@ import 'producto.dart';
 enum EstadoVenta { enProceso, completada, cancelada, apartada, liquidada }
 
 class ArticuloVenta {
-  int? id;
+  String id;
   String uuid;
   String? ventaUuid;
   String? productoUuid;
   Producto producto;
   int cantidad;
   double precioUnitario;
+  String createdAt;
   String? updatedAt;
   String? deletedAt;
   String syncEstado;
@@ -19,24 +20,54 @@ class ArticuloVenta {
   String get nombre => producto.nombre;
 
   ArticuloVenta({
-    this.id,
+    String? id,
+    String? uuid,
+    String? ventaUuid,
+    String? productoUuid,
+    required Producto producto,
+    required int cantidad,
+    required double precioUnitario,
+    String? createdAt,
+    String? updatedAt,
+    String? deletedAt,
+    String syncEstado = 'pendiente',
+    String? dispositivoId,
+  }) : this._(
+          id: id ?? uuid ?? const Uuid().v4(),
+          uuid: uuid ?? id,
+          ventaUuid: ventaUuid,
+          productoUuid: productoUuid,
+          producto: producto,
+          cantidad: cantidad,
+          precioUnitario: precioUnitario,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+          deletedAt: deletedAt,
+          syncEstado: syncEstado,
+          dispositivoId: dispositivoId,
+        );
+
+  ArticuloVenta._({
+    required this.id,
     String? uuid,
     this.ventaUuid,
     this.productoUuid,
     required this.producto,
     required this.cantidad,
     required this.precioUnitario,
+    String? createdAt,
     this.updatedAt,
     this.deletedAt,
     this.syncEstado = 'pendiente',
     this.dispositivoId,
-  }) : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4();
+  })  : uuid = uuid ?? id,
+        createdAt = createdAt ?? DateTime.now().toUtc().toIso8601String();
 
   double get subtotal => cantidad * precioUnitario;
 
   Map<String, dynamic> toMap(String ventaId, {String? ventaUuidParam}) {
     return {
-      if (id != null) 'id': id,
+      'id': id,
       'uuid': uuid,
       'venta_id': ventaId,
       'venta_uuid': ventaUuidParam ?? ventaUuid,
@@ -44,6 +75,7 @@ class ArticuloVenta {
       'producto_uuid': productoUuid ?? producto.uuid,
       'cantidad': cantidad,
       'precioUnitario': precioUnitario,
+      'created_at': createdAt,
       'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': deletedAt,
       'sync_estado': syncEstado,
@@ -52,14 +84,16 @@ class ArticuloVenta {
   }
 
   factory ArticuloVenta.fromMap(Map<String, dynamic> map, Producto producto) {
+    final rawUuid = map['uuid']?.toString() ?? const Uuid().v4();
     return ArticuloVenta(
-      id: (map['id'] as num?)?.toInt(),
-      uuid: map['uuid']?.toString(),
+      id: map['id']?.toString() ?? rawUuid,
+      uuid: rawUuid,
       ventaUuid: map['venta_uuid']?.toString(),
       productoUuid: map['producto_uuid']?.toString() ?? producto.uuid,
       producto: producto,
-      cantidad: map['cantidad'],
-      precioUnitario: map['precioUnitario'],
+      cantidad: (map['cantidad'] as num).toInt(),
+      precioUnitario: (map['precioUnitario'] as num).toDouble(),
+      createdAt: map['created_at']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
       updatedAt: map['updated_at']?.toString(),
       deletedAt: map['deleted_at']?.toString(),
       syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
@@ -80,12 +114,49 @@ class Venta {
   String cliente;
   double montoPagado;
   String notas;
+  String createdAt;
   String? updatedAt;
   String? deletedAt;
   String syncEstado;
   String? dispositivoId;
 
   Venta({
+    String? id,
+    String? uuid,
+    String? colaboradorUuid,
+    required DateTime fecha,
+    EstadoVenta estado = EstadoVenta.enProceso,
+    List<ArticuloVenta>? articulos,
+    double porcentajeIva = 0.16,
+    bool aplicarIva = true,
+    String cliente = 'Cliente Mostrador',
+    double montoPagado = 0.0,
+    String notas = '',
+    String? createdAt,
+    String? updatedAt,
+    String? deletedAt,
+    String syncEstado = 'pendiente',
+    String? dispositivoId,
+  }) : this._(
+          id: id ?? uuid ?? const Uuid().v4(),
+          uuid: uuid ?? id,
+          colaboradorUuid: colaboradorUuid,
+          fecha: fecha,
+          estado: estado,
+          articulos: articulos,
+          porcentajeIva: porcentajeIva,
+          aplicarIva: aplicarIva,
+          cliente: cliente,
+          montoPagado: montoPagado,
+          notas: notas,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+          deletedAt: deletedAt,
+          syncEstado: syncEstado,
+          dispositivoId: dispositivoId,
+        );
+
+  Venta._({
     required this.id,
     String? uuid,
     this.colaboradorUuid,
@@ -97,11 +168,13 @@ class Venta {
     this.cliente = 'Cliente Mostrador',
     this.montoPagado = 0.0,
     this.notas = '',
+    String? createdAt,
     this.updatedAt,
     this.deletedAt,
     this.syncEstado = 'pendiente',
     this.dispositivoId,
-  })  : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4(),
+  })  : uuid = uuid ?? id,
+        createdAt = createdAt ?? DateTime.now().toUtc().toIso8601String(),
         articulos = articulos ?? [];
 
   Map<String, dynamic> toMap() {
@@ -116,6 +189,7 @@ class Venta {
       'cliente': cliente,
       'montoPagado': montoPagado,
       'notas': notas,
+      'created_at': createdAt,
       'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': deletedAt,
       'sync_estado': syncEstado,
@@ -128,13 +202,15 @@ class Venta {
     List<ArticuloVenta> articulosCargados,
   ) {
     final estadoRaw = map['estado']?.toString().toLowerCase().trim() ?? '';
+    final rawUuid = map['uuid']?.toString() ?? const Uuid().v4();
+    final fechaParsed = map['fecha'] != null
+        ? DateTime.tryParse(map['fecha'].toString()) ?? DateTime.now()
+        : DateTime.now();
     return Venta(
-      id: map['id']?.toString() ?? '',
-      uuid: map['uuid']?.toString(),
+      id: map['id']?.toString() ?? rawUuid,
+      uuid: rawUuid,
       colaboradorUuid: map['colaborador_uuid']?.toString(),
-      fecha: map['fecha'] != null
-          ? DateTime.tryParse(map['fecha'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      fecha: fechaParsed,
       estado: EstadoVenta.values.firstWhere(
         (e) => e.name.toLowerCase() == estadoRaw,
         orElse: () => EstadoVenta.enProceso,
@@ -144,6 +220,7 @@ class Venta {
       cliente: map['cliente']?.toString() ?? 'Cliente Mostrador',
       montoPagado: (map['montoPagado'] as num?)?.toDouble() ?? 0.0,
       notas: map['notas']?.toString() ?? '',
+      createdAt: map['created_at']?.toString() ?? fechaParsed.toIso8601String(),
       updatedAt: map['updated_at']?.toString(),
       deletedAt: map['deleted_at']?.toString(),
       syncEstado: map['sync_estado']?.toString() ?? 'pendiente',

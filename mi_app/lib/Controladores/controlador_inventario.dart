@@ -93,7 +93,7 @@ class ControladorInventario extends ChangeNotifier {
     }
     final mapas = await db.query(
       'productos',
-      where: 'activo = ?',
+      where: 'activo = ? AND deleted_at IS NULL',
       whereArgs: [soloActivos ? 1 : 0],
       orderBy:
           'CASE WHEN cantidadEnInventario > 0 THEN 0 ELSE 1 END, nombre COLLATE NOCASE ASC',
@@ -183,9 +183,15 @@ class ControladorInventario extends ChangeNotifier {
   Future<void> deshabilitarProducto(dynamic id) async {
     final db = await BaseDeDatos.instancia.database;
     final idParam = id.toString();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'productos',
-      {'activo': 0},
+      {
+        'activo': 0,
+        'is_synced': 0,
+        'sync_estado': 'pendiente',
+        'updated_at': nowIso,
+      },
       where: 'id = ?',
       whereArgs: [idParam],
     );
@@ -209,9 +215,16 @@ class ControladorInventario extends ChangeNotifier {
   Future<void> restaurarProducto(dynamic id) async {
     final db = await BaseDeDatos.instancia.database;
     final idParam = id.toString();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     await db.update(
       'productos',
-      {'activo': 1},
+      {
+        'activo': 1,
+        'deleted_at': null,
+        'is_synced': 0,
+        'sync_estado': 'pendiente',
+        'updated_at': nowIso,
+      },
       where: 'id = ?',
       whereArgs: [idParam],
     );
@@ -220,6 +233,7 @@ class ControladorInventario extends ChangeNotifier {
     final prod = _productos.where((p) => p.id == idParam).firstOrNull;
     if (prod != null) {
       prod.activo = true;
+      prod.deletedAt = null;
       // Si la vista actual muestra solo deshabilitados, retirarlo de la lista de ocultos
       if (!_filtroSoloActivos) {
         _productos.removeWhere((p) => p.id == idParam);
@@ -232,31 +246,31 @@ class ControladorInventario extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Elimina definitivamente un producto (Hard Delete) ejecutando `DELETE FROM productos WHERE id = ?`.
+  /// Realiza el borrado lógico (Tombstone) de un producto para arquitectura Offline-First.
   ///
-  /// Acción irreversible reservada exclusivamente para el rol 'dueño'.
-  /// Si el producto no cuenta con ventas registradas, se elimina físicamente de la base de datos.
-  /// En caso de poseer registros vinculados en `articulos_venta`, previene el fallo de clave foránea
-  /// notificando la restricción de integridad referencial.
+  /// En lugar de un DELETE físico que rompería la sincronización multi-dispositivo,
+  /// marca 'activo = 0', 'deleted_at = now()', 'is_synced = 0' y 'sync_estado = pendiente'
+  /// para que el motor de Push propague la eliminación hacia Supabase y otras terminales.
   Future<void> eliminarProductoDefinitivamente(dynamic id) async {
     final db = await BaseDeDatos.instancia.database;
     final idParam = id.toString();
-    try {
-      await db.delete(
-        'productos',
-        where: 'id = ?',
-        whereArgs: [idParam],
-      );
-      _productos.removeWhere((p) => p.id == idParam);
-      notifyListeners();
-    } catch (e) {
-      if (e.toString().contains('FOREIGN KEY')) {
-        throw Exception(
-          'No es posible eliminar definitivamente el producto porque posee registros de venta históricos. Consérvelo deshabilitado.',
-        );
-      }
-      rethrow;
-    }
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+
+    await db.update(
+      'productos',
+      {
+        'activo': 0,
+        'deleted_at': nowIso,
+        'is_synced': 0,
+        'sync_estado': 'pendiente',
+        'updated_at': nowIso,
+      },
+      where: 'id = ?',
+      whereArgs: [idParam],
+    );
+
+    _productos.removeWhere((p) => p.id == idParam);
+    notifyListeners();
   }
 
   /// Alias de retrocompatibilidad con llamadas preexistentes que ejecutan el borrado lógico (Soft Delete).
