@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
@@ -203,14 +205,12 @@ void main() {
       expect(resultado.exitoso, isTrue);
       expect(resultado.totalDescargados, equals(1));
 
-      // Verificar que se insertó en SQLite marcado con is_synced = 1
       final prod = await db.query('productos', where: 'uuid = ?', whereArgs: ['uuid-remoto-nuevo']);
       expect(prod.length, equals(1));
       expect(prod.first['nombre'], equals('Orquídea Blanca'));
       expect(prod.first['is_synced'], equals(1));
       expect(prod.first['sync_estado'], equals('sincronizado'));
 
-      // Verificar que el cursor se actualizó en SQLite
       final nuevoCursor = await SyncService.instancia.obtenerLastSyncTimestamp(db: db);
       expect(nuevoCursor, isNotNull);
       expect(nuevoCursor!.compareTo(cursorAnterior), greaterThan(0));
@@ -219,7 +219,6 @@ void main() {
     test('5. ¡CRÍTICO - Cero Duplicados!: Sobrescribe registro existente si coincide UUID (INSERT OR REPLACE)', () async {
       final uuidExistente = const Uuid().v4();
 
-      // Sembrar producto existente localmente
       await db.insert('productos', {
         'id': 'LOCAL-10',
         'uuid': uuidExistente,
@@ -231,7 +230,6 @@ void main() {
         'updated_at': '2026-11-17T10:00:00Z',
       });
 
-      // Simular cambio remoto con mismo UUID pero datos actualizados en la nube
       final resultado = await SyncService.instancia.pullCloudChanges(
         dbOverride: db,
         pullHandlerOverride: (tabla, cursor) async {
@@ -256,7 +254,6 @@ void main() {
 
       expect(resultado.exitoso, isTrue);
 
-      // Verificar que NO hay duplicados: el conteo total con ese UUID debe ser exactamente 1
       final productos = await db.query('productos', where: 'uuid = ?', whereArgs: [uuidExistente]);
       expect(productos.length, equals(1));
       expect(productos.first['nombre'], equals('Ficus Actualizado desde Nube'));
@@ -279,9 +276,135 @@ void main() {
       expect(resultado.exitoso, isFalse);
       expect(resultado.error, contains('Timeout al descargar'));
 
-      // Verificar que el timestamp NO se actualizó y conserva el cursor original
       final cursorActual = await SyncService.instancia.obtenerLastSyncTimestamp(db: db);
       expect(cursorActual, equals(cursorOriginal));
+    });
+  });
+
+  group('SyncService - Fase 4 (Storage Sync)', () {
+    late Database db;
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('planteapp_storage_test_');
+
+      db = await openDatabase(
+        inMemoryDatabasePath,
+        version: 15,
+        onConfigure: (d) async => await d.execute('PRAGMA foreign_keys = ON'),
+        onCreate: (d, version) async {
+          await BaseDeDatos.instancia.crearEsquemaParaPruebas(d, 15);
+        },
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('7. syncImages: Sube archivos locales a Storage, actualiza SQLite con URL pública y marca is_synced = 0', () async {
+      // 1. Crear un archivo temporal que simule una foto tomada sin internet
+      final archivoLocal = File(p.join(tempDir.path, 'planta_foto.jpg'));
+      await archivoLocal.writeAsBytes(List.filled(500, 65)); // 500 bytes
+
+      final prodUuid = const Uuid().v4();
+
+      await db.insert('productos', {
+        'id': 'PROD-FOTO',
+        'uuid': prodUuid,
+        'nombre': 'Begonia Maculata',
+        'precioVenta': 180.0,
+        'costo': 70.0,
+        'cantidadEnInventario': 3,
+        'imagenes': archivoLocal.path,
+        'is_synced': 1, // Ya estaba sincronizado previamente en texto
+        'updated_at': '2026-11-17T10:00:00Z',
+      });
+
+      // 2. Ejecutar syncImages con mock de Supabase Storage
+      final resultado = await SyncService.instancia.syncImages(
+        dbOverride: db,
+        storageUploaderOverride: (bucket, remotePath, file) async {
+          expect(bucket, equals('productos'));
+          expect(remotePath, contains(prodUuid));
+          return 'https://xyz.supabase.co/storage/v1/object/public/$bucket/$remotePath';
+        },
+      );
+
+      expect(resultado.exitoso, isTrue);
+      expect(resultado.totalImagenesSubidas, equals(1));
+      expect(resultado.urlsGeneradas.first, startsWith('https://xyz.supabase.co/storage/v1/object/public/productos/'));
+
+      // 3. Verificar que SQLite ahora tiene la URL pública y se marcó is_synced = 0
+      final prodActualizado = await db.query('productos', where: 'id = ?', whereArgs: ['PROD-FOTO']);
+      expect(prodActualizado.first['imagenes'], startsWith('https://xyz.supabase.co/'));
+      expect(prodActualizado.first['is_synced'], equals(0)); // ¡Listo para que Push lo suba!
+      expect(prodActualizado.first['sync_estado'], equals('pendiente'));
+    });
+
+    test('8. syncImages: Oprime archivos que ya son URLs web o assets', () async {
+      await db.insert('productos', {
+        'id': 'PROD-WEB',
+        'uuid': const Uuid().v4(),
+        'nombre': 'Suculenta Web',
+        'precioVenta': 90.0,
+        'costo': 30.0,
+        'cantidadEnInventario': 5,
+        'imagenes': 'https://xyz.supabase.co/storage/v1/object/public/productos/remota.webp,assets/images/logo.png',
+        'is_synced': 1,
+        'updated_at': '2026-11-17T10:00:00Z',
+      });
+
+      int llamadosStorage = 0;
+
+      final resultado = await SyncService.instancia.syncImages(
+        dbOverride: db,
+        storageUploaderOverride: (bucket, remotePath, file) async {
+          llamadosStorage++;
+          return 'https://xyz.supabase.co/test';
+        },
+      );
+
+      expect(resultado.exitoso, isTrue);
+      expect(resultado.totalImagenesSubidas, equals(0));
+      expect(llamadosStorage, equals(0));
+
+      final prod = await db.query('productos', where: 'id = ?', whereArgs: ['PROD-WEB']);
+      expect(prod.first['is_synced'], equals(1)); // Sin cambios
+    });
+
+    test('9. syncImages: Si la subida falla, la ruta local se conserva intacta', () async {
+      final archivoLocal = File(p.join(tempDir.path, 'foto_error.jpg'));
+      await archivoLocal.writeAsBytes(List.filled(200, 66));
+
+      await db.insert('productos', {
+        'id': 'PROD-ERROR',
+        'uuid': const Uuid().v4(),
+        'nombre': 'Planta Fallida',
+        'precioVenta': 150.0,
+        'costo': 60.0,
+        'cantidadEnInventario': 1,
+        'imagenes': archivoLocal.path,
+        'is_synced': 1,
+        'updated_at': '2026-11-17T10:00:00Z',
+      });
+
+      final resultado = await SyncService.instancia.syncImages(
+        dbOverride: db,
+        storageUploaderOverride: (bucket, remotePath, file) async {
+          throw Exception('Simulación de fallo en Supabase Storage (500 Internal Server Error)');
+        },
+      );
+
+      expect(resultado.exitoso, isTrue);
+      expect(resultado.totalImagenesSubidas, equals(0));
+
+      // La ruta local original debe permanecer intacta en SQLite
+      final prod = await db.query('productos', where: 'id = ?', whereArgs: ['PROD-ERROR']);
+      expect(prod.first['imagenes'], equals(archivoLocal.path));
     });
   });
 }

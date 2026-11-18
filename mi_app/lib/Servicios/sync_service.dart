@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -48,6 +51,25 @@ class SyncPullResult {
       'SyncPullResult(exitoso: $exitoso, totalDescargados: $totalDescargados, porTabla: $descargadosPorTabla, cursor: $lastSyncTimestamp, error: $error)';
 }
 
+/// Resultado detallado de la sincronización de imágenes físicas hacia Storage.
+class SyncImagesResult {
+  final bool exitoso;
+  final int totalImagenesSubidas;
+  final List<String> urlsGeneradas;
+  final String? error;
+
+  const SyncImagesResult({
+    required this.exitoso,
+    this.totalImagenesSubidas = 0,
+    this.urlsGeneradas = const [],
+    this.error,
+  });
+
+  @override
+  String toString() =>
+      'SyncImagesResult(exitoso: $exitoso, totalImagenesSubidas: $totalImagenesSubidas, error: $error)';
+}
+
 /// Configuración de sincronización por tabla.
 class _TablaSyncConfig {
   final String nombreLocal;
@@ -63,10 +85,16 @@ class _TablaSyncConfig {
   });
 }
 
-/// Servicio integral de sincronización Offline-First (Fase 2: Push Batching & Fase 3: Pull Incremental & Upsert).
+/// Servicio integral de sincronización Offline-First:
+/// - Fase 2: Push Batching (Subida de cambios locales).
+/// - Fase 3: Pull Incremental & Upsert Masivo (Cero Duplicados con cursor).
+/// - Fase 4: Storage Sync (Subida y compresión de archivos físicos a Supabase Storage).
 class SyncService {
   static final SyncService instancia = SyncService._();
   SyncService._();
+
+  /// Nombre del bucket predeterminado en Supabase Storage
+  static const String bucketImagenesProductos = 'productos';
 
   /// Tamaño predeterminado de cada lote HTTP para evitar sobrecargar la conexión
   static const int batchSizePredeterminado = 50;
@@ -420,6 +448,208 @@ class SyncService {
     } finally {
       _sincronizando = false;
     }
+  }
+
+  // ===========================================================================
+  // FASE 4: STORAGE SYNC (Sincronización de Archivos Físicos a Supabase Storage)
+  // ===========================================================================
+
+  /// Sincroniza archivos físicos de imágenes locales hacia Supabase Storage.
+  ///
+  /// 1. Busca productos con rutas locales de imagen en SQLite (que no contengan URLs web de Supabase/HTTP).
+  /// 2. Si la imagen es pesada (> 300 KB), aplica compresión WebP antes de subirla.
+  /// 3. Sube el archivo físico al bucket de Supabase Storage ('productos').
+  /// 4. Reemplaza la ruta local por la URL pública web devuelta por Supabase.
+  /// 5. Marca el registro en SQLite con `is_synced = 0` y `sync_estado = 'pendiente'`
+  ///    para que el método `pushLocalChanges()` sincronice la fila actualizada en la base remota.
+  Future<SyncImagesResult> syncImages({
+    SupabaseClient? clientOverride,
+    Future<String> Function(String bucket, String remotePath, File file)? storageUploaderOverride,
+    Database? dbOverride,
+    String bucket = bucketImagenesProductos,
+    int umbralCompresionBytes = 300 * 1024, // 300 KB
+  }) async {
+    int subidas = 0;
+    final List<String> urlsGeneradas = [];
+
+    try {
+      // 1. Validar cliente de Supabase (a menos que haya mock en pruebas)
+      SupabaseClient? client;
+      if (storageUploaderOverride == null) {
+        client = clientOverride ??
+            (ServicioSupabase.instancia.estaInicializado
+                ? ServicioSupabase.instancia.client
+                : (kIsWeb || Supabase.instance.isInitialized ? Supabase.instance.client : null));
+
+        if (client == null) {
+          debugPrint('SyncService [STORAGE]: Supabase no está inicializado. Modo local activo.');
+          return const SyncImagesResult(
+            exitoso: true,
+            totalImagenesSubidas: 0,
+            error: 'Modo local activo (sin conexión a Supabase).',
+          );
+        }
+
+        // 2. Validar conectividad de red
+        if (clientOverride == null) {
+          final hayRed = await ServicioConectividad.instancia.tieneConexion();
+          if (!hayRed) {
+            debugPrint('SyncService [STORAGE]: Sin conexión a internet disponible.');
+            return const SyncImagesResult(
+              exitoso: false,
+              totalImagenesSubidas: 0,
+              error: 'Sin conexión a internet.',
+            );
+          }
+        }
+      }
+
+      final db = dbOverride ?? (await BaseDeDatos.instancia.database);
+
+      // 3. Buscar productos que tengan rutas de imágenes locales
+      final productos = await db.query(
+        'productos',
+        columns: ['id', 'uuid', 'imagenes'],
+        where: "imagenes IS NOT NULL AND imagenes != ''",
+      );
+
+      if (productos.isEmpty) {
+        return const SyncImagesResult(exitoso: true, totalImagenesSubidas: 0);
+      }
+
+      for (final prod in productos) {
+        final String imagenesRaw = prod['imagenes']?.toString() ?? '';
+        final String prodUuid = prod['uuid']?.toString() ?? prod['id']?.toString() ?? const Uuid().v4();
+        final List<String> rutas = imagenesRaw.split(',');
+        final List<String> rutasActualizadas = [];
+        bool huboCambios = false;
+
+        for (final ruta in rutas) {
+          final rutaLimpia = ruta.trim();
+          if (rutaLimpia.isEmpty) continue;
+
+          // Si ya es una URL web o asset de la app, conservar intacta
+          if (_esUrlRemotaOAsset(rutaLimpia)) {
+            rutasActualizadas.add(rutaLimpia);
+            continue;
+          }
+
+          final archivoLocal = File(rutaLimpia);
+          if (!archivoLocal.existsSync()) {
+            debugPrint('SyncService [STORAGE]: El archivo local $rutaLimpia no existe en disco. Omitiendo.');
+            rutasActualizadas.add(rutaLimpia);
+            continue;
+          }
+
+          // 4. Compresión inteligente previa a la subida si es pesada (> 300 KB)
+          final File archivoASubir = await _comprimirSiEsPesada(
+            archivoLocal,
+            umbralBytes: umbralCompresionBytes,
+          );
+
+          try {
+            // 5. Subir archivo a Supabase Storage
+            final String remotePath = '$prodUuid/${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(archivoLocal.path)}.webp';
+            final String publicUrl;
+
+            if (storageUploaderOverride != null) {
+              publicUrl = await storageUploaderOverride(bucket, remotePath, archivoASubir);
+            } else {
+              final storage = client!.storage.from(bucket);
+              await storage.upload(
+                remotePath,
+                archivoASubir,
+                fileOptions: const FileOptions(upsert: true, contentType: 'image/webp'),
+              );
+              publicUrl = storage.getPublicUrl(remotePath);
+            }
+
+            rutasActualizadas.add(publicUrl);
+            urlsGeneradas.add(publicUrl);
+            subidas++;
+            huboCambios = true;
+            debugPrint('SyncService [STORAGE]: Imagen de producto $prodUuid subida exitosamente: $publicUrl');
+          } catch (e) {
+            debugPrint('SyncService [STORAGE]: Error al subir imagen $rutaLimpia: $e');
+            // Si falla la subida de esta imagen, conservamos la ruta local para el próximo reintento
+            rutasActualizadas.add(rutaLimpia);
+          }
+        }
+
+        // 6. Si se subió alguna imagen, actualizar el producto en SQLite y marcar is_synced = 0
+        if (huboCambios) {
+          await db.update(
+            'productos',
+            {
+              'imagenes': rutasActualizadas.join(','),
+              'is_synced': 0, // ¡CRÍTICO! Marcar 0 para que pushLocalChanges() actualice la fila en la BD remota
+              'sync_estado': 'pendiente',
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [prod['id']],
+          );
+        }
+      }
+
+      return SyncImagesResult(
+        exitoso: true,
+        totalImagenesSubidas: subidas,
+        urlsGeneradas: urlsGeneradas,
+      );
+    } catch (e) {
+      debugPrint('SyncService [STORAGE]: Error en syncImages: $e');
+      return SyncImagesResult(
+        exitoso: false,
+        totalImagenesSubidas: subidas,
+        urlsGeneradas: urlsGeneradas,
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Verifica si una ruta es ya una URL web o un asset bundle empaquetado
+  static bool _esUrlRemotaOAsset(String ruta) {
+    final lower = ruta.toLowerCase();
+    return lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('assets/');
+  }
+
+  /// Comprime ligeramente una imagen si supera el umbral establecido (por defecto 300 KB).
+  /// Convierte a formato WebP optimizado al 80% de calidad.
+  static Future<File> _comprimirSiEsPesada(
+    File original, {
+    required int umbralBytes,
+  }) async {
+    try {
+      final int longitud = await original.length();
+      if (longitud <= umbralBytes) {
+        return original;
+      }
+
+      final tempDir = Directory.systemTemp;
+      final targetPath = p.join(
+        tempDir.path,
+        'opt_${DateTime.now().millisecondsSinceEpoch}_${p.basenameWithoutExtension(original.path)}.webp',
+      );
+
+      final resultado = await FlutterImageCompress.compressAndGetFile(
+        original.absolute.path,
+        targetPath,
+        minWidth: 1024,
+        minHeight: 1024,
+        quality: 80,
+        format: CompressFormat.webp,
+      );
+
+      if (resultado != null) {
+        return File(resultado.path);
+      }
+    } catch (e) {
+      debugPrint('SyncService [STORAGE]: Aviso en compresión ($e). Utilizando archivo original.');
+    }
+    return original;
   }
 
   // ===========================================================================
