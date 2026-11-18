@@ -8,12 +8,12 @@
 class SupabaseConfig {
   static const String url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://pwzptdoexpkdhzlzftso.supabase.co',
   );
 
   static const String anonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_DdA9AgS1eD6ym-iIQy-alQ_xqnasPWn',
   );
 
   /// Indica si la nube de Supabase está habilitada por entorno.

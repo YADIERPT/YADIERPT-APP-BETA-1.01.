@@ -366,6 +366,15 @@ class SyncService {
           } catch (e) {
             debugPrint(
                 'SyncService [PUSH]: Error al subir lote de $tablaLocalReal a Supabase: $e');
+            final errStr = e.toString().toLowerCase();
+            final bool tablaInexistente = errStr.contains('pgrst205') ||
+                errStr.contains('does not exist') ||
+                errStr.contains('not found');
+            if (tablaInexistente) {
+              debugPrint(
+                  'SyncService [PUSH]: La tabla remota ${config.nombreRemoto} aún no existe en Supabase. Omitiendo.');
+              continue;
+            }
             // Si falla la petición HTTP, NO actualizamos is_synced y permitimos reintento posterior
             return SyncPushResult(
               exitoso: false,
@@ -474,15 +483,28 @@ class SyncService {
 
         // 5. Consultar registros remotos donde updated_at >= last_sync_timestamp
         final List<Map<String, dynamic>> registrosRemotos;
-        if (pullHandlerOverride != null) {
-          registrosRemotos = await pullHandlerOverride(config.nombreRemoto, lastSyncTimestamp);
-        } else {
-          var query = client!.from(config.nombreRemoto).select();
-          if (lastSyncTimestamp != null && lastSyncTimestamp.isNotEmpty) {
-            query = query.gte('updated_at', lastSyncTimestamp);
+        try {
+          if (pullHandlerOverride != null) {
+            registrosRemotos = await pullHandlerOverride(config.nombreRemoto, lastSyncTimestamp);
+          } else {
+            var query = client!.from(config.nombreRemoto).select();
+            if (lastSyncTimestamp != null && lastSyncTimestamp.isNotEmpty) {
+              query = query.gte('updated_at', lastSyncTimestamp);
+            }
+            final respuesta = await query.order('updated_at', ascending: true);
+            registrosRemotos = List<Map<String, dynamic>>.from(respuesta);
           }
-          final respuesta = await query.order('updated_at', ascending: true);
-          registrosRemotos = List<Map<String, dynamic>>.from(respuesta);
+        } catch (e) {
+          debugPrint('SyncService [PULL]: Aviso al consultar ${config.nombreRemoto} en Supabase: $e');
+          final errStr = e.toString().toLowerCase();
+          final bool tablaInexistente = errStr.contains('pgrst205') ||
+              errStr.contains('does not exist') ||
+              errStr.contains('not found');
+          if (tablaInexistente) {
+            descargadosPorTabla[tablaLocalReal] = 0;
+            continue;
+          }
+          rethrow;
         }
 
         if (registrosRemotos.isEmpty) {
@@ -728,6 +750,20 @@ class SyncService {
       );
     } catch (e) {
       debugPrint('SyncService [STORAGE]: Error en syncImages: $e');
+      final errStr = e.toString().toLowerCase();
+      final bool bucketInexistente = errStr.contains('nosuchbucket') ||
+          errStr.contains('bucket not found') ||
+          errStr.contains('not found');
+      if (bucketInexistente) {
+        debugPrint(
+            'SyncService [STORAGE]: Bucket productos pendiente de creación en Supabase. Omitiendo fotos temporalmente.');
+        return SyncImagesResult(
+          exitoso: true,
+          totalImagenesSubidas: subidas,
+          urlsGeneradas: urlsGeneradas,
+          error: 'Bucket productos pendiente de creación en Supabase.',
+        );
+      }
       return SyncImagesResult(
         exitoso: false,
         totalImagenesSubidas: subidas,
