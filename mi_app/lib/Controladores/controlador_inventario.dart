@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../Modelos/producto.dart';
+import '../Modelos/movimiento_inventario.dart';
 import '../BaseDatos/base_datos.dart';
 
 /// Controlador reactivo de inventario para Planteapp.
@@ -139,18 +140,29 @@ class ControladorInventario extends ChangeNotifier {
           whereArgs: [nuevoProducto.id],
         );
 
-        if (coincidentes.isNotEmpty) {
-          // Reactivar el producto existente y actualizar sus datos
-          nuevoProducto.activo = true;
-          await db.update(
-            'productos',
-            nuevoProducto.toMap(),
-            where: 'id = ?',
-            whereArgs: [nuevoProducto.id],
-          );
-        } else {
-          await db.insert('productos', nuevoProducto.toMap());
-        }
+        await db.transaction((txn) async {
+          if (coincidentes.isNotEmpty) {
+            // Reactivar el producto existente y actualizar sus datos
+            nuevoProducto.activo = true;
+            await txn.update(
+              'productos',
+              nuevoProducto.toMap(),
+              where: 'id = ?',
+              whereArgs: [nuevoProducto.id],
+            );
+          } else {
+            await txn.insert('productos', nuevoProducto.toMap());
+            if (nuevoProducto.cantidadEnInventario > 0) {
+              final mov = MovimientoInventario(
+                productoUuid: nuevoProducto.uuid,
+                tipo: TipoMovimientoInventario.ajuste,
+                cantidad: nuevoProducto.cantidadEnInventario,
+                motivo: 'Inventario inicial',
+              );
+              await txn.insert('movimientos_inventario', mov.toMap());
+            }
+          }
+        });
         completer.complete();
       } catch (e) {
         // En caso de fallo transaccional en SQLite, revertir el estado en memoria
@@ -257,7 +269,23 @@ class ControladorInventario extends ChangeNotifier {
     if (producto != null) {
       producto.reducirInventario(cantidad);
       ordenarProductosJerarquico(_productos);
-      await _actualizarProducto(producto);
+      final db = await BaseDeDatos.instancia.database;
+      await db.transaction((txn) async {
+        await txn.update(
+          'productos',
+          producto.toMap(),
+          where: 'id = ?',
+          whereArgs: [producto.id],
+        );
+        final mov = MovimientoInventario(
+          productoUuid: producto.uuid,
+          tipo: TipoMovimientoInventario.ajuste,
+          cantidad: -cantidad,
+          motivo: 'Merma botánica',
+        );
+        await txn.insert('movimientos_inventario', mov.toMap());
+      });
+      notifyListeners();
     } else {
       throw Exception('Producto no encontrado');
     }
@@ -271,7 +299,23 @@ class ControladorInventario extends ChangeNotifier {
     if (producto != null) {
       producto.reducirInventario(cantidad);
       ordenarProductosJerarquico(_productos);
-      await _actualizarProducto(producto);
+      final db = await BaseDeDatos.instancia.database;
+      await db.transaction((txn) async {
+        await txn.update(
+          'productos',
+          producto.toMap(),
+          where: 'id = ?',
+          whereArgs: [producto.id],
+        );
+        final mov = MovimientoInventario(
+          productoUuid: producto.uuid,
+          tipo: TipoMovimientoInventario.venta,
+          cantidad: -cantidad,
+          motivo: 'Descuento por venta',
+        );
+        await txn.insert('movimientos_inventario', mov.toMap());
+      });
+      notifyListeners();
     }
   }
 
@@ -304,9 +348,29 @@ class ControladorInventario extends ChangeNotifier {
   Future<void> actualizarProductoCompleto(Producto productoActualizado) async {
     final index = _productos.indexWhere((p) => p.id == productoActualizado.id);
     if (index != -1) {
+      final anterior = _productos[index];
+      final diff = productoActualizado.cantidadEnInventario - anterior.cantidadEnInventario;
       _productos[index] = productoActualizado;
       ordenarProductosJerarquico(_productos);
-      await _actualizarProducto(productoActualizado);
+      final db = await BaseDeDatos.instancia.database;
+      await db.transaction((txn) async {
+        await txn.update(
+          'productos',
+          productoActualizado.toMap(),
+          where: 'id = ?',
+          whereArgs: [productoActualizado.id],
+        );
+        if (diff != 0) {
+          final mov = MovimientoInventario(
+            productoUuid: productoActualizado.uuid,
+            tipo: TipoMovimientoInventario.ajuste,
+            cantidad: diff,
+            motivo: 'Ajuste en edición completa de producto',
+          );
+          await txn.insert('movimientos_inventario', mov.toMap());
+        }
+      });
+      notifyListeners();
     } else {
       throw Exception('Producto no encontrado');
     }
@@ -332,10 +396,30 @@ class ControladorInventario extends ChangeNotifier {
   ) async {
     final producto = obtenerProducto(productoId);
     if (producto != null) {
+      final int anterior = producto.cantidadEnInventario;
+      final int diff = nuevaCantidad - anterior;
       producto.cantidadEnInventario = nuevaCantidad;
       producto.umbralStockCritico = nuevoUmbral;
       ordenarProductosJerarquico(_productos);
-      await _actualizarProducto(producto);
+      final db = await BaseDeDatos.instancia.database;
+      await db.transaction((txn) async {
+        await txn.update(
+          'productos',
+          producto.toMap(),
+          where: 'id = ?',
+          whereArgs: [producto.id],
+        );
+        if (diff != 0) {
+          final mov = MovimientoInventario(
+            productoUuid: producto.uuid,
+            tipo: TipoMovimientoInventario.ajuste,
+            cantidad: diff,
+            motivo: 'Ajuste manual de existencias',
+          );
+          await txn.insert('movimientos_inventario', mov.toMap());
+        }
+      });
+      notifyListeners();
     } else {
       throw Exception('Producto no encontrado');
     }

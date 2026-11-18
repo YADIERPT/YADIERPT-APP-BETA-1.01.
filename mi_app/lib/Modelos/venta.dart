@@ -1,42 +1,77 @@
+import 'package:uuid/uuid.dart';
 import 'producto.dart';
 
 enum EstadoVenta { enProceso, completada, cancelada, apartada, liquidada }
 
 class ArticuloVenta {
+  int? id;
+  String uuid;
+  String? ventaUuid;
+  String? productoUuid;
   Producto producto;
   int cantidad;
   double precioUnitario;
+  String? updatedAt;
+  String? deletedAt;
+  String syncEstado;
+  String? dispositivoId;
 
   String get nombre => producto.nombre;
 
   ArticuloVenta({
+    this.id,
+    String? uuid,
+    this.ventaUuid,
+    this.productoUuid,
     required this.producto,
     required this.cantidad,
     required this.precioUnitario,
-  });
+    this.updatedAt,
+    this.deletedAt,
+    this.syncEstado = 'pendiente',
+    this.dispositivoId,
+  }) : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4();
 
   double get subtotal => cantidad * precioUnitario;
 
-  Map<String, dynamic> toMap(String ventaId) {
+  Map<String, dynamic> toMap(String ventaId, {String? ventaUuidParam}) {
     return {
+      if (id != null) 'id': id,
+      'uuid': uuid,
       'venta_id': ventaId,
+      'venta_uuid': ventaUuidParam ?? ventaUuid,
       'producto_id': producto.id,
+      'producto_uuid': productoUuid ?? producto.uuid,
       'cantidad': cantidad,
       'precioUnitario': precioUnitario,
+      'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': deletedAt,
+      'sync_estado': syncEstado,
+      'dispositivo_id': dispositivoId,
     };
   }
 
   factory ArticuloVenta.fromMap(Map<String, dynamic> map, Producto producto) {
     return ArticuloVenta(
+      id: (map['id'] as num?)?.toInt(),
+      uuid: map['uuid']?.toString(),
+      ventaUuid: map['venta_uuid']?.toString(),
+      productoUuid: map['producto_uuid']?.toString() ?? producto.uuid,
       producto: producto,
       cantidad: map['cantidad'],
       precioUnitario: map['precioUnitario'],
+      updatedAt: map['updated_at']?.toString(),
+      deletedAt: map['deleted_at']?.toString(),
+      syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
+      dispositivoId: map['dispositivo_id']?.toString(),
     );
   }
 }
 
 class Venta {
   String id;
+  String uuid;
+  String? colaboradorUuid;
   DateTime fecha;
   EstadoVenta estado;
   List<ArticuloVenta> articulos;
@@ -45,9 +80,15 @@ class Venta {
   String cliente;
   double montoPagado;
   String notas;
+  String? updatedAt;
+  String? deletedAt;
+  String syncEstado;
+  String? dispositivoId;
 
   Venta({
     required this.id,
+    String? uuid,
+    this.colaboradorUuid,
     required this.fecha,
     this.estado = EstadoVenta.enProceso,
     List<ArticuloVenta>? articulos,
@@ -56,11 +97,18 @@ class Venta {
     this.cliente = 'Cliente Mostrador',
     this.montoPagado = 0.0,
     this.notas = '',
-  }) : articulos = articulos ?? [];
+    this.updatedAt,
+    this.deletedAt,
+    this.syncEstado = 'pendiente',
+    this.dispositivoId,
+  })  : uuid = (uuid != null && uuid.isNotEmpty) ? uuid : const Uuid().v4(),
+        articulos = articulos ?? [];
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'uuid': uuid,
+      'colaborador_uuid': colaboradorUuid,
       'fecha': fecha.toIso8601String(),
       'estado': estado.name,
       'porcentajeIva': porcentajeIva,
@@ -68,6 +116,10 @@ class Venta {
       'cliente': cliente,
       'montoPagado': montoPagado,
       'notas': notas,
+      'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': deletedAt,
+      'sync_estado': syncEstado,
+      'dispositivo_id': dispositivoId,
     };
   }
 
@@ -78,6 +130,8 @@ class Venta {
     final estadoRaw = map['estado']?.toString().toLowerCase().trim() ?? '';
     return Venta(
       id: map['id']?.toString() ?? '',
+      uuid: map['uuid']?.toString(),
+      colaboradorUuid: map['colaborador_uuid']?.toString(),
       fecha: map['fecha'] != null
           ? DateTime.tryParse(map['fecha'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -90,6 +144,10 @@ class Venta {
       cliente: map['cliente']?.toString() ?? 'Cliente Mostrador',
       montoPagado: (map['montoPagado'] as num?)?.toDouble() ?? 0.0,
       notas: map['notas']?.toString() ?? '',
+      updatedAt: map['updated_at']?.toString(),
+      deletedAt: map['deleted_at']?.toString(),
+      syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
+      dispositivoId: map['dispositivo_id']?.toString(),
       articulos: articulosCargados,
     );
   }

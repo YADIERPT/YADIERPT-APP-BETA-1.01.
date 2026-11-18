@@ -7,6 +7,8 @@ import '../Modelos/colaborador.dart';
 import '../BaseDatos/base_datos.dart';
 import '../Servicios/servicio_criptografia.dart';
 import '../Servicios/secure_storage_service.dart';
+import '../Servicios/servicio_autenticacion_supabase.dart';
+import '../Servicios/servicio_realtime.dart';
 
 /// Alias semántico para el controlador de personal / colaboradores
 typedef ControladorEmpleados = ControladorAutenticacion;
@@ -127,9 +129,12 @@ class ControladorAutenticacion extends ChangeNotifier {
 
       final colaboradorSanitizado = Colaborador(
         id: idSanitizado,
+        uuid: nuevo.uuid,
         nombre: nombreSanitizado,
         clave: claveFinal,
         rol: nuevo.rol,
+        authUserId: nuevo.authUserId,
+        email: nuevo.email,
       );
 
       final db = await BaseDeDatos.instancia.database;
@@ -161,6 +166,7 @@ class ControladorAutenticacion extends ChangeNotifier {
     required String nombre,
     required String clave,
     RolUsuario rol = RolUsuario.empleado,
+    String? email,
   }) async {
     final idSanitizado = id.trim().toUpperCase();
     final nombreSanitizado = nombre.trim();
@@ -171,6 +177,7 @@ class ControladorAutenticacion extends ChangeNotifier {
       nombre: nombreSanitizado,
       clave: claveSanitizada,
       rol: rol,
+      email: email?.trim(),
     );
     return await registrarColaborador(nuevo);
   }
@@ -260,6 +267,10 @@ class ControladorAutenticacion extends ChangeNotifier {
               'id': saltReal,
             });
           }
+
+          // Autenticación silenciosa en Supabase Auth si hay conexión y configuración activa (Fase 4)
+          await _intentarAutenticacionSilenciosaNube(claveSanitizada);
+
           notifyListeners();
           return true;
         }
@@ -298,6 +309,7 @@ class ControladorAutenticacion extends ChangeNotifier {
 
         _usuarioActual = admin;
         await obtenerColaboradores();
+        await _intentarAutenticacionSilenciosaNube(claveSanitizada);
         notifyListeners();
         return true;
       }
@@ -371,6 +383,14 @@ class ControladorAutenticacion extends ChangeNotifier {
 
       if (resultados.isNotEmpty) {
         _usuarioActual = Colaborador.fromMap(resultados.first);
+        ServicioAutenticacionSupabase.instancia.restaurarSesion().then((restaurada) {
+          if (restaurada) {
+            ServicioRealtime.instancia.iniciarEscucha();
+          }
+        }).catchError((e) {
+          debugPrint('Aviso al restaurar sesión Supabase por ID: $e');
+          return false;
+        });
         notifyListeners();
         return true;
       }
@@ -434,6 +454,13 @@ class ControladorAutenticacion extends ChangeNotifier {
       'rol': rolAGuardar.valor,
     };
 
+    if (colaborador.authUserId != null) {
+      map['auth_user_id'] = colaborador.authUserId;
+    }
+    if (colaborador.email != null) {
+      map['email'] = colaborador.email;
+    }
+
     if (nuevaClave != null && nuevaClave.trim().isNotEmpty) {
       map['clave'] = await hashearClaveKdf(nuevaClave.trim(), idSanitizado);
     }
@@ -450,6 +477,8 @@ class ControladorAutenticacion extends ChangeNotifier {
         id: idSanitizado,
         nombre: colaborador.nombre.trim(),
         rol: rolAGuardar,
+        authUserId: colaborador.authUserId ?? _usuarioActual!.authUserId,
+        email: colaborador.email ?? _usuarioActual!.email,
         clave: map['clave'] as String? ?? _usuarioActual!.clave,
       );
     }
@@ -462,6 +491,8 @@ class ControladorAutenticacion extends ChangeNotifier {
           id: idSanitizado,
           nombre: colaborador.nombre.trim(),
           rol: rolAGuardar,
+          authUserId: colaborador.authUserId ?? _colaboradoresPrueba![index].authUserId,
+          email: colaborador.email ?? _colaboradoresPrueba![index].email,
           clave: map['clave'] as String? ?? _colaboradoresPrueba![index].clave,
         );
       }
@@ -547,6 +578,10 @@ class ControladorAutenticacion extends ChangeNotifier {
     );
     if (_usuarioActual != null && _usuarioActual!.id.trim().toUpperCase() == idSanitizado) {
       _usuarioActual = _usuarioActual!.copyWith(clave: claveHasheada);
+      ServicioAutenticacionSupabase.instancia.cambiarClave(nuevaClave: nuevaClave).catchError((e) {
+        debugPrint('Aviso al actualizar clave en Supabase Auth: $e');
+        return false;
+      });
     }
   }
 
@@ -555,6 +590,39 @@ class ControladorAutenticacion extends ChangeNotifier {
     _tokenDesafioActivo = null;
     _expiracionTokenDesafio = null;
     _usuarioDesafio = null;
+    ServicioRealtime.instancia.detenerEscucha().catchError((e) {
+      debugPrint('Aviso al detener Realtime: $e');
+    });
+    ServicioAutenticacionSupabase.instancia.cerrarSesion().catchError((e) {
+      debugPrint('Aviso al cerrar sesión Supabase: $e');
+    });
     notifyListeners();
+  }
+
+  /// Intenta iniciar sesión silenciosamente en Supabase Auth en segundo plano
+  /// tras un login local exitoso. Si la conexión falla, la app continúa offline.
+  Future<void> _intentarAutenticacionSilenciosaNube(String clavePlana) async {
+    if (_usuarioActual == null) return;
+    try {
+      final exitoNube = await ServicioAutenticacionSupabase.instancia.iniciarSesionSilenciosa(
+        colaborador: _usuarioActual!,
+        clavePlana: clavePlana,
+      );
+      if (exitoNube) {
+        final authUserId = ServicioAutenticacionSupabase.instancia.usuarioNube?.id;
+        if (authUserId != null && authUserId.isNotEmpty) {
+          _usuarioActual = _usuarioActual!.copyWith(
+            authUserId: authUserId,
+            email: _usuarioActual!.emailAutenticacion,
+          );
+        }
+        // Iniciar escucha reactiva Realtime multi-dispositivo (Fase 4b)
+        ServicioRealtime.instancia.iniciarEscucha().catchError((e) {
+          debugPrint('Aviso al iniciar Realtime tras login: $e');
+        });
+      }
+    } catch (e) {
+      debugPrint('Aviso en login silencioso Supabase: $e');
+    }
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../Modelos/venta.dart';
 import '../../Tema/app_theme.dart';
 import '../../Tema/app_svg_icons.dart';
+import 'imagen_producto_widget.dart';
 
 class ArticuloTicketItem extends StatelessWidget {
   final ArticuloVenta art;
@@ -310,29 +311,15 @@ class ArticuloTicketItem extends StatelessWidget {
   }
 
   Widget _buildImagenProducto(double iconSize) {
-    if (art.producto.imagenes.isNotEmpty && art.producto.imagenes.first.trim().isNotEmpty) {
-      final imgPath = art.producto.imagenes.first.trim();
-      if (imgPath.startsWith('assets/')) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.asset(
-            imgPath,
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(iconSize),
-          ),
-        );
-      } else {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.file(
-            File(imgPath),
-            fit: BoxFit.cover,
-            errorBuilder: (c, e, s) => _buildPlaceholder(iconSize),
-          ),
-        );
-      }
-    }
-    return _buildPlaceholder(iconSize);
+    return ImagenProductoWidget(
+      producto: art.producto,
+      width: iconSize + 16,
+      height: iconSize + 16,
+      borderRadius: BorderRadius.circular(10),
+      fit: BoxFit.cover,
+      usarMiniatura: true,
+      placeholder: _buildPlaceholder(iconSize),
+    );
   }
 
   Widget _buildPlaceholder(double iconSize) {
