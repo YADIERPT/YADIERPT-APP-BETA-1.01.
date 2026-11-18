@@ -181,7 +181,10 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
         whereArgs: [idStr, 'deu_$idStr'],
       );
       final String? deudorUuid = deudorQuery.isNotEmpty ? deudorQuery.first['uuid']?.toString() : null;
-      final String? ventaUuid = mapaVenta['uuid']?.toString();
+      final String? ventaUuid = mapaVenta['uuid']?.toString() ?? mapaVenta['id']?.toString();
+      final DateTime fechaActual = DateTime.now();
+      final String localFechaIso = fechaActual.toIso8601String();
+      final String nowIso = fechaActual.toUtc().toIso8601String();
 
       final String nuevoAbonoUuid = const Uuid().v4();
       final abono = Abono(
@@ -191,12 +194,20 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
         ventaUuid: ventaUuid,
         deudorUuid: deudorUuid,
         monto: monto,
-        fecha: DateTime.now(),
+        fecha: fechaActual,
         metodoPago: metodoPago,
+        updatedAt: nowIso,
+        syncEstado: 'pendiente',
       );
 
-      // 4. Insertar el abono en el registro histórico
-      await txn.insert('abonos_venta', abono.toMap());
+      // 4. Insertar el abono en el registro histórico con UUID y banderas de sincronización Offline-First
+      final Map<String, dynamic> mapaAbono = abono.toMap();
+      mapaAbono['is_synced'] = 0;
+      mapaAbono['fecha'] = localFechaIso;
+      mapaAbono['created_at'] = nowIso;
+      mapaAbono['updated_at'] = nowIso;
+      mapaAbono['sync_estado'] = 'pendiente';
+      await txn.insert('abonos_venta', mapaAbono, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // 5. Actualizar monto acumulado y estado de la venta
       await txn.update(
@@ -204,6 +215,9 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
         {
           'montoPagado': nuevoMontoPagado,
           'estado': nuevoEstado,
+          'is_synced': 0,
+          'sync_estado': 'pendiente',
+          'updated_at': nowIso,
         },
         where: whereClause,
         whereArgs: whereArgs,
@@ -216,24 +230,34 @@ class ControladorCuentasPorCobrar extends ChangeNotifier {
           'montoPagado': nuevoMontoPagado,
           'saldoPendiente': nuevoSaldoRestante,
           'estado': liquidada ? 'LIQUIDADA' : 'PENDIENTE',
+          'is_synced': 0,
+          'sync_estado': 'pendiente',
+          'updated_at': nowIso,
         },
         where: 'venta_id = ? OR id = ?',
         whereArgs: [idStr, 'deu_$idStr'],
       );
 
-      // 1. Registro Contable de Abonos (Ingresos Reales):
-      // Inserta un registro en finanzas/caja ('transacciones') por el monto exacto del abono
+      // 7. Registro Contable de Abonos (Ingresos Reales):
+      // Inserta un registro en finanzas/caja ('transacciones') con UUID v4 único y soporte para SyncService
       final String descripcionTransaccion = liquidada
           ? 'Abono Folio #$idStr (Liquidación: $cliente)'
           : 'Abono Folio #$idStr ($cliente)';
 
+      final String transaccionUuid = const Uuid().v4();
       await txn.insert('transacciones', {
-        'id': '${abono.id}_ingreso',
+        'id': transaccionUuid,
+        'uuid': transaccionUuid,
         'tipo': TipoTransaccion.ingreso.name,
         'monto': monto,
-        'fecha': DateTime.now().toIso8601String(),
+        'fecha': localFechaIso,
         'descripcion': descripcionTransaccion,
-      });
+        'concepto': descripcionTransaccion,
+        'is_synced': 0,
+        'sync_estado': 'pendiente',
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // 8. Crear comprobante inmutable del abono
       comprobanteGenerado = ComprobanteAbono(

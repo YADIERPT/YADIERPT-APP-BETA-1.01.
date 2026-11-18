@@ -393,6 +393,207 @@ void main() {
       expect(cPull.isNotEmpty, isTrue);
       expect(cPull.first['is_synced'], equals(1));
     });
+
+    test('9. Push y Pull de abonos_venta y transacciones: Sube y descarga respetando is_synced y mapeo relacional', () async {
+      final abonoUuid = const Uuid().v4();
+      final transaccionUuid = const Uuid().v4();
+      final ventaUuid = const Uuid().v4();
+
+      await db.insert('ventas', {
+        'id': ventaUuid,
+        'uuid': ventaUuid,
+        'fecha': '2026-11-18T01:00:00Z',
+        'estado': 'apartada',
+        'porcentajeIva': 0.16,
+        'aplicarIva': 1,
+        'cliente': 'Carlos Jardines',
+        'montoPagado': 100.0,
+        'is_synced': 1,
+      });
+
+      await db.insert('abonos_venta', {
+        'id': abonoUuid,
+        'uuid': abonoUuid,
+        'venta_id': ventaUuid,
+        'venta_uuid': ventaUuid,
+        'monto': 150.0,
+        'fecha': '2026-11-18T02:00:00Z',
+        'metodoPago': 'Efectivo',
+        'is_synced': 0,
+        'created_at': '2026-11-18T02:00:00Z',
+        'updated_at': '2026-11-18T02:00:00Z',
+      });
+
+      await db.insert('transacciones', {
+        'id': transaccionUuid,
+        'uuid': transaccionUuid,
+        'tipo': 'ingreso',
+        'monto': 150.0,
+        'descripcion': 'Abono venta crédito',
+        'concepto': 'Abono venta crédito',
+        'fecha': '2026-11-18T02:00:00Z',
+        'is_synced': 0,
+        'created_at': '2026-11-18T02:00:00Z',
+        'updated_at': '2026-11-18T02:00:00Z',
+      });
+
+      final List<Map<String, dynamic>> subidos = [];
+      final resPush = await SyncService.instancia.pushLocalChanges(
+        dbOverride: db,
+        upsertHandlerOverride: (tabla, lote) async {
+          subidos.addAll(lote);
+        },
+      );
+
+      expect(resPush.exitoso, isTrue);
+      expect(subidos.any((m) => m['uuid'] == abonoUuid), isTrue);
+      expect(subidos.any((m) => m['uuid'] == transaccionUuid), isTrue);
+
+      final abonoSubido = subidos.firstWhere((m) => m['uuid'] == abonoUuid);
+      expect(abonoSubido['monto'], equals(150.0));
+      expect(abonoSubido['metodo_pago'], equals('Efectivo'));
+
+      final transaccionSubida = subidos.firstWhere((m) => m['uuid'] == transaccionUuid);
+      expect(transaccionSubida['concepto'], equals('Abono venta crédito'));
+      expect(transaccionSubida['monto'], equals(150.0));
+
+      final aCheck = await db.query('abonos_venta', where: 'uuid = ?', whereArgs: [abonoUuid]);
+      expect(aCheck.first['is_synced'], equals(1));
+
+      final tCheck = await db.query('transacciones', where: 'uuid = ?', whereArgs: [transaccionUuid]);
+      expect(tCheck.first['is_synced'], equals(1));
+
+      // Test de PULL para abonos y transacciones
+      final pullAbonoUuid = const Uuid().v4();
+      final pullTransaccionUuid = const Uuid().v4();
+      final resPull = await SyncService.instancia.pullCloudChanges(
+        dbOverride: db,
+        pullHandlerOverride: (tabla, cursor) async {
+          if (tabla == 'abonos_venta') {
+            return [
+              {
+                'uuid': pullAbonoUuid,
+                'venta_uuid': ventaUuid,
+                'monto': 200.0,
+                'metodo_pago': 'Transferencia',
+                'fecha': '2026-11-18T06:00:00Z',
+                'created_at': '2026-11-18T06:00:00Z',
+                'updated_at': '2026-11-18T06:00:00Z',
+              }
+            ];
+          }
+          if (tabla == 'transacciones') {
+            return [
+              {
+                'uuid': pullTransaccionUuid,
+                'tipo': 'egreso',
+                'monto': 80.0,
+                'concepto': 'Compra de macetas',
+                'fecha': '2026-11-18T06:30:00Z',
+                'created_at': '2026-11-18T06:30:00Z',
+                'updated_at': '2026-11-18T06:30:00Z',
+              }
+            ];
+          }
+          return [];
+        },
+      );
+
+      expect(resPull.exitoso, isTrue);
+      final aPull = await db.query('abonos_venta', where: 'uuid = ?', whereArgs: [pullAbonoUuid]);
+      expect(aPull.isNotEmpty, isTrue);
+      expect(aPull.first['is_synced'], equals(1));
+      expect(aPull.first['monto'], equals(200.0));
+
+      final tPull = await db.query('transacciones', where: 'uuid = ?', whereArgs: [pullTransaccionUuid]);
+      expect(tPull.isNotEmpty, isTrue);
+      expect(tPull.first['is_synced'], equals(1));
+      expect(tPull.first['monto'], equals(80.0));
+      expect(tPull.first['tipo'], equals('egreso'));
+    });
+
+    test('10. ¡CRÍTICO - Integridad Referencial!: Pull de venta existente con Upsert atómico no detona ON DELETE CASCADE en articulos_venta', () async {
+      final String ventaUuid = const Uuid().v4();
+      final String productoUuid = const Uuid().v4();
+      final String articuloUuid = const Uuid().v4();
+
+      // 1. Insertar producto padre
+      await db.insert('productos', {
+        'id': 'PROD-CASCADE-01',
+        'uuid': productoUuid,
+        'nombre': 'Ficus Lyrata',
+        'precioVenta': 500.0,
+        'costo': 250.0,
+        'cantidadEnInventario': 10,
+        'is_synced': 1,
+      });
+
+      // 2. Insertar venta padre
+      await db.insert('ventas', {
+        'id': 'VEN-CASCADE-01',
+        'uuid': ventaUuid,
+        'fecha': '2026-11-18T00:00:00Z',
+        'estado': 'apartada',
+        'porcentajeIva': 0.16,
+        'aplicarIva': 0,
+        'cliente': 'Carlos Jardín',
+        'montoPagado': 100.0,
+        'is_synced': 1,
+      });
+
+      // 3. Insertar artículo hijo sujeto a ON DELETE CASCADE
+      await db.insert('articulos_venta', {
+        'id': articuloUuid,
+        'uuid': articuloUuid,
+        'venta_id': 'VEN-CASCADE-01',
+        'venta_uuid': ventaUuid,
+        'producto_id': 'PROD-CASCADE-01',
+        'producto_uuid': productoUuid,
+        'cantidad': 2,
+        'precioUnitario': 250.0,
+        'is_synced': 1,
+      });
+
+      // Verificar existencia inicial del artículo hijo
+      final articulosAntes = await db.query('articulos_venta', where: 'id = ?', whereArgs: [articuloUuid]);
+      expect(articulosAntes.length, equals(1));
+
+      // 4. Ejecutar PULL simulado de actualización de la venta desde la nube
+      final resPull = await SyncService.instancia.pullCloudChanges(
+        dbOverride: db,
+        pullHandlerOverride: (tabla, cursor) async {
+          if (tabla == 'ventas') {
+            return [
+              {
+                'uuid': ventaUuid,
+                'codigo_local': 'VEN-CASCADE-01',
+                'cliente': 'Carlos Jardín (Modificado)',
+                'estado': 'completada',
+                'monto_pagado': 500.0,
+                'porcentaje_iva': 0.16,
+                'aplicar_iva': 0,
+                'updated_at': '2026-11-18T08:00:00Z',
+              }
+            ];
+          }
+          return [];
+        },
+      );
+
+      expect(resPull.exitoso, isTrue);
+
+      // 5. Verificar que la venta padre se actualizó correctamente en SQLite
+      final ventaActualizada = await db.query('ventas', where: 'uuid = ?', whereArgs: [ventaUuid]);
+      expect(ventaActualizada.first['estado'], equals('completada'));
+      expect(ventaActualizada.first['montoPagado'], equals(500.0));
+      expect(ventaActualizada.first['cliente'], equals('Carlos Jardín (Modificado)'));
+
+      // 6. ¡VALIDACIÓN CRÍTICA!: articulos_venta NO fue eliminado por ON DELETE CASCADE
+      final articulosDespues = await db.query('articulos_venta', where: 'id = ?', whereArgs: [articuloUuid]);
+      expect(articulosDespues.length, equals(1), reason: 'El Upsert con ON CONFLICT jamás debe detonar ON DELETE CASCADE');
+      expect(articulosDespues.first['cantidad'], equals(2));
+      expect(articulosDespues.first['venta_id'], equals('VEN-CASCADE-01'));
+    });
   });
 
   group('SyncService - Fase 4 (Storage Sync)', () {

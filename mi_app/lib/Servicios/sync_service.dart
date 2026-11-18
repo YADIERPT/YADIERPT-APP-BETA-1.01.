@@ -175,6 +175,18 @@ class SyncService {
       campoId: 'id',
       transformadorPush: _mapearDeudorASupabase,
     ),
+    _TablaSyncConfig(
+      nombreLocal: 'abonos_venta',
+      nombreRemoto: 'abonos_venta',
+      campoId: 'uuid',
+      transformadorPush: _mapearAbonoVentaASupabase,
+    ),
+    _TablaSyncConfig(
+      nombreLocal: 'transacciones',
+      nombreRemoto: 'transacciones',
+      campoId: 'uuid',
+      transformadorPush: _mapearTransaccionASupabase,
+    ),
   ];
 
   // ===========================================================================
@@ -278,6 +290,11 @@ class SyncService {
       for (final config in _tablasConfig) {
         final tablaLocalReal = await _determinarTablaLocal(db, config.nombreLocal);
         if (tablaLocalReal == null) continue;
+
+        // Validar defensivamente si la tabla cuenta con la columna is_synced
+        final infoColumnas = await db.rawQuery('PRAGMA table_info($tablaLocalReal)');
+        final tieneIsSynced = infoColumnas.any((col) => col['name'] == 'is_synced');
+        if (!tieneIsSynced) continue;
 
         // Consultar registros locales donde is_synced == 0
         final registrosPendientes = await db.query(
@@ -450,6 +467,11 @@ class SyncService {
         final tablaLocalReal = await _determinarTablaLocal(db, config.nombreLocal);
         if (tablaLocalReal == null) continue;
 
+        // Validar defensivamente si la tabla cuenta con la columna is_synced
+        final infoColumnas = await db.rawQuery('PRAGMA table_info($tablaLocalReal)');
+        final tieneIsSynced = infoColumnas.any((col) => col['name'] == 'is_synced');
+        if (!tieneIsSynced) continue;
+
         // 5. Consultar registros remotos donde updated_at >= last_sync_timestamp
         final List<Map<String, dynamic>> registrosRemotos;
         if (pullHandlerOverride != null) {
@@ -471,7 +493,10 @@ class SyncService {
         debugPrint(
             'SyncService [PULL]: Descargando ${registrosRemotos.length} registros remotos para $tablaLocalReal...');
 
-        // 6. ¡CRÍTICO - Cero Duplicados!: Upsert masivo mediante INSERT OR REPLACE en una sola transacción
+        // 6. ¡CRÍTICO - Cero Duplicados & Sin Cascade Delete!:
+        // Upsert atómico compatible con SQLite mediante ON CONFLICT(...) DO UPDATE SET.
+        // Se descarta definitivamente ConflictAlgorithm.replace porque ejecuta un DELETE subyacente
+        // que detona ON DELETE CASCADE en articulos_venta, abonos_venta y deudores al actualizar ventas.
         int insertadosTabla = 0;
         await db.transaction((txn) async {
           final batch = txn.batch();
@@ -487,16 +512,40 @@ class SyncService {
             filaLocal['is_synced'] = 1;
             filaLocal['sync_estado'] = 'sincronizado';
 
-            // Ejecuta en SQLite: INSERT OR REPLACE INTO <tabla> (...) VALUES (...)
-            batch.insert(
-              tablaLocalReal,
-              filaLocal,
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
+            // Identificar clave de conflicto para el Upsert atómico:
+            // Todas las tablas del esquema manejan índice UNIQUE o PRIMARY KEY en 'uuid'.
+            final bool tieneUuid = filaLocal.containsKey('uuid') && filaLocal['uuid'] != null;
+            final String conflictTarget = tieneUuid ? 'uuid' : config.campoId;
+
+            final columnas = filaLocal.keys.toList();
+            final placeholders = List.filled(columnas.length, '?').join(', ');
+            final columnasStr = columnas.map((c) => '"$c"').join(', ');
+            final valores = filaLocal.values.toList();
+
+            // Excluir la columna de conflicto y el id primario local del SET para no alterar claves foráneas
+            final columnasUpdate = columnas.where((col) => col != conflictTarget && col != 'id').toList();
+
+            final String sql;
+            if (columnasUpdate.isNotEmpty) {
+              final updateClause = columnasUpdate.map((col) => '"$col" = excluded."$col"').join(', ');
+              sql = '''
+                INSERT INTO $tablaLocalReal ($columnasStr)
+                VALUES ($placeholders)
+                ON CONFLICT($conflictTarget) DO UPDATE SET $updateClause
+              ''';
+            } else {
+              sql = '''
+                INSERT INTO $tablaLocalReal ($columnasStr)
+                VALUES ($placeholders)
+                ON CONFLICT($conflictTarget) DO NOTHING
+              ''';
+            }
+
+            batch.rawInsert(sql, valores);
             insertadosTabla++;
           }
 
-          // Ejecutar en lote optimizado dentro del motor SQLite C
+          // Ejecutar en lote optimizado dentro del motor SQLite C sin detonar DELETE CASCADE
           await batch.commit(noResult: true);
         });
 
@@ -853,6 +902,10 @@ class SyncService {
         return _mapearSupabaseAMovimientoInventarioLocal(remoto, txn);
       case 'deudores':
         return _mapearSupabaseADeudorLocal(remoto, txn);
+      case 'abonos_venta':
+        return _mapearSupabaseAAbonoVentaLocal(remoto, txn);
+      case 'transacciones':
+        return _mapearSupabaseATransaccionLocal(remoto, txn);
       default:
         final copia = Map<String, dynamic>.from(remoto);
         copia['is_synced'] = 1;
@@ -1129,6 +1182,63 @@ class SyncService {
     };
   }
 
+  static Future<Map<String, dynamic>> _mapearSupabaseAAbonoVentaLocal(
+    Map<String, dynamic> remoto,
+    DatabaseExecutor txn,
+  ) async {
+    final String uuid = remoto['uuid']?.toString() ?? remoto['id']?.toString() ?? const Uuid().v4();
+    final String ventaUuid = remoto['venta_uuid']?.toString() ?? remoto['venta_id']?.toString() ?? '';
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+
+    String ventaId = ventaUuid;
+    if (ventaUuid.isNotEmpty) {
+      final v = await txn.query('ventas', columns: ['id'], where: 'uuid = ? OR id = ?', whereArgs: [ventaUuid, ventaUuid], limit: 1);
+      if (v.isNotEmpty) {
+        ventaId = v.first['id']?.toString() ?? ventaUuid;
+      }
+    }
+
+    return {
+      'id': uuid,
+      'uuid': uuid,
+      'venta_id': ventaId,
+      'venta_uuid': ventaUuid,
+      'deudor_uuid': remoto['deudor_uuid']?.toString(),
+      'colaborador_uuid': remoto['colaborador_uuid']?.toString(),
+      'monto': (remoto['monto'] as num?)?.toDouble() ?? 0.0,
+      'fecha': remoto['fecha']?.toString() ?? remoto['created_at']?.toString() ?? nowIso,
+      'metodoPago': remoto['metodo_pago']?.toString() ?? remoto['metodoPago']?.toString() ?? 'Efectivo',
+      'is_synced': 1,
+      'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? nowIso,
+      'updated_at': remoto['updated_at']?.toString() ?? nowIso,
+      'deleted_at': remoto['deleted_at']?.toString(),
+    };
+  }
+
+  static Future<Map<String, dynamic>> _mapearSupabaseATransaccionLocal(
+    Map<String, dynamic> remoto,
+    DatabaseExecutor txn,
+  ) async {
+    final String uuid = remoto['uuid']?.toString() ?? remoto['id']?.toString() ?? const Uuid().v4();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final String concepto = remoto['concepto']?.toString() ?? remoto['descripcion']?.toString() ?? '';
+
+    return {
+      'id': uuid,
+      'uuid': uuid,
+      'tipo': remoto['tipo']?.toString().toLowerCase() ?? 'ingreso',
+      'monto': (remoto['monto'] as num?)?.toDouble() ?? 0.0,
+      'descripcion': concepto,
+      'concepto': concepto,
+      'fecha': remoto['fecha']?.toString() ?? remoto['created_at']?.toString() ?? nowIso,
+      'is_synced': 1,
+      'sync_estado': 'sincronizado',
+      'created_at': remoto['created_at']?.toString() ?? nowIso,
+      'updated_at': remoto['updated_at']?.toString() ?? nowIso,
+    };
+  }
+
   // ===========================================================================
   // Mapeadores Locales (SQLite) -> Supabase (PUSH)
   // ===========================================================================
@@ -1267,6 +1377,34 @@ class SyncService {
       'created_at': local['created_at'] ?? local['fechaRegistro'] ?? nowIso,
       'updated_at': local['updated_at'] ?? nowIso,
       'deleted_at': local['deleted_at'],
+    };
+  }
+
+  static Map<String, dynamic> _mapearAbonoVentaASupabase(Map<String, dynamic> local) {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': local['uuid'] ?? local['id'] ?? const Uuid().v4(),
+      'venta_uuid': local['venta_uuid'] ?? local['venta_id'],
+      'monto': (local['monto'] as num?)?.toDouble() ?? 0.0,
+      'metodo_pago': local['metodo_pago'] ?? local['metodoPago'] ?? 'Efectivo',
+      'fecha': local['fecha'] ?? nowIso,
+      'is_synced': local['is_synced'] ?? 0,
+      'created_at': local['created_at'] ?? local['fecha'] ?? nowIso,
+      'updated_at': local['updated_at'] ?? nowIso,
+    };
+  }
+
+  static Map<String, dynamic> _mapearTransaccionASupabase(Map<String, dynamic> local) {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    return {
+      'uuid': local['uuid'] ?? local['id'] ?? const Uuid().v4(),
+      'tipo': local['tipo']?.toString().toLowerCase() ?? 'ingreso',
+      'monto': (local['monto'] as num?)?.toDouble() ?? 0.0,
+      'concepto': local['concepto'] ?? local['descripcion'] ?? '',
+      'fecha': local['fecha'] ?? nowIso,
+      'is_synced': local['is_synced'] ?? 0,
+      'created_at': local['created_at'] ?? local['fecha'] ?? nowIso,
+      'updated_at': local['updated_at'] ?? nowIso,
     };
   }
 

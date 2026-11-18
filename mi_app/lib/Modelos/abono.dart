@@ -43,6 +43,8 @@ class Abono {
       'monto': monto,
       'fecha': fecha.toIso8601String(),
       'metodoPago': metodoPago,
+      'is_synced': 0,
+      'created_at': fecha.toIso8601String(),
       'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': deletedAt,
       'sync_estado': syncEstado,

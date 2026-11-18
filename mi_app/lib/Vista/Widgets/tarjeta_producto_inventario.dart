@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,8 +5,8 @@ import '../../Controladores/controlador_autenticacion.dart';
 import '../../Modelos/producto.dart';
 import '../../Modelos/colaborador.dart';
 import '../../Tema/app_theme.dart';
-import '../../Tema/app_svg_icons.dart';
 import '../../Utilidades/formateador.dart';
+import 'miniatura_producto_widget.dart';
 
 class TarjetaProductoInventario extends StatelessWidget {
   final Producto prod;
@@ -555,47 +554,15 @@ class TarjetaProductoInventario extends StatelessWidget {
     );
   }
 
-  /// Construye la imagen del producto 100% offline.
-  /// Soporta rutas locales de assets ('assets/...') o archivos guardados en el dispositivo ('/data/...').
-  /// En caso de no existir o fallar, renderiza un ícono botánico SVG nativo sin requerir internet.
+  /// Construye la imagen del producto optimizada en memoria (Anti-OOM).
+  /// Soporta URLs remotas de Supabase Storage (CachedNetworkImage), activos locales y
+  /// archivos en disco decodificados a baja resolución (150px) sin bloquear el hilo UI.
   Widget _buildImagenProducto(double width, double height) {
-    if (prod.imagenes.isNotEmpty && prod.imagenes.first.trim().isNotEmpty) {
-      final imgPath = prod.imagenes.first.trim();
-      if (imgPath.startsWith('assets/')) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            imgPath,
-            width: width,
-            height: height,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
-          ),
-        );
-      } else {
-        final file = File(imgPath);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            file,
-            width: width,
-            height: height,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => _buildPlaceholderIcon(),
-          ),
-        );
-      }
-    }
-    return _buildPlaceholderIcon();
-  }
-
-  Widget _buildPlaceholderIcon() {
-    return Center(
-      child: SvgIconWidget(
-        prod.esPlanta ? AppSvgIcons.planta : AppSvgIcons.articulo,
-        size: 32,
-        color: AppColors.primary,
-      ),
+    return MiniaturaProductoWidget(
+      producto: prod,
+      width: width,
+      height: height,
+      borderRadius: BorderRadius.circular(12),
     );
   }
 }

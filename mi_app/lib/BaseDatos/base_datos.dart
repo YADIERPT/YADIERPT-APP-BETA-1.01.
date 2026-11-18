@@ -96,12 +96,16 @@ class BaseDeDatos {
         'abonos_venta',
         'cortes_caja',
         'movimientos_inventario',
+        'transacciones',
       ];
       for (final tabla in tablasSincronizables) {
         await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
         await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'updated_at', 'TEXT');
         await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'created_at', 'TEXT');
       }
+      await _agregarColumnaSiNoExiste(dbInstancia, 'transacciones', 'uuid', 'TEXT');
+      await _agregarColumnaSiNoExiste(dbInstancia, 'transacciones', 'concepto', 'TEXT');
+      await _agregarColumnaSiNoExiste(dbInstancia, 'transacciones', 'sync_estado', "TEXT NOT NULL DEFAULT 'pendiente'");
     } catch (_) {}
 
     // Asegurar tabla cola_imagenes para sincronización en segundo plano de Storage (Fase 6)
@@ -970,12 +974,20 @@ class BaseDeDatos {
     await db.execute('''
       CREATE TABLE transacciones (
         id TEXT PRIMARY KEY,
+        uuid TEXT,
         tipo TEXT NOT NULL,
         monto REAL NOT NULL,
         fecha TEXT NOT NULL,
-        descripcion TEXT NOT NULL
+        descripcion TEXT NOT NULL,
+        concepto TEXT,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT,
+        deleted_at TEXT,
+        sync_estado TEXT NOT NULL DEFAULT 'pendiente'
       )
     ''');
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_transacciones_uuid ON transacciones (uuid)');
 
     await db.execute('''
       CREATE TABLE configuracion (

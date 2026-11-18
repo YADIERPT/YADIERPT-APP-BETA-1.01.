@@ -583,12 +583,21 @@ class ControladorVentas extends ChangeNotifier {
             metodoPago: metodoPagoAbono,
           );
           await txn.insert('abonos_venta', abono.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+          final String localFecha = DateTime.now().toIso8601String();
+          final String nowUtc = DateTime.now().toUtc().toIso8601String();
+          final String descripcionEnganche = 'Abono Folio #${venta.id} (Enganche: $cliente)';
           await txn.insert('transacciones', {
             'id': transaccionUuid,
+            'uuid': transaccionUuid,
             'tipo': TipoTransaccion.ingreso.name,
             'monto': montoAbonoInicial,
-            'fecha': DateTime.now().toIso8601String(),
-            'descripcion': 'Abono Folio #${venta.id} (Enganche: $cliente)',
+            'fecha': localFecha,
+            'descripcion': descripcionEnganche,
+            'concepto': descripcionEnganche,
+            'is_synced': 0,
+            'sync_estado': 'pendiente',
+            'created_at': nowUtc,
+            'updated_at': nowUtc,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
@@ -793,18 +802,31 @@ class ControladorVentas extends ChangeNotifier {
           liquidada ? EstadoVenta.completada.name : EstadoVenta.apartada.name;
       final String cliente = mapaVenta['cliente']?.toString() ?? 'Cliente';
 
+      final String? deudorUuid = (await txn.query('deudores', columns: ['uuid'], where: 'venta_id = ? OR id = ?', whereArgs: [idStr, 'deu_$idStr'])).firstOrNull?['uuid']?.toString();
+      final String? ventaUuid = mapaVenta['uuid']?.toString() ?? mapaVenta['id']?.toString();
+      final String nowIso = DateTime.now().toUtc().toIso8601String();
+
       final String nuevoAbonoUuid = const Uuid().v4();
       final abono = Abono(
         id: nuevoAbonoUuid,
         uuid: nuevoAbonoUuid,
         ventaId: idStr,
+        ventaUuid: ventaUuid,
+        deudorUuid: deudorUuid,
         monto: monto,
         fecha: DateTime.now(),
         metodoPago: metodoPago,
+        updatedAt: nowIso,
+        syncEstado: 'pendiente',
       );
 
       // 4. Insertar el abono en el registro histórico
-      await txn.insert('abonos_venta', abono.toMap());
+      final Map<String, dynamic> mapaAbono = abono.toMap();
+      mapaAbono['is_synced'] = 0;
+      mapaAbono['created_at'] = nowIso;
+      mapaAbono['updated_at'] = nowIso;
+      mapaAbono['sync_estado'] = 'pendiente';
+      await txn.insert('abonos_venta', mapaAbono, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // 5. Actualizar monto acumulado y estado de la venta
       await txn.update(
@@ -812,6 +834,9 @@ class ControladorVentas extends ChangeNotifier {
         {
           'montoPagado': nuevoMontoPagado,
           'estado': nuevoEstado,
+          'is_synced': 0,
+          'sync_estado': 'pendiente',
+          'updated_at': nowIso,
         },
         where: whereClause,
         whereArgs: whereArgs,
@@ -824,23 +849,33 @@ class ControladorVentas extends ChangeNotifier {
           'montoPagado': nuevoMontoPagado,
           'saldoPendiente': nuevoSaldoRestante,
           'estado': liquidada ? 'LIQUIDADA' : 'PENDIENTE',
+          'is_synced': 0,
+          'sync_estado': 'pendiente',
+          'updated_at': nowIso,
         },
         where: 'venta_id = ? OR id = ?',
         whereArgs: [idStr, 'deu_$idStr'],
       );
 
-      // 7. Registrar el ingreso financiero correspondiente
+      // 7. Registrar el ingreso financiero correspondiente con UUID v4 único
       final String descripcionTransaccion = liquidada
           ? 'Abono Folio #$idStr (Liquidación: $cliente)'
           : 'Abono Folio #$idStr ($cliente)';
 
+      final String transaccionUuid = const Uuid().v4();
       await txn.insert('transacciones', {
-        'id': '${abono.id}_ingreso',
+        'id': transaccionUuid,
+        'uuid': transaccionUuid,
         'tipo': TipoTransaccion.ingreso.name,
         'monto': monto,
-        'fecha': DateTime.now().toIso8601String(),
+        'fecha': nowIso,
         'descripcion': descripcionTransaccion,
-      });
+        'concepto': descripcionTransaccion,
+        'is_synced': 0,
+        'sync_estado': 'pendiente',
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
 
     // Refrescar estado local y financiero en memoria

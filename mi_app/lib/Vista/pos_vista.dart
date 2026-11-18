@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +13,7 @@ import '../Utilidades/debouncer.dart';
 import '../Utilidades/formateador.dart';
 import '../Constantes/limites.dart';
 import 'Widgets/tarjeta_pos_producto.dart';
+import 'Widgets/miniatura_producto_widget.dart';
 import 'venta.dart';
 import 'impresion_ticket.dart';
 import '../Servicios/servicio_ticket_pdf.dart';
@@ -52,38 +52,11 @@ class _PosVistaState extends State<PosVista> {
   }
 
   Widget _buildMiniImagenProducto(Producto prod) {
-    if (prod.imagenes.isNotEmpty) {
-      final ruta = prod.imagenes.first;
-      if (ruta.startsWith('assets/')) {
-        return Image.asset(
-          ruta,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(
-            prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
-            color: AppColors.textSecondary,
-            size: 20,
-          ),
-        );
-      }
-      final file = File(ruta);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(
-            prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
-            color: AppColors.textSecondary,
-            size: 20,
-          ),
-        );
-      }
-    }
-    return Center(
-      child: Icon(
-        prod.esPlanta ? Icons.local_florist : Icons.inventory_2_outlined,
-        color: AppColors.textSecondary,
-        size: 20,
-      ),
+    return MiniaturaProductoWidget(
+      producto: prod,
+      width: 44,
+      height: 44,
+      borderRadius: BorderRadius.circular(10),
     );
   }
 
