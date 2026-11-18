@@ -85,6 +85,20 @@ class BaseDeDatos {
     try {
       await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'auth_user_id', 'TEXT');
       await _agregarColumnaSiNoExiste(dbInstancia, 'colaboradores', 'email', 'TEXT');
+
+      // Asegurar columnas Offline-First en todas las tablas sincronizables
+      final tablasSincronizables = [
+        'colaboradores',
+        'productos',
+        'ventas',
+        'articulos_venta',
+        'deudores',
+        'abonos_venta',
+      ];
+      for (final tabla in tablasSincronizables) {
+        await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
+        await _agregarColumnaSiNoExiste(dbInstancia, tabla, 'updated_at', 'TEXT');
+      }
     } catch (_) {}
 
     // Asegurar tabla cola_imagenes para sincronización en segundo plano de Storage (Fase 6)
@@ -517,6 +531,7 @@ class BaseDeDatos {
 
       for (final tabla in tablasSincronizables) {
         await _agregarColumnaSiNoExiste(db, tabla, 'uuid', 'TEXT');
+        await _agregarColumnaSiNoExiste(db, tabla, 'is_synced', 'INTEGER NOT NULL DEFAULT 0');
         await _agregarColumnaSiNoExiste(db, tabla, 'updated_at', 'TEXT');
         await _agregarColumnaSiNoExiste(db, tabla, 'deleted_at', 'TEXT');
         await _agregarColumnaSiNoExiste(db, tabla, 'sync_estado', "TEXT NOT NULL DEFAULT 'pendiente'");
@@ -642,7 +657,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_colaboradores_updated_at AFTER UPDATE ON colaboradores
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE colaboradores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE colaboradores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
 
@@ -650,7 +665,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_productos_updated_at AFTER UPDATE ON productos
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE productos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE productos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
 
@@ -658,7 +673,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_ventas_updated_at AFTER UPDATE ON ventas
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE ventas SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE ventas SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
 
@@ -666,7 +681,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_articulos_venta_updated_at AFTER UPDATE ON articulos_venta
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE articulos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE articulos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
 
@@ -674,7 +689,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_deudores_updated_at AFTER UPDATE ON deudores
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE deudores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE deudores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
 
@@ -682,7 +697,7 @@ class BaseDeDatos {
         CREATE TRIGGER IF NOT EXISTS trg_abonos_venta_updated_at AFTER UPDATE ON abonos_venta
         WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
         BEGIN
-          UPDATE abonos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+          UPDATE abonos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
         END;
       ''');
     }
@@ -728,6 +743,7 @@ class BaseDeDatos {
         rol TEXT NOT NULL,
         auth_user_id TEXT,
         email TEXT,
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -749,6 +765,7 @@ class BaseDeDatos {
         umbralStockCritico INTEGER NOT NULL DEFAULT 5,
         tipo TEXT NOT NULL DEFAULT 'planta',
         activo INTEGER NOT NULL DEFAULT 1,
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -769,6 +786,7 @@ class BaseDeDatos {
         cliente TEXT NOT NULL DEFAULT 'Cliente Mostrador',
         montoPagado REAL NOT NULL DEFAULT 0.0,
         notas TEXT NOT NULL DEFAULT '',
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -788,6 +806,7 @@ class BaseDeDatos {
         monto REAL NOT NULL,
         fecha TEXT NOT NULL,
         metodoPago TEXT NOT NULL DEFAULT 'Efectivo',
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -807,6 +826,7 @@ class BaseDeDatos {
         producto_uuid TEXT,
         cantidad INTEGER NOT NULL,
         precioUnitario REAL NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -916,6 +936,7 @@ class BaseDeDatos {
         fechaRegistro TEXT NOT NULL,
         fechaLimite TEXT,
         estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        is_synced INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT,
         deleted_at TEXT,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
@@ -935,6 +956,7 @@ class BaseDeDatos {
         motivo TEXT,
         colaborador_uuid TEXT,
         dispositivo_id TEXT,
+        is_synced INTEGER NOT NULL DEFAULT 0,
         sync_estado TEXT NOT NULL DEFAULT 'pendiente',
         created_at TEXT NOT NULL
       )
@@ -1025,7 +1047,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_colaboradores_updated_at AFTER UPDATE ON colaboradores
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE colaboradores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE colaboradores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
 
@@ -1033,7 +1055,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_productos_updated_at AFTER UPDATE ON productos
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE productos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE productos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
 
@@ -1041,7 +1063,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_ventas_updated_at AFTER UPDATE ON ventas
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE ventas SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE ventas SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
 
@@ -1049,7 +1071,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_articulos_venta_updated_at AFTER UPDATE ON articulos_venta
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE articulos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE articulos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
 
@@ -1057,7 +1079,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_deudores_updated_at AFTER UPDATE ON deudores
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE deudores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE deudores SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
 
@@ -1065,7 +1087,7 @@ class BaseDeDatos {
       CREATE TRIGGER IF NOT EXISTS trg_abonos_venta_updated_at AFTER UPDATE ON abonos_venta
       WHEN (NEW.sync_estado = OLD.sync_estado AND (NEW.updated_at IS OLD.updated_at OR NEW.updated_at = OLD.updated_at))
       BEGIN
-        UPDATE abonos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
+        UPDATE abonos_venta SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), is_synced = 0, sync_estado = 'pendiente' WHERE rowid = NEW.rowid;
       END;
     ''');
   }

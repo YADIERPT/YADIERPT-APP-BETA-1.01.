@@ -13,6 +13,7 @@ class Producto {
   String tipo; // 'planta' o 'articulo'
   List<String> imagenes;
   bool activo;
+  bool isSynced;
   String? updatedAt;
   String? deletedAt;
   String syncEstado;
@@ -30,6 +31,7 @@ class Producto {
     this.tipo = 'planta',
     List<String>? imagenes,
     this.activo = true,
+    this.isSynced = false,
     this.updatedAt,
     this.deletedAt,
     this.syncEstado = 'pendiente',
@@ -54,6 +56,7 @@ class Producto {
       'tipo': tipo,
       'imagenes': imagenes.join(','),
       'activo': activo ? 1 : 0,
+      'is_synced': isSynced ? 1 : 0,
       'updated_at': updatedAt ?? DateTime.now().toUtc().toIso8601String(),
       'deleted_at': deletedAt,
       'sync_estado': syncEstado,
@@ -80,6 +83,7 @@ class Producto {
       activo: map['activo'] == null
           ? true
           : (map['activo'] == 1 || map['activo'] == true),
+      isSynced: map['is_synced'] == 1 || map['is_synced'] == true,
       updatedAt: map['updated_at']?.toString(),
       deletedAt: map['deleted_at']?.toString(),
       syncEstado: map['sync_estado']?.toString() ?? 'pendiente',
@@ -99,6 +103,7 @@ class Producto {
     String? tipo,
     List<String>? imagenes,
     bool? activo,
+    bool? isSynced,
     String? updatedAt,
     String? deletedAt,
     String? syncEstado,
@@ -116,6 +121,7 @@ class Producto {
       tipo: tipo ?? this.tipo,
       imagenes: imagenes ?? List.from(this.imagenes),
       activo: activo ?? this.activo,
+      isSynced: isSynced ?? this.isSynced,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       syncEstado: syncEstado ?? this.syncEstado,
